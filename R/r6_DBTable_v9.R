@@ -411,9 +411,9 @@ DBTable_v9 <- R6::R6Class(
     #' @param ... Not in use.
     print = function(...) {
       if (!self$dbconnection$is_connected()) {
-        cat(self$table_name_fully_specified, crayon::bgRed(crayon::white("(disconnected)\n\n")))
+        cat(self$table_name_fully_specified_text, crayon::bgRed(crayon::white("(disconnected)\n\n")))
       } else {
-        cat(self$table_name_fully_specified, crayon::bgCyan(crayon::white("(connected)\n\n")))
+        cat(self$table_name_fully_specified_text, crayon::bgCyan(crayon::white("(connected)\n\n")))
       }
       width_of_numbering <- nchar(length(self$field_types))
       for (i in seq_along(self$field_types)) {
