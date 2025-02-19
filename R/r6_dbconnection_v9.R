@@ -33,6 +33,7 @@ DBConnection_v9 <- R6::R6Class(
     #' @param password Password
     #' @param trusted_connection NULL or "yes"
     #' @param sslmode NULL or "require"
+    #' @param role_create_table NULL or the role to take when creating tables.
     #' @return A new `DBConnection_v9` object.
     initialize = function(
       driver = NULL,
@@ -43,7 +44,8 @@ DBConnection_v9 <- R6::R6Class(
       user = NULL,
       password = NULL,
       trusted_connection = NULL,
-      sslmode = NULL
+      sslmode = NULL,
+      role_create_table = NULL
       ) {
       force(driver)
       force(server)
@@ -54,9 +56,11 @@ DBConnection_v9 <- R6::R6Class(
       force(password)
       force(trusted_connection)
       force(sslmode)
+      force(role_create_table)
 
       if(is.null(trusted_connection)) trusted_connection <- "x"
       if(is.null(sslmode)) sslmode <- "x"
+      if(is.null(role_create_table)) role_create_table <- "x"
 
       self$config <- list(
         driver = driver,
@@ -67,7 +71,8 @@ DBConnection_v9 <- R6::R6Class(
         user = user,
         password = password,
         trusted_connection = trusted_connection,
-        sslmode = sslmode
+        sslmode = sslmode,
+        role_create_table = role_create_table
       )
     },
 

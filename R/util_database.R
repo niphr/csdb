@@ -536,9 +536,9 @@ upsert_load_data_infile.PostgreSQL <- function(
 }
 
 ######### create_table
-create_table <- function(connection, table, fields, keys) UseMethod("create_table")
+create_table <- function(connection, table, fields, keys, ...) UseMethod("create_table")
 
-create_table.default <- function(connection, table, fields, keys = NULL) {
+create_table.default <- function(connection, table, fields, keys = NULL, ...) {
   fields_new <- fields
   fields_new[fields == "TEXT"] <- "TEXT CHARACTER SET utf8 COLLATE utf8_unicode_ci"
 
@@ -548,7 +548,7 @@ create_table.default <- function(connection, table, fields, keys = NULL) {
   DBI::dbExecute(connection, sql)
 }
 
-`create_table.Microsoft SQL Server` <- function(connection, table, fields, keys = NULL) {
+`create_table.Microsoft SQL Server` <- function(connection, table, fields, keys = NULL, ...) {
   fields_new <- fields
   fields_new[fields == "TEXT"] <- "NVARCHAR (1000)"
   fields_new[fields == "DOUBLE"] <- "FLOAT"
@@ -569,7 +569,7 @@ create_table.default <- function(connection, table, fields, keys = NULL) {
   DBI::dbExecute(connection, sql)
 }
 
-`create_table.PostgreSQL` <- function(connection, table, fields, keys = NULL) {
+`create_table.PostgreSQL` <- function(connection, table, fields, keys = NULL, role_create_table = NULL) {
   fields_new <- fields
   fields_new[fields == "TEXT"] <- "VARCHAR"
   fields_new[fields == "DOUBLE"] <- "REAL"
@@ -589,6 +589,12 @@ create_table.default <- function(connection, table, fields, keys = NULL) {
     stringr::str_replace("\"", "") |>
     stringr::str_replace("\"", "")
   # print(sql)
+
+  # include set role if appropriate
+  if(!is.na(role_create_table)) if(role_create_table!="x"){
+    sql <- paste0("SET ROLE ", role_create_table, "; ", sql,"; RESET ROLE")
+  }
+
   DBI::dbExecute(connection, sql)
 }
 

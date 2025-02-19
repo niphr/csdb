@@ -53,7 +53,8 @@ Create a new DBConnection_v9 object.
   user = NULL,
   password = NULL,
   trusted_connection = NULL,
-  sslmode = NULL
+  sslmode = NULL,
+  role_create_table = NULL
 )}\if{html}{\out{</div>}}
 }
 
@@ -77,6 +78,8 @@ Create a new DBConnection_v9 object.
 \item{\code{trusted_connection}}{NULL or "yes"}
 
 \item{\code{sslmode}}{NULL or "require"}
+
+\item{\code{role_create_table}}{NULL or the role to take when creating tables.}
 }
 \if{html}{\out{</div>}}
 }

@@ -304,7 +304,7 @@ DBTable_v9 <- R6::R6Class(
     #' @description
     #' Create a new DBTable_v9 object.
     #'
-    #' @param dbconfig Configuration details of the database (driver, server, port, db, schema, user, password, trusted_connection, sslmode).
+    #' @param dbconfig Configuration details of the database (driver, server, port, db, schema, user, password, trusted_connection, sslmode, role_create_table).
     #' @param table_name Name of the table in the database.
     #' @param field_types The types of each column in the database table (INTEGER, DOUBLE, TEXT, BOOLEAN, DATE, DATETIME).
     #' @param keys The combination of these variables uniquely identifies each row of data in the table.
@@ -333,6 +333,7 @@ DBTable_v9 <- R6::R6Class(
       self$dbconfig$password <- dbconfig$password
       self$dbconfig$trusted_connection <- dbconfig$trusted_connection
       self$dbconfig$sslmode <- dbconfig$sslmode
+      self$dbconfig$role_create_table <- dbconfig$role_create_table
 
       self$dbconnection <- DBConnection_v9$new(
         driver = self$dbconfig$driver,
@@ -343,7 +344,8 @@ DBTable_v9 <- R6::R6Class(
         user = self$dbconfig$user,
         password = self$dbconfig$password,
         trusted_connection = self$dbconfig$trusted_connection,
-        sslmode = self$dbconfig$sslmode
+        sslmode = self$dbconfig$sslmode,
+        role_create_table = self$dbconfig$role_create_table
       )
 
       force(table_name)
@@ -467,7 +469,13 @@ DBTable_v9 <- R6::R6Class(
       }
       if (create_tab) {
         message(glue::glue("Creating table {self$table_name}"))
-        create_table(self$dbconnection$autoconnection, self$table_name_fully_specified, self$field_types, self$keys)
+        create_table(
+          connection = self$dbconnection$autoconnection,
+          table = self$table_name_fully_specified,
+          fields = self$field_types,
+          keys = self$keys,
+          role_create_table = self$dbconnection$config$role_create_table
+        )
         private$add_constraint()
         self$add_indexes()
       }

@@ -1,3 +1,7 @@
+# Version 2024.10.25
+
+- `role_create_table` is now included for dbconnection_v9/dbtable_v9, so that the role can be changed when creating tables in PostgreSQL.
+
 # Version 2024.3.27
 
 - csdb now supports PostgreSQL databases as well as MS SQL Server.
