@@ -871,11 +871,21 @@ keep_rows_where.PostgreSQL <- function(connection, table, condition) {
   temp_name <- paste0("tmp", random_uuid())
 
   sql <- glue::glue("SELECT * INTO {temp_name} FROM {table} WHERE {condition}")
+  if(!is.na(role_create_table)) if(role_create_table!="x"){ # include set role if appropriate
+    sql <- paste0("SET ROLE ", role_create_table, "; ", sql,"; RESET ROLE")
+  }
   DBI::dbExecute(connection, sql)
 
-  DBI::dbRemoveTable(connection, name = table)
+  sql <- glue::glue("DROP TABLE {table}")
+  if(!is.na(role_create_table)) if(role_create_table!="x"){ # include set role if appropriate
+    sql <- paste0("SET ROLE ", role_create_table, "; ", sql,"; RESET ROLE")
+  }
+  DBI::dbExecute(connection, sql)
 
   sql <- glue::glue("ALTER TABLE {temp_name} RENAME TO {table}")
+  if(!is.na(role_create_table)) if(role_create_table!="x"){ # include set role if appropriate
+    sql <- paste0("SET ROLE ", role_create_table, "; ", sql,"; RESET ROLE")
+  }
   DBI::dbExecute(connection, sql)
 
   t1 <- Sys.time()
@@ -898,6 +908,23 @@ list_indexes <- function(connection, table) {
 #' @param connection connection
 #' @param table table
 #' @export
-drop_table <- function(connection, table) {
+drop_table <- function(connection, table) UseMethod("drop_table")
+
+`drop_table.Microsoft SQL Server` <- function(connection, table) {
   return(try(DBI::dbRemoveTable(connection, name = table), TRUE))
 }
+
+drop_table.PostgreSQL <- function(connection, table) {
+  sql <- glue::glue("DROP TABLE {table}")
+  if(!is.na(role_create_table)) if(role_create_table!="x"){ # include set role if appropriate
+    sql <- paste0("SET ROLE ", role_create_table, "; ", sql,"; RESET ROLE")
+  }
+
+  return(try(DBI::dbExecute(connection, sql), TRUE))
+}
+
+
+
+
+
+
