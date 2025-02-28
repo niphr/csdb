@@ -114,6 +114,7 @@ validator_field_contents_csfmt_rts_data_v1 <- function(data) {
   if (sum(!unique(data$sex) %in% c(
     "male",
     "female",
+    "missing",
     "total"
   )) > 0) {
     retval <- FALSE
