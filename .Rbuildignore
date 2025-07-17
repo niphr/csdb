@@ -10,5 +10,7 @@ license.md
 dev
 @eaDir
 ^\.claude$
+^\.github$
+^CLAUDE\.md$
 vignettes/_PRECOMPILER.R
 vignettes/.*\.Rmd\.orig$

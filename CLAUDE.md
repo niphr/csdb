@@ -43,6 +43,27 @@ devtools::test()
 testthat::test_file("tests/testthat/test-filename.R")
 ```
 
+### CRAN Preparation and Checking
+
+**IMPORTANT**: Always use the `--as-cran` flag when checking for CRAN submission to catch all potential issues:
+
+```bash
+# Build and check with CRAN standards
+R CMD build .
+R CMD check --as-cran packagename_version.tar.gz
+
+# Alternative using devtools
+devtools::check(args = c('--as-cran'))
+```
+
+**Target**: 0 NOTEs, 0 WARNINGs, 0 ERRORs for CRAN acceptance.
+
+The `--as-cran` flag enables additional checks that CRAN uses, including:
+- Stricter file structure validation
+- Detection of non-standard files
+- Enhanced dependency checking
+- More comprehensive code analysis
+
 ## Git Commit Requirements
 
 **CRITICAL**: When committing to this repository, commit messages must NEVER mention "claude", "ai", "Claude Code", or any AI-related terms. All commits should appear as regular human development work.

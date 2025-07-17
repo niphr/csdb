@@ -1,0 +1,28 @@
+DBConnection_v9         R6 Class representing a database connection
+DBTable_v9              R6 Class representing a database table with
+                        advanced data management capabilities
+drop_rows_where         Drop rows from a database table where a
+                        condition is met
+drop_table              Drop a database table
+get_table_names_and_info
+                        Get table names, number of rows, and size
+                        information
+nor_covid19_cases_by_time_location
+                        Covid-19 data for PCR-confirmed cases in Norway
+                        (nation and county)
+validator_field_contents_blank
+                        Blank data contents validator
+validator_field_contents_csfmt_rts_data_v1
+                        Field contents validator for csfmt_rts_data_v1
+                        schema
+validator_field_contents_csfmt_rts_data_v2
+                        Field contents validator for csfmt_rts_data_v2
+                        schema
+validator_field_types_blank
+                        Blank field types validator
+validator_field_types_csfmt_rts_data_v1
+                        Field types validator for csfmt_rts_data_v1
+                        schema
+validator_field_types_csfmt_rts_data_v2
+                        Field types validator for csfmt_rts_data_v2
+                        schema

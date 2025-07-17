@@ -1,0 +1,500 @@
+
+R version 4.4.1 (2024-06-14) -- "Race for Your Life"
+Copyright (C) 2024 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> pkgname <- "csdb"
+> source(file.path(R.home("share"), "R", "examples-header.R"))
+> options(warn = 1)
+> base::assign(".ExTimings", "csdb-Ex.timings", pos = 'CheckExEnv')
+> base::cat("name\tuser\tsystem\telapsed\n", file=base::get(".ExTimings", pos = 'CheckExEnv'))
+> base::assign(".format_ptime",
++ function(x) {
++   if(!is.na(x[4L])) x[1L] <- x[1L] + x[4L]
++   if(!is.na(x[5L])) x[2L] <- x[2L] + x[5L]
++   options(OutDec = '.')
++   format(x[1L:3L], digits = 7L)
++ },
++ pos = 'CheckExEnv')
+> 
+> ### * </HEADER>
+> library('csdb')
+csdb 2025.7.17
+https://www.csids.no/csdb/
+> 
+> base::assign(".oldSearch", base::search(), pos = 'CheckExEnv')
+> base::assign(".old_wd", base::getwd(), pos = 'CheckExEnv')
+> cleanEx()
+> nameEx("DBConnection_v9")
+> ### * DBConnection_v9
+> 
+> flush(stderr()); flush(stdout())
+> 
+> base::assign(".ptime", proc.time(), pos = "CheckExEnv")
+> ### Name: DBConnection_v9
+> ### Title: R6 Class representing a database connection
+> ### Aliases: DBConnection_v9
+> 
+> ### ** Examples
+> 
+> ## Not run: 
+> ##D # Create a SQL Server connection
+> ##D db_config <- DBConnection_v9$new(
+> ##D   driver = "ODBC Driver 17 for SQL Server",
+> ##D   server = "localhost",
+> ##D   port = 1433,
+> ##D   db = "mydb",
+> ##D   user = "myuser",
+> ##D   password = "mypass"
+> ##D )
+> ##D 
+> ##D # Connect to the database
+> ##D db_config$connect()
+> ##D 
+> ##D # Check connection status
+> ##D db_config$is_connected()
+> ##D 
+> ##D # Use the connection
+> ##D tables <- DBI::dbListTables(db_config$connection)
+> ##D 
+> ##D # Disconnect when done
+> ##D db_config$disconnect()
+> ##D 
+> ##D # PostgreSQL example
+> ##D pg_config <- DBConnection_v9$new(
+> ##D   driver = "PostgreSQL",
+> ##D   server = "localhost",
+> ##D   port = 5432,
+> ##D   db = "mydb",
+> ##D   user = "myuser",
+> ##D   password = "mypass"
+> ##D )
+> ##D 
+> ##D pg_config$connect()
+> ##D # ... use connection ...
+> ##D pg_config$disconnect()
+> ## End(Not run)
+> 
+> 
+> 
+> base::assign(".dptime", (proc.time() - get(".ptime", pos = "CheckExEnv")), pos = "CheckExEnv")
+> base::cat("DBConnection_v9", base::get(".format_ptime", pos = 'CheckExEnv')(get(".dptime", pos = "CheckExEnv")), "\n", file=base::get(".ExTimings", pos = 'CheckExEnv'), append=TRUE, sep="\t")
+> cleanEx()
+> nameEx("DBTable_v9")
+> ### * DBTable_v9
+> 
+> flush(stderr()); flush(stdout())
+> 
+> base::assign(".ptime", proc.time(), pos = "CheckExEnv")
+> ### Name: DBTable_v9
+> ### Title: R6 Class representing a database table with advanced data
+> ###   management capabilities
+> ### Aliases: DBTable_v9
+> 
+> ### ** Examples
+> 
+> ## Not run: 
+> ##D # Create database connection
+> ##D db_config <- list(
+> ##D   driver = "ODBC Driver 17 for SQL Server",
+> ##D   server = "localhost",
+> ##D   db = "mydb",
+> ##D   user = "myuser",
+> ##D   password = "mypass"
+> ##D )
+> ##D 
+> ##D # Define table schema
+> ##D field_types <- c(
+> ##D   "id" = "INTEGER",
+> ##D   "name" = "TEXT",
+> ##D   "value" = "DOUBLE",
+> ##D   "date_created" = "DATE"
+> ##D )
+> ##D 
+> ##D # Create table object
+> ##D my_table <- DBTable_v9$new(
+> ##D   dbconfig = db_config,
+> ##D   table_name = "my_data_table",
+> ##D   field_types = field_types,
+> ##D   keys = c("id"),
+> ##D   validator_field_types = validator_field_types_blank,
+> ##D   validator_field_contents = validator_field_contents_blank
+> ##D )
+> ##D 
+> ##D # Create table in database
+> ##D my_table$create_table()
+> ##D 
+> ##D # Insert data
+> ##D sample_data <- data.frame(
+> ##D   id = 1:3,
+> ##D   name = c("Alice", "Bob", "Charlie"),
+> ##D   value = c(10.5, 20.3, 15.7),
+> ##D   date_created = as.Date("2023-01-01")
+> ##D )
+> ##D my_table$insert_data(sample_data)
+> ##D 
+> ##D # Query data using dplyr
+> ##D result <- my_table$tbl() |>
+> ##D   dplyr::filter(value > 15) |>
+> ##D   dplyr::collect()
+> ##D 
+> ##D # Add indexes for performance
+> ##D my_table$add_indexes(c("name", "date_created"))
+> ##D 
+> ##D # Upsert (insert or update) data
+> ##D new_data <- data.frame(
+> ##D   id = 2:4,
+> ##D   name = c("Bob_Updated", "Charlie", "David"),
+> ##D   value = c(25.0, 15.7, 30.2),
+> ##D   date_created = as.Date("2023-01-02")
+> ##D )
+> ##D my_table$upsert_data(new_data)
+> ## End(Not run)
+> 
+> 
+> 
+> base::assign(".dptime", (proc.time() - get(".ptime", pos = "CheckExEnv")), pos = "CheckExEnv")
+> base::cat("DBTable_v9", base::get(".format_ptime", pos = 'CheckExEnv')(get(".dptime", pos = "CheckExEnv")), "\n", file=base::get(".ExTimings", pos = 'CheckExEnv'), append=TRUE, sep="\t")
+> cleanEx()
+> nameEx("drop_rows_where")
+> ### * drop_rows_where
+> 
+> flush(stderr()); flush(stdout())
+> 
+> base::assign(".ptime", proc.time(), pos = "CheckExEnv")
+> ### Name: drop_rows_where
+> ### Title: Drop rows from a database table where a condition is met
+> ### Aliases: drop_rows_where
+> 
+> ### ** Examples
+> 
+> ## Not run: 
+> ##D # Create a connection and sample data
+> ##D con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+> ##D DBI::dbCreateTable(con, "test_table", 
+> ##D                    data.frame(id = integer(), value = numeric(), status = character()))
+> ##D 
+> ##D # Insert some test data
+> ##D DBI::dbAppendTable(con, "test_table", 
+> ##D                    data.frame(id = 1:5, value = c(10, 20, 30, 40, 50), 
+> ##D                               status = c("active", "inactive", "active", "deleted", "active")))
+> ##D 
+> ##D # Drop rows where status is 'deleted'
+> ##D drop_rows_where(con, "test_table", "status = 'deleted'")
+> ##D 
+> ##D # Drop rows where value is greater than 30
+> ##D drop_rows_where(con, "test_table", "value > 30")
+> ##D 
+> ##D # Clean up
+> ##D DBI::dbDisconnect(con)
+> ## End(Not run)
+> 
+> 
+> 
+> base::assign(".dptime", (proc.time() - get(".ptime", pos = "CheckExEnv")), pos = "CheckExEnv")
+> base::cat("drop_rows_where", base::get(".format_ptime", pos = 'CheckExEnv')(get(".dptime", pos = "CheckExEnv")), "\n", file=base::get(".ExTimings", pos = 'CheckExEnv'), append=TRUE, sep="\t")
+> cleanEx()
+> nameEx("drop_table")
+> ### * drop_table
+> 
+> flush(stderr()); flush(stdout())
+> 
+> base::assign(".ptime", proc.time(), pos = "CheckExEnv")
+> ### Name: drop_table
+> ### Title: Drop a database table
+> ### Aliases: drop_table
+> 
+> ### ** Examples
+> 
+> ## Not run: 
+> ##D # Create a connection (example for SQLite)
+> ##D con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+> ##D 
+> ##D # Create a test table
+> ##D DBI::dbCreateTable(con, "test_table", data.frame(id = integer(), name = character()))
+> ##D 
+> ##D # Drop the table
+> ##D drop_table(con, "test_table")
+> ##D 
+> ##D # Clean up
+> ##D DBI::dbDisconnect(con)
+> ## End(Not run)
+> 
+> 
+> 
+> base::assign(".dptime", (proc.time() - get(".ptime", pos = "CheckExEnv")), pos = "CheckExEnv")
+> base::cat("drop_table", base::get(".format_ptime", pos = 'CheckExEnv')(get(".dptime", pos = "CheckExEnv")), "\n", file=base::get(".ExTimings", pos = 'CheckExEnv'), append=TRUE, sep="\t")
+> cleanEx()
+> nameEx("get_table_names_and_info")
+> ### * get_table_names_and_info
+> 
+> flush(stderr()); flush(stdout())
+> 
+> base::assign(".ptime", proc.time(), pos = "CheckExEnv")
+> ### Name: get_table_names_and_info
+> ### Title: Get table names, number of rows, and size information
+> ### Aliases: get_table_names_and_info
+> 
+> ### ** Examples
+> 
+> ## Not run: 
+> ##D # Microsoft SQL Server example
+> ##D con <- DBI::dbConnect(odbc::odbc(), 
+> ##D                       driver = "ODBC Driver 17 for SQL Server",
+> ##D                       server = "localhost", 
+> ##D                       database = "mydb")
+> ##D table_info <- get_table_names_and_info(con)
+> ##D print(table_info)
+> ##D DBI::dbDisconnect(con)
+> ##D 
+> ##D # PostgreSQL example  
+> ##D con <- DBI::dbConnect(RPostgres::Postgres(),
+> ##D                       host = "localhost",
+> ##D                       dbname = "mydb",
+> ##D                       user = "user")
+> ##D table_info <- get_table_names_and_info(con)
+> ##D print(table_info)
+> ##D DBI::dbDisconnect(con)
+> ## End(Not run)
+> 
+> 
+> 
+> base::assign(".dptime", (proc.time() - get(".ptime", pos = "CheckExEnv")), pos = "CheckExEnv")
+> base::cat("get_table_names_and_info", base::get(".format_ptime", pos = 'CheckExEnv')(get(".dptime", pos = "CheckExEnv")), "\n", file=base::get(".ExTimings", pos = 'CheckExEnv'), append=TRUE, sep="\t")
+> cleanEx()
+> nameEx("validator_field_contents_blank")
+> ### * validator_field_contents_blank
+> 
+> flush(stderr()); flush(stdout())
+> 
+> base::assign(".ptime", proc.time(), pos = "CheckExEnv")
+> ### Name: validator_field_contents_blank
+> ### Title: Blank data contents validator
+> ### Aliases: validator_field_contents_blank
+> 
+> ### ** Examples
+> 
+> # This validator always returns TRUE regardless of input
+> test_data <- data.frame(id = 1:3, name = c("A", "B", "C"), value = c(10, 20, 30))
+> validator_field_contents_blank(test_data)
+[1] TRUE
+> 
+> # Works with any data structure
+> empty_data <- data.frame()
+> validator_field_contents_blank(empty_data)
+[1] TRUE
+> 
+> 
+> 
+> base::assign(".dptime", (proc.time() - get(".ptime", pos = "CheckExEnv")), pos = "CheckExEnv")
+> base::cat("validator_field_contents_blank", base::get(".format_ptime", pos = 'CheckExEnv')(get(".dptime", pos = "CheckExEnv")), "\n", file=base::get(".ExTimings", pos = 'CheckExEnv'), append=TRUE, sep="\t")
+> cleanEx()
+> nameEx("validator_field_contents_csfmt_rts_data_v1")
+> ### * validator_field_contents_csfmt_rts_data_v1
+> 
+> flush(stderr()); flush(stdout())
+> 
+> base::assign(".ptime", proc.time(), pos = "CheckExEnv")
+> ### Name: validator_field_contents_csfmt_rts_data_v1
+> ### Title: Field contents validator for csfmt_rts_data_v1 schema
+> ### Aliases: validator_field_contents_csfmt_rts_data_v1
+> 
+> ### ** Examples
+> 
+> # Valid data for csfmt_rts_data_v1
+> valid_data <- data.frame(
++   granularity_time = c("date", "isoyearweek", "total"),
++   granularity_geo = c("nation", "county", "municip"),
++   stringsAsFactors = FALSE
++ )
+> validator_field_contents_csfmt_rts_data_v1(valid_data)
+[1] FALSE
+attr(,"var")
+[1] "date"
+> 
+> # Invalid data (wrong granularity_geo value)
+> invalid_data <- data.frame(
++   granularity_time = "date",
++   granularity_geo = "invalid_geo",
++   stringsAsFactors = FALSE
++ )
+> validator_field_contents_csfmt_rts_data_v1(invalid_data)
+[1] FALSE
+attr(,"var")
+[1] "granularity_geo"
+> 
+> 
+> 
+> base::assign(".dptime", (proc.time() - get(".ptime", pos = "CheckExEnv")), pos = "CheckExEnv")
+> base::cat("validator_field_contents_csfmt_rts_data_v1", base::get(".format_ptime", pos = 'CheckExEnv')(get(".dptime", pos = "CheckExEnv")), "\n", file=base::get(".ExTimings", pos = 'CheckExEnv'), append=TRUE, sep="\t")
+> cleanEx()
+> nameEx("validator_field_contents_csfmt_rts_data_v2")
+> ### * validator_field_contents_csfmt_rts_data_v2
+> 
+> flush(stderr()); flush(stdout())
+> 
+> base::assign(".ptime", proc.time(), pos = "CheckExEnv")
+> ### Name: validator_field_contents_csfmt_rts_data_v2
+> ### Title: Field contents validator for csfmt_rts_data_v2 schema
+> ### Aliases: validator_field_contents_csfmt_rts_data_v2
+> 
+> ### ** Examples
+> 
+> # Valid data for csfmt_rts_data_v2
+> valid_data_v2 <- data.frame(
++   granularity_time = c("date", "isoyearweek", "total"),
++   granularity_geo = c("nation", "county", "municip"),
++   stringsAsFactors = FALSE
++ )
+> validator_field_contents_csfmt_rts_data_v2(valid_data_v2)
+[1] FALSE
+attr(,"var")
+[1] "date"
+> 
+> 
+> 
+> base::assign(".dptime", (proc.time() - get(".ptime", pos = "CheckExEnv")), pos = "CheckExEnv")
+> base::cat("validator_field_contents_csfmt_rts_data_v2", base::get(".format_ptime", pos = 'CheckExEnv')(get(".dptime", pos = "CheckExEnv")), "\n", file=base::get(".ExTimings", pos = 'CheckExEnv'), append=TRUE, sep="\t")
+> cleanEx()
+> nameEx("validator_field_types_blank")
+> ### * validator_field_types_blank
+> 
+> flush(stderr()); flush(stdout())
+> 
+> base::assign(".ptime", proc.time(), pos = "CheckExEnv")
+> ### Name: validator_field_types_blank
+> ### Title: Blank field types validator
+> ### Aliases: validator_field_types_blank
+> 
+> ### ** Examples
+> 
+> # This validator always returns TRUE regardless of input
+> field_types <- c("id" = "INTEGER", "name" = "TEXT", "date" = "DATE")
+> validator_field_types_blank(field_types)
+[1] TRUE
+> 
+> # Works with any field types
+> other_types <- c("value" = "DOUBLE", "status" = "BOOLEAN")
+> validator_field_types_blank(other_types)
+[1] TRUE
+> 
+> 
+> 
+> base::assign(".dptime", (proc.time() - get(".ptime", pos = "CheckExEnv")), pos = "CheckExEnv")
+> base::cat("validator_field_types_blank", base::get(".format_ptime", pos = 'CheckExEnv')(get(".dptime", pos = "CheckExEnv")), "\n", file=base::get(".ExTimings", pos = 'CheckExEnv'), append=TRUE, sep="\t")
+> cleanEx()
+> nameEx("validator_field_types_csfmt_rts_data_v1")
+> ### * validator_field_types_csfmt_rts_data_v1
+> 
+> flush(stderr()); flush(stdout())
+> 
+> base::assign(".ptime", proc.time(), pos = "CheckExEnv")
+> ### Name: validator_field_types_csfmt_rts_data_v1
+> ### Title: Field types validator for csfmt_rts_data_v1 schema
+> ### Aliases: validator_field_types_csfmt_rts_data_v1
+> 
+> ### ** Examples
+> 
+> # Valid field types for csfmt_rts_data_v1
+> valid_fields <- c(
++   "granularity_time" = "TEXT",
++   "granularity_geo" = "TEXT", 
++   "country_iso3" = "TEXT",
++   "location_code" = "TEXT",
++   "border" = "INTEGER",
++   "age" = "TEXT",
++   "sex" = "TEXT",
++   "isoyear" = "INTEGER",
++   "isoweek" = "INTEGER",
++   "isoyearweek" = "TEXT",
++   "season" = "TEXT",
++   "seasonweek" = "DOUBLE",
++   "calyear" = "INTEGER",
++   "calmonth" = "INTEGER",
++   "calyearmonth" = "TEXT",
++   "date" = "DATE",
++   "cases_n" = "INTEGER"
++ )
+> validator_field_types_csfmt_rts_data_v1(valid_fields)
+[1] TRUE
+> 
+> # Invalid field types (wrong structure)
+> invalid_fields <- c("id" = "INTEGER", "name" = "TEXT")
+> validator_field_types_csfmt_rts_data_v1(invalid_fields)
+[1] FALSE
+> 
+> 
+> 
+> base::assign(".dptime", (proc.time() - get(".ptime", pos = "CheckExEnv")), pos = "CheckExEnv")
+> base::cat("validator_field_types_csfmt_rts_data_v1", base::get(".format_ptime", pos = 'CheckExEnv')(get(".dptime", pos = "CheckExEnv")), "\n", file=base::get(".ExTimings", pos = 'CheckExEnv'), append=TRUE, sep="\t")
+> cleanEx()
+> nameEx("validator_field_types_csfmt_rts_data_v2")
+> ### * validator_field_types_csfmt_rts_data_v2
+> 
+> flush(stderr()); flush(stdout())
+> 
+> base::assign(".ptime", proc.time(), pos = "CheckExEnv")
+> ### Name: validator_field_types_csfmt_rts_data_v2
+> ### Title: Field types validator for csfmt_rts_data_v2 schema
+> ### Aliases: validator_field_types_csfmt_rts_data_v2
+> 
+> ### ** Examples
+> 
+> # Valid field types for csfmt_rts_data_v2 (includes additional fields)
+> valid_fields_v2 <- c(
++   "granularity_time" = "TEXT",
++   "granularity_geo" = "TEXT", 
++   "country_iso3" = "TEXT",
++   "location_code" = "TEXT",
++   "border" = "INTEGER",
++   "age" = "TEXT",
++   "sex" = "TEXT",
++   "isoyear" = "INTEGER",
++   "isoweek" = "INTEGER",
++   "isoyearweek" = "TEXT",
++   "season" = "TEXT",
++   "seasonweek" = "DOUBLE",
++   "calyear" = "INTEGER",
++   "calmonth" = "INTEGER",
++   "calyearmonth" = "TEXT",
++   "date" = "DATE",
++   "tag_outcome" = "TEXT",
++   "tag_type" = "TEXT",
++   "cases_n" = "INTEGER"
++ )
+> validator_field_types_csfmt_rts_data_v2(valid_fields_v2)
+[1] FALSE
+> 
+> 
+> 
+> base::assign(".dptime", (proc.time() - get(".ptime", pos = "CheckExEnv")), pos = "CheckExEnv")
+> base::cat("validator_field_types_csfmt_rts_data_v2", base::get(".format_ptime", pos = 'CheckExEnv')(get(".dptime", pos = "CheckExEnv")), "\n", file=base::get(".ExTimings", pos = 'CheckExEnv'), append=TRUE, sep="\t")
+> ### * <FOOTER>
+> ###
+> cleanEx()
+> options(digits = 7L)
+> base::cat("Time elapsed: ", proc.time() - base::get("ptime", pos = 'CheckExEnv'),"\n")
+Time elapsed:  0.944 0.041 1 0 0 
+> grDevices::dev.off()
+null device 
+          1 
+> ###
+> ### Local variables: ***
+> ### mode: outline-minor ***
+> ### outline-regexp: "\\(> \\)?### [*]+" ***
+> ### End: ***
+> quit('no')
