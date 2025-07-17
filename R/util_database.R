@@ -559,10 +559,22 @@ upsert_load_data_infile.PostgreSQL <- function(
   invisible()
 }
 
-######### create_table
-create_table <- function(connection, table, fields, keys, ...) UseMethod("create_table")
+#' Create database table
+#' 
+#' Internal function to create database tables with appropriate field types.
+#' 
+#' @param connection Database connection
+#' @param table Table name 
+#' @param fields Named vector of field types
+#' @param keys Primary key columns
+#' @param role_create_table Role for table creation (PostgreSQL)
+#' @param ... Additional arguments
+#' @return NULL (called for side effects)
+#' @export
+#' @keywords internal
+create_table <- function(connection, table, fields, keys = NULL, role_create_table = NULL, ...) UseMethod("create_table")
 
-create_table.default <- function(connection, table, fields, keys = NULL, ...) {
+create_table.default <- function(connection, table, fields, keys = NULL, role_create_table = NULL, ...) {
   fields_new <- fields
   fields_new[fields == "TEXT"] <- "TEXT CHARACTER SET utf8 COLLATE utf8_unicode_ci"
 
@@ -572,7 +584,7 @@ create_table.default <- function(connection, table, fields, keys = NULL, ...) {
   DBI::dbExecute(connection, sql)
 }
 
-`create_table.Microsoft SQL Server` <- function(connection, table, fields, keys = NULL, ...) {
+`create_table.Microsoft SQL Server` <- function(connection, table, fields, keys = NULL, role_create_table = NULL, ...) {
   fields_new <- fields
   fields_new[fields == "TEXT"] <- "NVARCHAR (1000)"
   fields_new[fields == "DOUBLE"] <- "FLOAT"
@@ -593,7 +605,7 @@ create_table.default <- function(connection, table, fields, keys = NULL, ...) {
   DBI::dbExecute(connection, sql)
 }
 
-`create_table.PostgreSQL` <- function(connection, table, fields, keys = NULL, role_create_table = NULL) {
+`create_table.PostgreSQL` <- function(connection, table, fields, keys = NULL, role_create_table = NULL, ...) {
   fields_new <- fields
   fields_new[fields == "TEXT"] <- "VARCHAR"
   fields_new[fields == "DOUBLE"] <- "REAL"
@@ -743,9 +755,20 @@ drop_index.PostgreSQL <- function(connection, table, index) {
   )
 }
 
+#' Add database index
+#' 
+#' Internal function to add indexes to database tables.
+#' 
+#' @param connection Database connection
+#' @param table Table name
+#' @param index Index name
+#' @param keys Columns to index
+#' @return NULL (called for side effects)
+#' @export
+#' @keywords internal
 add_index <- function(connection, table, index, keys) UseMethod("add_index")
 
-add_index.default <- function(connection, table, keys, index) {
+add_index.default <- function(connection, table, index, keys) {
   keys <- glue::glue_collapse(keys, sep = ", ")
 
   sql <- glue::glue("
@@ -755,7 +778,7 @@ add_index.default <- function(connection, table, keys, index) {
   try(a <- DBI::dbExecute(connection, sql), T)
 }
 
-`add_index.Microsoft SQL Server` <- function(connection, table, keys, index) {
+`add_index.Microsoft SQL Server` <- function(connection, table, index, keys) {
   keys <- glue::glue_collapse(keys, sep = ", ")
 
   try(
@@ -767,7 +790,7 @@ add_index.default <- function(connection, table, keys, index) {
   )
 }
 
-add_index.PostgreSQL <- function(connection, table, keys, index) {
+add_index.PostgreSQL <- function(connection, table, index, keys) {
   keys <- glue::glue_collapse(keys, sep = ", ")
 
   try(
@@ -897,9 +920,20 @@ drop_rows_where.PostgreSQL <- function(connection, table, condition) {
   #if (config$verbose) message(glue::glue("Kept rows in {dif} seconds from {table}"))
 }
 
-keep_rows_where <- function(connection, table, condition) UseMethod("keep_rows_where")
+#' Keep rows matching condition
+#' 
+#' Internal function to keep only rows matching a condition in database tables.
+#' 
+#' @param connection Database connection
+#' @param table Table name
+#' @param condition SQL WHERE condition
+#' @param role_create_table Role for table operations (PostgreSQL)
+#' @return NULL (called for side effects)
+#' @export
+#' @keywords internal
+keep_rows_where <- function(connection, table, condition, role_create_table = NULL) UseMethod("keep_rows_where")
 
-`keep_rows_where.Microsoft SQL Server` <- function(connection, table, condition) {
+`keep_rows_where.Microsoft SQL Server` <- function(connection, table, condition, role_create_table = NULL) {
 
   t0 <- Sys.time()
   temp_name <- paste0("tmp", random_uuid())
