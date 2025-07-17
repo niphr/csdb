@@ -2,14 +2,65 @@
 % Please edit documentation in R/r6_dbconnection_v9.R
 \name{DBConnection_v9}
 \alias{DBConnection_v9}
-\title{R6 Class representing a DB schema/table}
+\title{R6 Class representing a database connection}
 \description{
-The fundamental way to communicate with database tables.
+A robust database connection manager that handles connections to various database systems
+including Microsoft SQL Server and PostgreSQL. This class provides connection management,
+authentication, and automatic reconnection capabilities.
 }
 \details{
-This class is a representation of a database table. It is the way that you can
-access data (e.g. `tbl()`), manipulate data (e.g. `insert_data`, `upsert_data`),
-and manipulate structural aspects of the database table (e.g. `add_indexes`, `drop_indexes`).
+The DBConnection_v9 class encapsulates database connection logic and provides a consistent
+interface for connecting to different database systems. It supports both trusted connections
+and user/password authentication, handles connection failures gracefully, and provides
+automatic reconnection functionality.
+
+Key features:
+\itemize{
+  \item Support for multiple database systems (SQL Server, PostgreSQL)
+  \item Automatic connection management with retry logic
+  \item Secure credential handling
+  \item Connection status monitoring
+  \item Graceful error handling and recovery
+}
+}
+\examples{
+\dontrun{
+# Create a SQL Server connection
+db_config <- DBConnection_v9$new(
+  driver = "ODBC Driver 17 for SQL Server",
+  server = "localhost",
+  port = 1433,
+  db = "mydb",
+  user = "myuser",
+  password = "mypass"
+)
+
+# Connect to the database
+db_config$connect()
+
+# Check connection status
+db_config$is_connected()
+
+# Use the connection
+tables <- DBI::dbListTables(db_config$connection)
+
+# Disconnect when done
+db_config$disconnect()
+
+# PostgreSQL example
+pg_config <- DBConnection_v9$new(
+  driver = "PostgreSQL",
+  server = "localhost",
+  port = 5432,
+  db = "mydb",
+  user = "myuser",
+  password = "mypass"
+)
+
+pg_config$connect()
+# ... use connection ...
+pg_config$disconnect()
+}
 }
 \section{Public fields}{
 \if{html}{\out{<div class="r6-fields">}}

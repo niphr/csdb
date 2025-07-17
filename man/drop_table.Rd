@@ -2,15 +2,35 @@
 % Please edit documentation in R/util_database.R
 \name{drop_table}
 \alias{drop_table}
-\title{drop_table}
+\title{Drop a database table}
 \usage{
 drop_table(connection, table)
 }
 \arguments{
-\item{connection}{connection}
+\item{connection}{A database connection object (e.g., from \code{\link[DBI]{dbConnect}})}
 
-\item{table}{table}
+\item{table}{Character string specifying the name of the table to drop}
+}
+\value{
+Invisible NULL on success, or a try-error object if the operation fails
 }
 \description{
-drop_table
+Safely removes a database table from the database. This function wraps 
+\code{\link[DBI]{dbRemoveTable}} with error handling to prevent failures
+from stopping execution.
+}
+\examples{
+\dontrun{
+# Create a connection (example for SQLite)
+con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+
+# Create a test table
+DBI::dbCreateTable(con, "test_table", data.frame(id = integer(), name = character()))
+
+# Drop the table
+drop_table(con, "test_table")
+
+# Clean up
+DBI::dbDisconnect(con)
+}
 }

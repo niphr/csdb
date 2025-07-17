@@ -2,15 +2,35 @@
 % Please edit documentation in R/r6_DBTable_v9.R
 \name{validator_field_contents_csfmt_rts_data_v1}
 \alias{validator_field_contents_csfmt_rts_data_v1}
-\title{validator_field_contents_csfmt_rts_data_v1
-An example (schema) validator of database data used in csfmt_rts_data_v1}
+\title{Field contents validator for csfmt_rts_data_v1 schema}
 \usage{
 validator_field_contents_csfmt_rts_data_v1(data)
 }
 \arguments{
-\item{data}{data passed to schema}
+\item{data}{A data.frame or data.table containing the data to validate}
+}
+\value{
+TRUE if data is valid for csfmt_rts_data_v1, FALSE otherwise (with error attribute)
 }
 \description{
-validator_field_contents_csfmt_rts_data_v1
-An example (schema) validator of database data used in csfmt_rts_data_v1
+Validates that data contents conform to the csfmt_rts_data_v1 schema specification.
+This validator checks that granularity_time and granularity_geo fields contain
+valid values according to the surveillance data format requirements.
+}
+\examples{
+# Valid data for csfmt_rts_data_v1
+valid_data <- data.frame(
+  granularity_time = c("date", "isoyearweek", "total"),
+  granularity_geo = c("nation", "county", "municip"),
+  stringsAsFactors = FALSE
+)
+validator_field_contents_csfmt_rts_data_v1(valid_data)
+
+# Invalid data (wrong granularity_geo value)
+invalid_data <- data.frame(
+  granularity_time = "date",
+  granularity_geo = "invalid_geo",
+  stringsAsFactors = FALSE
+)
+validator_field_contents_csfmt_rts_data_v1(invalid_data)
 }

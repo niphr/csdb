@@ -2,14 +2,96 @@
 % Please edit documentation in R/r6_DBTable_v9.R
 \name{DBTable_v9}
 \alias{DBTable_v9}
-\title{R6 Class representing a DB schema/table}
+\title{R6 Class representing a database table with advanced data management capabilities}
 \description{
-The fundamental way to communicate with database tables.
+A comprehensive database table management class that provides high-level operations
+for data manipulation, schema validation, and table administration. This class
+combines database connectivity with data validation and efficient bulk operations.
 }
 \details{
-This class is a representation of a database table. It is the way that you can
-access data (e.g. `tbl()`), manipulate data (e.g. `insert_data`, `upsert_data`),
-and manipulate structural aspects of the database table (e.g. `add_indexes`, `drop_indexes`).
+The DBTable_v9 class is a sophisticated database table abstraction that provides:
+
+\strong{Core functionality:}
+\itemize{
+  \item Table creation and schema management
+  \item Data insertion with bulk loading capabilities
+  \item Upsert operations (insert or update)
+  \item Index management (creation, deletion)
+  \item Data validation through customizable validators
+  \item Integration with dplyr for data queries
+}
+
+\strong{Advanced features:}
+\itemize{
+  \item Automatic table creation based on field specifications
+  \item Schema validation with custom validator functions
+  \item Efficient bulk data loading using database-specific methods
+  \item Index optimization for query performance
+  \item Cross-database compatibility (SQL Server, PostgreSQL)
+}
+
+\strong{Data validation:}
+The class supports custom validation functions for both field types and data contents,
+ensuring data integrity and schema compliance.
+}
+\examples{
+\dontrun{
+# Create database connection
+db_config <- list(
+  driver = "ODBC Driver 17 for SQL Server",
+  server = "localhost",
+  db = "mydb",
+  user = "myuser",
+  password = "mypass"
+)
+
+# Define table schema
+field_types <- c(
+  "id" = "INTEGER",
+  "name" = "TEXT",
+  "value" = "DOUBLE",
+  "date_created" = "DATE"
+)
+
+# Create table object
+my_table <- DBTable_v9$new(
+  dbconfig = db_config,
+  table_name = "my_data_table",
+  field_types = field_types,
+  keys = c("id"),
+  validator_field_types = validator_field_types_blank,
+  validator_field_contents = validator_field_contents_blank
+)
+
+# Create table in database
+my_table$create_table()
+
+# Insert data
+sample_data <- data.frame(
+  id = 1:3,
+  name = c("Alice", "Bob", "Charlie"),
+  value = c(10.5, 20.3, 15.7),
+  date_created = as.Date("2023-01-01")
+)
+my_table$insert_data(sample_data)
+
+# Query data using dplyr
+result <- my_table$tbl() \%>\%
+  dplyr::filter(value > 15) \%>\%
+  dplyr::collect()
+
+# Add indexes for performance
+my_table$add_indexes(c("name", "date_created"))
+
+# Upsert (insert or update) data
+new_data <- data.frame(
+  id = 2:4,
+  name = c("Bob_Updated", "Charlie", "David"),
+  value = c(25.0, 15.7, 30.2),
+  date_created = as.Date("2023-01-02")
+)
+my_table$upsert_data(new_data)
+}
 }
 \section{Public fields}{
 \if{html}{\out{<div class="r6-fields">}}

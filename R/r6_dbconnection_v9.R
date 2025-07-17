@@ -1,17 +1,67 @@
 # DBConnection_v9 ----
-#' R6 Class representing a DB schema/table
+#' R6 Class representing a database connection
 #'
 #' @description
-#' The fundamental way to communicate with database tables.
+#' A robust database connection manager that handles connections to various database systems
+#' including Microsoft SQL Server and PostgreSQL. This class provides connection management,
+#' authentication, and automatic reconnection capabilities.
 #'
 #' @details
-#' This class is a representation of a database table. It is the way that you can
-#' access data (e.g. `tbl()`), manipulate data (e.g. `insert_data`, `upsert_data`),
-#' and manipulate structural aspects of the database table (e.g. `add_indexes`, `drop_indexes`).
+#' The DBConnection_v9 class encapsulates database connection logic and provides a consistent
+#' interface for connecting to different database systems. It supports both trusted connections
+#' and user/password authentication, handles connection failures gracefully, and provides
+#' automatic reconnection functionality.
+#'
+#' Key features:
+#' \itemize{
+#'   \item Support for multiple database systems (SQL Server, PostgreSQL)
+#'   \item Automatic connection management with retry logic
+#'   \item Secure credential handling
+#'   \item Connection status monitoring
+#'   \item Graceful error handling and recovery
+#' }
 #'
 #' @import data.table
 #' @import R6
 #' @export DBConnection_v9
+#' @examples
+#' \dontrun{
+#' # Create a SQL Server connection
+#' db_config <- DBConnection_v9$new(
+#'   driver = "ODBC Driver 17 for SQL Server",
+#'   server = "localhost",
+#'   port = 1433,
+#'   db = "mydb",
+#'   user = "myuser",
+#'   password = "mypass"
+#' )
+#' 
+#' # Connect to the database
+#' db_config$connect()
+#' 
+#' # Check connection status
+#' db_config$is_connected()
+#' 
+#' # Use the connection
+#' tables <- DBI::dbListTables(db_config$connection)
+#' 
+#' # Disconnect when done
+#' db_config$disconnect()
+#' 
+#' # PostgreSQL example
+#' pg_config <- DBConnection_v9$new(
+#'   driver = "PostgreSQL",
+#'   server = "localhost",
+#'   port = 5432,
+#'   db = "mydb",
+#'   user = "myuser",
+#'   password = "mypass"
+#' )
+#' 
+#' pg_config$connect()
+#' # ... use connection ...
+#' pg_config$disconnect()
+#' }
 DBConnection_v9 <- R6::R6Class(
   "DBConnection_v9",
 
@@ -102,9 +152,17 @@ DBConnection_v9 <- R6::R6Class(
     #' @param ... Not used.
     print = function(...) {
       if (!self$is_connected()) {
-        cat(crayon::bgRed(crayon::white("(disconnected)\n\n")))
+        if(requireNamespace("crayon", quietly = TRUE)) {
+          cat(crayon::bgRed(crayon::white("(disconnected)\n\n")))
+        } else {
+          cat("(disconnected)\n\n")
+        }
       } else {
-        cat(crayon::bgCyan(crayon::white("(connected)\n\n")))
+        if(requireNamespace("crayon", quietly = TRUE)) {
+          cat(crayon::bgCyan(crayon::white("(connected)\n\n")))
+        } else {
+          cat("(connected)\n\n")
+        }
       }
       cat("Driver:             ", self$config$driver, "\n")
       cat("Server:             ", self$config$server, "\n")

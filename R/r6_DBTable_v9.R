@@ -1,21 +1,78 @@
-#' Blank field_types validator
-#' @param db_field_types db_field_types passed to schema
+#' Blank field types validator
+#' 
+#' A pass-through validator that accepts any field types without validation.
+#' This is useful as a placeholder when no specific field type validation is needed.
+#' 
+#' @param db_field_types A named character vector of database field types
+#' @return Always returns TRUE
 #' @export
+#' @examples
+#' # This validator always returns TRUE regardless of input
+#' field_types <- c("id" = "INTEGER", "name" = "TEXT", "date" = "DATE")
+#' validator_field_types_blank(field_types)
+#' 
+#' # Works with any field types
+#' other_types <- c("value" = "DOUBLE", "status" = "BOOLEAN")
+#' validator_field_types_blank(other_types)
 validator_field_types_blank <- function(db_field_types) {
   return(TRUE)
 }
 
-#' Blank data validator
-#' @param data data passed to schema
+#' Blank data contents validator
+#' 
+#' A pass-through validator that accepts any data without validation.
+#' This is useful as a placeholder when no specific data content validation is needed.
+#' 
+#' @param data A data.frame or data.table containing the data to validate
+#' @return Always returns TRUE
 #' @export
+#' @examples
+#' # This validator always returns TRUE regardless of input
+#' test_data <- data.frame(id = 1:3, name = c("A", "B", "C"), value = c(10, 20, 30))
+#' validator_field_contents_blank(test_data)
+#' 
+#' # Works with any data structure
+#' empty_data <- data.frame()
+#' validator_field_contents_blank(empty_data)
 validator_field_contents_blank <- function(data) {
   return(TRUE)
 }
 
-#' validator_field_types_csfmt_rts_data_v1
-#' An example (schema) validator of field_types used in csfmt_rts_data_v1
-#' @param db_field_types db_field_types passed to schema
+#' Field types validator for csfmt_rts_data_v1 schema
+#' 
+#' Validates that field types conform to the csfmt_rts_data_v1 schema specification.
+#' This validator ensures that the first 16 fields match the expected structure
+#' for real-time surveillance data format version 1.
+#' 
+#' @param db_field_types A named character vector of database field types
+#' @return TRUE if field types are valid for csfmt_rts_data_v1, FALSE otherwise
 #' @export
+#' @examples
+#' # Valid field types for csfmt_rts_data_v1
+#' valid_fields <- c(
+#'   "granularity_time" = "TEXT",
+#'   "granularity_geo" = "TEXT", 
+#'   "country_iso3" = "TEXT",
+#'   "location_code" = "TEXT",
+#'   "border" = "INTEGER",
+#'   "age" = "TEXT",
+#'   "sex" = "TEXT",
+#'   "isoyear" = "INTEGER",
+#'   "isoweek" = "INTEGER",
+#'   "isoyearweek" = "TEXT",
+#'   "season" = "TEXT",
+#'   "seasonweek" = "DOUBLE",
+#'   "calyear" = "INTEGER",
+#'   "calmonth" = "INTEGER",
+#'   "calyearmonth" = "TEXT",
+#'   "date" = "DATE",
+#'   "cases_n" = "INTEGER"
+#' )
+#' validator_field_types_csfmt_rts_data_v1(valid_fields)
+#' 
+#' # Invalid field types (wrong structure)
+#' invalid_fields <- c("id" = "INTEGER", "name" = "TEXT")
+#' validator_field_types_csfmt_rts_data_v1(invalid_fields)
 validator_field_types_csfmt_rts_data_v1 <- function(db_field_types) {
   if (!inherits(db_field_types, "character")) {
     return(FALSE)
@@ -50,10 +107,31 @@ validator_field_types_csfmt_rts_data_v1 <- function(db_field_types) {
   return(TRUE)
 }
 
-#' validator_field_contents_csfmt_rts_data_v1
-#' An example (schema) validator of database data used in csfmt_rts_data_v1
-#' @param data data passed to schema
+#' Field contents validator for csfmt_rts_data_v1 schema
+#' 
+#' Validates that data contents conform to the csfmt_rts_data_v1 schema specification.
+#' This validator checks that granularity_time and granularity_geo fields contain
+#' valid values according to the surveillance data format requirements.
+#' 
+#' @param data A data.frame or data.table containing the data to validate
+#' @return TRUE if data is valid for csfmt_rts_data_v1, FALSE otherwise (with error attribute)
 #' @export
+#' @examples
+#' # Valid data for csfmt_rts_data_v1
+#' valid_data <- data.frame(
+#'   granularity_time = c("date", "isoyearweek", "total"),
+#'   granularity_geo = c("nation", "county", "municip"),
+#'   stringsAsFactors = FALSE
+#' )
+#' validator_field_contents_csfmt_rts_data_v1(valid_data)
+#' 
+#' # Invalid data (wrong granularity_geo value)
+#' invalid_data <- data.frame(
+#'   granularity_time = "date",
+#'   granularity_geo = "invalid_geo",
+#'   stringsAsFactors = FALSE
+#' )
+#' validator_field_contents_csfmt_rts_data_v1(invalid_data)
 validator_field_contents_csfmt_rts_data_v1 <- function(data) {
   for (i in unique(data$granularity_time)) {
     if (sum(stringr::str_detect(
@@ -130,10 +208,39 @@ validator_field_contents_csfmt_rts_data_v1 <- function(data) {
   return(TRUE)
 }
 
-#' validator_field_types_csfmt_rts_data_v2
-#' An example (schema) validator of field_types used in csfmt_rts_data_v2
-#' @param db_field_types db_field_types passed to schema
+#' Field types validator for csfmt_rts_data_v2 schema
+#' 
+#' Validates that field types conform to the csfmt_rts_data_v2 schema specification.
+#' This validator ensures that the first 18 fields match the expected structure
+#' for real-time surveillance data format version 2.
+#' 
+#' @param db_field_types A named character vector of database field types
+#' @return TRUE if field types are valid for csfmt_rts_data_v2, FALSE otherwise
 #' @export
+#' @examples
+#' # Valid field types for csfmt_rts_data_v2 (includes additional fields)
+#' valid_fields_v2 <- c(
+#'   "granularity_time" = "TEXT",
+#'   "granularity_geo" = "TEXT", 
+#'   "country_iso3" = "TEXT",
+#'   "location_code" = "TEXT",
+#'   "border" = "INTEGER",
+#'   "age" = "TEXT",
+#'   "sex" = "TEXT",
+#'   "isoyear" = "INTEGER",
+#'   "isoweek" = "INTEGER",
+#'   "isoyearweek" = "TEXT",
+#'   "season" = "TEXT",
+#'   "seasonweek" = "DOUBLE",
+#'   "calyear" = "INTEGER",
+#'   "calmonth" = "INTEGER",
+#'   "calyearmonth" = "TEXT",
+#'   "date" = "DATE",
+#'   "tag_outcome" = "TEXT",
+#'   "tag_type" = "TEXT",
+#'   "cases_n" = "INTEGER"
+#' )
+#' validator_field_types_csfmt_rts_data_v2(valid_fields_v2)
 validator_field_types_csfmt_rts_data_v2 <- function(db_field_types) {
   if (!inherits(db_field_types, "character")) {
     return(FALSE)
@@ -170,10 +277,23 @@ validator_field_types_csfmt_rts_data_v2 <- function(db_field_types) {
   return(TRUE)
 }
 
-#' validator_field_contents_csfmt_rts_data_v2
-#' An example (schema) validator of database data used in csfmt_rts_data_v2
-#' @param data data passed to schema
+#' Field contents validator for csfmt_rts_data_v2 schema
+#' 
+#' Validates that data contents conform to the csfmt_rts_data_v2 schema specification.
+#' This validator checks that granularity_time and granularity_geo fields contain
+#' valid values according to the surveillance data format requirements for version 2.
+#' 
+#' @param data A data.frame or data.table containing the data to validate
+#' @return TRUE if data is valid for csfmt_rts_data_v2, FALSE otherwise (with error attribute)
 #' @export
+#' @examples
+#' # Valid data for csfmt_rts_data_v2
+#' valid_data_v2 <- data.frame(
+#'   granularity_time = c("date", "isoyearweek", "total"),
+#'   granularity_geo = c("nation", "county", "municip"),
+#'   stringsAsFactors = FALSE
+#' )
+#' validator_field_contents_csfmt_rts_data_v2(valid_data_v2)
 validator_field_contents_csfmt_rts_data_v2 <- function(data) {
   for (i in unique(data$granularity_time)) {
     if (sum(stringr::str_detect(
@@ -252,19 +372,100 @@ validator_field_contents_csfmt_rts_data_v2 <- function(data) {
 }
 
 # DBTable_v9 ----
-#' R6 Class representing a DB schema/table
+#' R6 Class representing a database table with advanced data management capabilities
 #'
 #' @description
-#' The fundamental way to communicate with database tables.
+#' A comprehensive database table management class that provides high-level operations
+#' for data manipulation, schema validation, and table administration. This class
+#' combines database connectivity with data validation and efficient bulk operations.
 #'
 #' @details
-#' This class is a representation of a database table. It is the way that you can
-#' access data (e.g. `tbl()`), manipulate data (e.g. `insert_data`, `upsert_data`),
-#' and manipulate structural aspects of the database table (e.g. `add_indexes`, `drop_indexes`).
+#' The DBTable_v9 class is a sophisticated database table abstraction that provides:
+#' 
+#' \strong{Core functionality:}
+#' \itemize{
+#'   \item Table creation and schema management
+#'   \item Data insertion with bulk loading capabilities
+#'   \item Upsert operations (insert or update)
+#'   \item Index management (creation, deletion)
+#'   \item Data validation through customizable validators
+#'   \item Integration with dplyr for data queries
+#' }
+#' 
+#' \strong{Advanced features:}
+#' \itemize{
+#'   \item Automatic table creation based on field specifications
+#'   \item Schema validation with custom validator functions
+#'   \item Efficient bulk data loading using database-specific methods
+#'   \item Index optimization for query performance
+#'   \item Cross-database compatibility (SQL Server, PostgreSQL)
+#' }
+#' 
+#' \strong{Data validation:}
+#' The class supports custom validation functions for both field types and data contents,
+#' ensuring data integrity and schema compliance.
 #'
 #' @import data.table
 #' @import R6
 #' @export DBTable_v9
+#' @examples
+#' \dontrun{
+#' # Create database connection
+#' db_config <- list(
+#'   driver = "ODBC Driver 17 for SQL Server",
+#'   server = "localhost",
+#'   db = "mydb",
+#'   user = "myuser",
+#'   password = "mypass"
+#' )
+#' 
+#' # Define table schema
+#' field_types <- c(
+#'   "id" = "INTEGER",
+#'   "name" = "TEXT",
+#'   "value" = "DOUBLE",
+#'   "date_created" = "DATE"
+#' )
+#' 
+#' # Create table object
+#' my_table <- DBTable_v9$new(
+#'   dbconfig = db_config,
+#'   table_name = "my_data_table",
+#'   field_types = field_types,
+#'   keys = c("id"),
+#'   validator_field_types = validator_field_types_blank,
+#'   validator_field_contents = validator_field_contents_blank
+#' )
+#' 
+#' # Create table in database
+#' my_table$create_table()
+#' 
+#' # Insert data
+#' sample_data <- data.frame(
+#'   id = 1:3,
+#'   name = c("Alice", "Bob", "Charlie"),
+#'   value = c(10.5, 20.3, 15.7),
+#'   date_created = as.Date("2023-01-01")
+#' )
+#' my_table$insert_data(sample_data)
+#' 
+#' # Query data using dplyr
+#' result <- my_table$tbl() %>%
+#'   dplyr::filter(value > 15) %>%
+#'   dplyr::collect()
+#' 
+#' # Add indexes for performance
+#' my_table$add_indexes(c("name", "date_created"))
+#' 
+#' # Upsert (insert or update) data
+#' new_data <- data.frame(
+#'   id = 2:4,
+#'   name = c("Bob_Updated", "Charlie", "David"),
+#'   value = c(25.0, 15.7, 30.2),
+#'   date_created = as.Date("2023-01-02")
+#' )
+#' my_table$upsert_data(new_data)
+#' }
 DBTable_v9 <- R6::R6Class(
   "DBTable_v9",
 
@@ -413,9 +614,17 @@ DBTable_v9 <- R6::R6Class(
     #' @param ... Not in use.
     print = function(...) {
       if (!self$dbconnection$is_connected()) {
-        cat(self$table_name_fully_specified, crayon::bgRed(crayon::white("(disconnected)\n\n")))
+        if(requireNamespace("crayon", quietly = TRUE)) {
+          cat(self$table_name_fully_specified, crayon::bgRed(crayon::white("(disconnected)\n\n")))
+        } else {
+          cat(self$table_name_fully_specified, "(disconnected)\n\n")
+        }
       } else {
-        cat(self$table_name_fully_specified, crayon::bgCyan(crayon::white("(connected)\n\n")))
+        if(requireNamespace("crayon", quietly = TRUE)) {
+          cat(self$table_name_fully_specified, crayon::bgCyan(crayon::white("(connected)\n\n")))
+        } else {
+          cat(self$table_name_fully_specified, "(connected)\n\n")
+        }
       }
       width_of_numbering <- nchar(length(self$field_types))
       for (i in seq_along(self$field_types)) {
@@ -423,7 +632,7 @@ DBTable_v9 <- R6::R6Class(
         x_name <- names(self$field_types)[i]
         x_type <- self$field_types[i]
         if(x_name %in% self$keys){
-          x_key <- crayon::bgRed(crayon::white("(KEY)"))
+          x_key <- if(requireNamespace("crayon", quietly = TRUE)) crayon::bgRed(crayon::white("(KEY)")) else "(KEY)"
         } else {
           x_key <- ""
         }
@@ -513,7 +722,7 @@ DBTable_v9 <- R6::R6Class(
       # this will make the insert go faster, because
       # the data will be sorted
       # setkeyv(newdata, self$keys)
-      infile <- random_file(private$load_folder_fn(), extra_insert = digest::digest(newdata[1,]))
+      infile <- random_file(private$load_folder_fn(), extra_insert = if(requireNamespace("digest", quietly = TRUE)) digest::digest(newdata[1,]) else "")
       load_data_infile(
         connection = self$dbconnection$autoconnection,
         dbconfig = self$dbconnection$config,
@@ -563,7 +772,7 @@ DBTable_v9 <- R6::R6Class(
       # this will make the insert go faster, because
       # the data will be sorted
 
-      infile <- random_file(private$load_folder_fn(), extra_insert = digest::digest(newdata[1,]))
+      infile <- random_file(private$load_folder_fn(), extra_insert = if(requireNamespace("digest", quietly = TRUE)) digest::digest(newdata[1,]) else "")
       upsert_load_data_infile(
         connection = self$dbconnection$autoconnection,
         dbconfig = self$dbconnection$config,
