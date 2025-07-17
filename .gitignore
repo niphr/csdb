@@ -5,3 +5,5 @@
 @eaDir
 nul
 .DS_Store
+*.Rcheck/
+*.tar.gz
