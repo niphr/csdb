@@ -11,6 +11,10 @@
 - Fixed vignette title and improved documentation quality
 - All functions now pass R CMD check with only acceptable NOTEs
 
+# Version 2025.2.15
+
+- Including `role_create_table` in drop_table for PostgreSQL.
+
 # Version 2024.10.25
 
 - `role_create_table` is now included for dbconnection_v9/dbtable_v9, so that the role can be changed when creating tables in PostgreSQL.

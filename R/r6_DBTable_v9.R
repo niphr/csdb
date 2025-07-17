@@ -192,6 +192,7 @@ validator_field_contents_csfmt_rts_data_v1 <- function(data) {
   if (sum(!unique(data$sex) %in% c(
     "male",
     "female",
+    "missing",
     "total"
   )) > 0) {
     retval <- FALSE
@@ -615,15 +616,15 @@ DBTable_v9 <- R6::R6Class(
     print = function(...) {
       if (!self$dbconnection$is_connected()) {
         if(requireNamespace("crayon", quietly = TRUE)) {
-          cat(self$table_name_fully_specified, crayon::bgRed(crayon::white("(disconnected)\n\n")))
+          cat(self$table_name_fully_specified_text, crayon::bgRed(crayon::white("(disconnected)\n\n")))
         } else {
-          cat(self$table_name_fully_specified, "(disconnected)\n\n")
+          cat(self$table_name_fully_specified_text, "(disconnected)\n\n")
         }
       } else {
         if(requireNamespace("crayon", quietly = TRUE)) {
-          cat(self$table_name_fully_specified, crayon::bgCyan(crayon::white("(connected)\n\n")))
+          cat(self$table_name_fully_specified_text, crayon::bgCyan(crayon::white("(connected)\n\n")))
         } else {
-          cat(self$table_name_fully_specified, "(connected)\n\n")
+          cat(self$table_name_fully_specified_text, "(connected)\n\n")
         }
       }
       width_of_numbering <- nchar(length(self$field_types))
