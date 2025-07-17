@@ -10,3 +10,5 @@ license.md
 dev
 @eaDir
 ^\.claude$
+vignettes/_PRECOMPILER.R
+vignettes/.*\.Rmd\.orig$
