@@ -4,7 +4,7 @@
 
 [csdb](https://www.csids.no/csdb/) provides an abstracted system for easily working with databases with large datasets.
 
-Read the introduction vignette [here](http://www.csids.no/csdb/articles/csdb.html) or run `help(package="csdb")`.
+Read the introduction vignette [here](https://www.csids.no/csdb/articles/csdb.html) or run `help(package="csdb")`.
 
 ## csverse
 
