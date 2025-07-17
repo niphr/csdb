@@ -2,13 +2,26 @@
 % Please edit documentation in R/r6_DBTable_v9.R
 \name{validator_field_types_blank}
 \alias{validator_field_types_blank}
-\title{Blank field_types validator}
+\title{Blank field types validator}
 \usage{
 validator_field_types_blank(db_field_types)
 }
 \arguments{
-\item{db_field_types}{db_field_types passed to schema}
+\item{db_field_types}{A named character vector of database field types}
+}
+\value{
+Always returns TRUE
 }
 \description{
-Blank field_types validator
+A pass-through validator that accepts any field types without validation.
+This is useful as a placeholder when no specific field type validation is needed.
+}
+\examples{
+# This validator always returns TRUE regardless of input
+field_types <- c("id" = "INTEGER", "name" = "TEXT", "date" = "DATE")
+validator_field_types_blank(field_types)
+
+# Works with any field types
+other_types <- c("value" = "DOUBLE", "status" = "BOOLEAN")
+validator_field_types_blank(other_types)
 }

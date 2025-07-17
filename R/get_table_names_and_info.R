@@ -1,6 +1,39 @@
-#' Get table names, number of rows, and size of data
-#' @param connection db connection
+#' Get table names, number of rows, and size information
+#' 
+#' Retrieves comprehensive information about database tables including their names,
+#' row counts, and storage size metrics. This function provides database-specific
+#' implementations for different database systems.
+#' 
+#' @param connection A database connection object (e.g., from \code{\link[DBI]{dbConnect}})
+#' @return A data.table containing table information with columns:
+#' \describe{
+#'   \item{table_name}{Character. Name of the table}
+#'   \item{nrow}{Numeric. Number of rows in the table}
+#'   \item{size_total_gb}{Numeric. Total size of the table in gigabytes}
+#'   \item{size_data_gb}{Numeric. Size of data in gigabytes}
+#'   \item{size_index_gb}{Numeric. Size of indexes in gigabytes}
+#' }
 #' @export
+#' @examples
+#' \dontrun{
+#' # Microsoft SQL Server example
+#' con <- DBI::dbConnect(odbc::odbc(), 
+#'                       driver = "ODBC Driver 17 for SQL Server",
+#'                       server = "localhost", 
+#'                       database = "mydb")
+#' table_info <- get_table_names_and_info(con)
+#' print(table_info)
+#' DBI::dbDisconnect(con)
+#' 
+#' # PostgreSQL example  
+#' con <- DBI::dbConnect(RPostgres::Postgres(),
+#'                       host = "localhost",
+#'                       dbname = "mydb",
+#'                       user = "user")
+#' table_info <- get_table_names_and_info(con)
+#' print(table_info)
+#' DBI::dbDisconnect(con)
+#' }
 get_table_names_and_info <- function(connection) UseMethod("get_table_names_and_info")
 
 #' @export

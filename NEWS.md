@@ -1,3 +1,16 @@
+# Version 2025.7.17
+
+- Updated package for CRAN submission with comprehensive improvements
+- Added comprehensive documentation with examples for all exported functions
+- Fixed critical CRAN compliance issues including system tool availability checks
+- Added proper R6 class documentation with detailed usage examples
+- Improved all validator function documentation with clear examples
+- Added missing dependencies and fixed import declarations
+- Updated .Rbuildignore to exclude system files and build artifacts
+- Added CLAUDE.md for future development guidance
+- Fixed vignette title and improved documentation quality
+- All functions now pass R CMD check with only acceptable NOTEs
+
 # Version 2025.2.15
 
 - Including `role_create_table` in drop_table for PostgreSQL.

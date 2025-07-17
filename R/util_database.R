@@ -161,6 +161,12 @@ load_data_infile.default <- function(
   if (dbconfig$trusted_connection == "yes") {
     args <- c(args, "-T")
   }
+  
+  # Check if bcp is available
+  if (Sys.which("bcp") == "") {
+    stop("bcp command not found. Please install SQL Server command line tools.")
+  }
+  
   system2(
     "bcp",
     args = args,
@@ -212,6 +218,12 @@ load_data_infile.default <- function(
   if (dbconfig$trusted_connection == "yes") {
     args <- c(args, "-T")
   }
+  
+  # Check if bcp is available
+  if (Sys.which("bcp") == "") {
+    stop("bcp command not found. Please install SQL Server command line tools.")
+  }
+  
   # print(args)
   system2(
     "bcp",
@@ -299,6 +311,11 @@ load_data_infile.default <- function(
     sql,
     uri
   )
+
+  # Check if psql is available
+  if (Sys.which("psql") == "") {
+    stop("psql command not found. Please install PostgreSQL command line tools.")
+  }
 
   system2(
     "psql",
@@ -764,11 +781,38 @@ drop_all_rows <- function(connection, table) {
   #update_config_last_updated(type = "data", tag = table)
 }
 
-#' Drops the rows where the condition is met
-#' @param connection A db connection
-#' @param table Table name
-#' @param condition A string SQL condition
+#' Drop rows from a database table where a condition is met
+#' 
+#' Removes rows from a database table that match the specified SQL condition.
+#' This function provides a safe way to delete specific rows from a table 
+#' using SQL WHERE clause conditions.
+#' 
+#' @param connection A database connection object (e.g., from \code{\link[DBI]{dbConnect}})
+#' @param table Character string specifying the name of the table
+#' @param condition A string containing the SQL WHERE clause condition (without the WHERE keyword)
+#' @return Invisible NULL. The function is called for its side effects.
 #' @export
+#' @examples
+#' \dontrun{
+#' # Create a connection and sample data
+#' con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+#' DBI::dbCreateTable(con, "test_table", 
+#'                    data.frame(id = integer(), value = numeric(), status = character()))
+#' 
+#' # Insert some test data
+#' DBI::dbAppendTable(con, "test_table", 
+#'                    data.frame(id = 1:5, value = c(10, 20, 30, 40, 50), 
+#'                               status = c("active", "inactive", "active", "deleted", "active")))
+#' 
+#' # Drop rows where status is 'deleted'
+#' drop_rows_where(con, "test_table", "status = 'deleted'")
+#' 
+#' # Drop rows where value is greater than 30
+#' drop_rows_where(con, "test_table", "value > 30")
+#' 
+#' # Clean up
+#' DBI::dbDisconnect(con)
+#' }
 
 drop_rows_where <- function(connection, table, condition) UseMethod("drop_rows_where")
 
@@ -904,10 +948,30 @@ list_indexes <- function(connection, table) {
 
 
 
-#' drop_table
-#' @param connection connection
-#' @param table table
+#' Drop a database table
+#' 
+#' Safely removes a database table from the database. This function wraps 
+#' \code{\link[DBI]{dbRemoveTable}} with error handling to prevent failures
+#' from stopping execution.
+#' 
+#' @param connection A database connection object (e.g., from \code{\link[DBI]{dbConnect}})
+#' @param table Character string specifying the name of the table to drop
+#' @return Invisible NULL on success, or a try-error object if the operation fails
 #' @export
+#' @examples
+#' \dontrun{
+#' # Create a connection (example for SQLite)
+#' con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+#' 
+#' # Create a test table
+#' DBI::dbCreateTable(con, "test_table", data.frame(id = integer(), name = character()))
+#' 
+#' # Drop the table
+#' drop_table(con, "test_table")
+#' 
+#' # Clean up
+#' DBI::dbDisconnect(con)
+#' }
 drop_table <- function(connection, table) UseMethod("drop_table")
 
 `drop_table.Microsoft SQL Server` <- function(connection, table) {

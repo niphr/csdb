@@ -2,17 +2,44 @@
 % Please edit documentation in R/util_database.R
 \name{drop_rows_where}
 \alias{drop_rows_where}
-\title{Drops the rows where the condition is met}
+\title{Drop rows from a database table where a condition is met}
 \usage{
 drop_rows_where(connection, table, condition)
 }
 \arguments{
-\item{connection}{A db connection}
+\item{connection}{A database connection object (e.g., from \code{\link[DBI]{dbConnect}})}
 
-\item{table}{Table name}
+\item{table}{Character string specifying the name of the table}
 
-\item{condition}{A string SQL condition}
+\item{condition}{A string containing the SQL WHERE clause condition (without the WHERE keyword)}
+}
+\value{
+Invisible NULL. The function is called for its side effects.
 }
 \description{
-Drops the rows where the condition is met
+Removes rows from a database table that match the specified SQL condition.
+This function provides a safe way to delete specific rows from a table 
+using SQL WHERE clause conditions.
+}
+\examples{
+\dontrun{
+# Create a connection and sample data
+con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+DBI::dbCreateTable(con, "test_table", 
+                   data.frame(id = integer(), value = numeric(), status = character()))
+
+# Insert some test data
+DBI::dbAppendTable(con, "test_table", 
+                   data.frame(id = 1:5, value = c(10, 20, 30, 40, 50), 
+                              status = c("active", "inactive", "active", "deleted", "active")))
+
+# Drop rows where status is 'deleted'
+drop_rows_where(con, "test_table", "status = 'deleted'")
+
+# Drop rows where value is greater than 30
+drop_rows_where(con, "test_table", "value > 30")
+
+# Clean up
+DBI::dbDisconnect(con)
+}
 }
