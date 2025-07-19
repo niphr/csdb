@@ -2,3 +2,26 @@ url: https://www.csids.no/csdb/
 
 template:
   package: csidstemplatepkgdown
+
+reference:
+- title: "Core Database Classes"
+  desc: "Main R6 classes for database connection and table management"
+  contents:
+  - DBConnection_v9
+  - DBTable_v9
+
+- title: "Database Utilities"
+  desc: "Helper functions for database operations and metadata"
+  contents:
+  - get_table_names_and_info
+
+- title: "Data Validation"
+  desc: "Functions for validating field types and data contents"
+  contents:
+  - starts_with("validator_field_types")
+  - starts_with("validator_field_contents")
+
+- title: "Datasets"
+  desc: "Example datasets included with the package"
+  contents:
+  - nor_covid19_cases_by_time_location

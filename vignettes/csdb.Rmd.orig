@@ -1,10 +1,10 @@
 ---
-title: "Introduction to spldb"
-author: "Richard White"
-date: "2020-02-17"
+title: "Introduction to csdb"
+author: "Richard Aubrey White"
+date: "2025-07-18"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Introduction to spldb}
+  %\VignetteIndexEntry{Introduction to csdb}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -24,13 +24,13 @@ library(magrittr)
 ## Concept
 ```{r}
 dbconnection <- csdb::DBConnection_v9$new(
-  driver = Sys.getenv("SC9_DBCONFIG_DRIVER"),
-  server = Sys.getenv("SC9_DBCONFIG_SERVER"),
-  port = as.integer(Sys.getenv("SC9_DBCONFIG_PORT")),
-  db = Sys.getenv("SC9_DBCONFIG_DB_ANON"),
-  user = Sys.getenv("SC9_DBCONFIG_USER"),
-  password = Sys.getenv("SC9_DBCONFIG_PASSWORD"),
-  trusted_connection = Sys.getenv("SC9_DBCONFIG_TRUSTED_CONNETION")
+  driver = Sys.getenv("CS9_DBCONFIG_DRIVER"),
+  server = Sys.getenv("CS9_DBCONFIG_SERVER"),
+  port = as.integer(Sys.getenv("CS9_DBCONFIG_PORT")),
+  db = Sys.getenv("CS9_DBCONFIG_DB_ANON"),
+  user = Sys.getenv("CS9_DBCONFIG_USER"),
+  password = Sys.getenv("CS9_DBCONFIG_PASSWORD"),
+  sslmode = Sys.getenv("CS9_DBCONFIG_SSLMODE")
 )
 dbconnection
 dbconnection$connect()
@@ -46,14 +46,14 @@ class(dbconnection$autoconnection)
 
 dbtable <- csdb::DBTable_v9$new(
   dbconfig = list(
-    driver = Sys.getenv("SC9_DBCONFIG_DRIVER"),
-    server = Sys.getenv("SC9_DBCONFIG_SERVER"),
-    port = as.integer(Sys.getenv("SC9_DBCONFIG_PORT")),
-    db = Sys.getenv("SC9_DBCONFIG_DB_ANON"),
-    schema = Sys.getenv("SC9_DBCONFIG_SCHEMA_ANON"),
-    user = Sys.getenv("SC9_DBCONFIG_USER"),
-    password = Sys.getenv("SC9_DBCONFIG_PASSWORD"),
-    trusted_connection = Sys.getenv("SC9_DBCONFIG_TRUSTED_CONNETION")
+    driver = Sys.getenv("CS9_DBCONFIG_DRIVER"),
+    server = Sys.getenv("CS9_DBCONFIG_SERVER"),
+    port = as.integer(Sys.getenv("CS9_DBCONFIG_PORT")),
+    db = Sys.getenv("CS9_DBCONFIG_DB_ANON"),
+    schema = Sys.getenv("CS9_DBCONFIG_SCHEMA_ANON"),
+    user = Sys.getenv("CS9_DBCONFIG_USER"),
+    password = Sys.getenv("CS9_DBCONFIG_PASSWORD"),
+    sslmode = Sys.getenv("CS9_DBCONFIG_SSLMODE")
   ),
   table_name = "anon_test",
   field_types = c(
@@ -89,6 +89,7 @@ dbtable <- csdb::DBTable_v9$new(
     validator_field_types = csdb::validator_field_types_blank,
     validator_field_contents = csdb::validator_field_contents_blank
 )
+dbtable$drop_all_rows()
 dbtable$insert_data(csdb::nor_covid19_cases_by_time_location)
 dbtable$connect()
 dbtable$dbconnection$is_connected()

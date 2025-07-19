@@ -1,24 +1,24 @@
-# Global variable declarations to satisfy R CMD check
-utils::globalVariables(c(
-  "indexname", "tablename", "size_total_gb", "reserved", 
-  "size_data_gb", "data", "size_index_gb", "index_size", 
-  "rows", "name", "table_name", "."
-))
+# Database Utilities for csdb package
+# This file contains S7 database methods and database-specific utility functions
 
-random_uuid <- function() {
-  x <- uuid::UUIDgenerate(F)
-  x <- gsub("-", "", x)
-  # the second part here allows for the usage of set.seed()
-  x <- paste0("a", x, round(runif(1)*10000000))
-  x
-}
+# Database utility functions
 
-random_file <- function(folder, extension = ".csv", extra_insert = NULL) {
-  dir.create(folder, showWarnings = FALSE, recursive = TRUE)
-  fs::path(folder, paste0(random_uuid(), extra_insert, extension))
-}
-
-
+#' Write data.table to file for database bulk insert
+#'
+#' Internal function to write data.table to CSV file with proper formatting
+#' for database bulk insert operations. Handles special cases like infinites,
+#' NaNs, and POSIXt objects.
+#'
+#' @param dt data.table to write
+#' @param file Output file path
+#' @param colnames Logical indicating whether to include column names
+#' @param eol End of line character
+#' @param quote Quoting behavior
+#' @param na String to use for NA values
+#' @param sep Column separator
+#' @return NULL (called for side effects)
+#' @keywords internal
+#' @noRd
 write_data_infile <- function(
     dt,
     file = paste0(tempfile(), ".csv"),
@@ -47,25 +47,114 @@ write_data_infile <- function(
   )
 }
 
-load_data_infile <- function(
-    connection,
-    dbconfig,
-    table,
-    dt,
-    file,
-    force_tablock
-) {
-  UseMethod("load_data_infile")
+#' Truncate all rows from a database table
+#'
+#' Removes all rows from a database table using TRUNCATE TABLE command.
+#' This is more efficient than DELETE for removing all rows.
+#'
+#' @param connection Database connection object
+#' @param table Name of the table to truncate
+#' @return NULL (called for side effects)
+#' @keywords internal
+#' @noRd
+drop_all_rows <- function(connection, table) {
+  a <- DBI::dbExecute(connection, glue::glue({
+    "TRUNCATE TABLE {table};"
+  }))
 }
 
-load_data_infile.default <- function(
-    connection = NULL,
-    dbconfig = NULL,
-    table,
-    dt = NULL,
-    file = "/xtmp/x123.csv",
-    force_tablock = FALSE
-) {
+#' List indexes for a database table
+#'
+#' Internal function to list all indexes for a specific table.
+#' Currently only supports Microsoft SQL Server.
+#'
+#' @param connection Database connection object
+#' @param table Name of the table to list indexes for
+#' @return data.frame with index information
+#' @keywords internal
+#' @noRd
+list_indexes <- function(connection, table) {
+  retval <- DBI::dbGetQuery(
+    connection,
+    glue::glue("select * from sys.indexes where object_id = (select object_id from sys.objects where name = '{table}')")
+  )
+  return(retval)
+}
+
+# S7 classes for database connections - register S4 classes for S7 dispatch
+# This allows S7 to dispatch on actual S4 connection objects  
+# We need to register the S4 classes with S7 first, then create methods for them
+
+# Helper function to safely register S4 classes for S7 dispatch
+register_s4_classes <- function() {
+  # Try to register S4 classes if they exist
+  tryCatch({
+    # Check if PostgreSQL S4 class exists and register it
+    if (methods::isClass("PostgreSQL")) {
+      S7::S4_register(methods::getClass("PostgreSQL"))
+    }
+  }, error = function(e) NULL)
+  
+  tryCatch({
+    # Check if Microsoft SQL Server S4 class exists and register it
+    if (methods::isClass("Microsoft SQL Server")) {
+      S7::S4_register(methods::getClass("Microsoft SQL Server"))
+    }
+  }, error = function(e) NULL)
+  
+  tryCatch({
+    # Check if DBIConnection S4 class exists and register it
+    if (methods::isClass("DBIConnection")) {
+      S7::S4_register(methods::getClass("DBIConnection"))
+    }
+  }, error = function(e) NULL)
+}
+
+# Register S4 classes on package load
+register_s4_classes()
+
+# Create S7 class objects for method registration
+# Use tryCatch to handle cases where S4 classes don't exist
+# Fall back to S3 class wrappers if S4 classes are not available
+tryCatch({
+  db_postgres <- methods::getClass("PostgreSQL")
+}, error = function(e) {
+  db_postgres <<- S7::new_S3_class("PostgreSQL")
+})
+
+tryCatch({
+  db_mssql <- methods::getClass("Microsoft SQL Server")
+}, error = function(e) {
+  db_mssql <<- S7::new_S3_class("Microsoft SQL Server")
+})
+
+tryCatch({
+  db_default <- methods::getClass("DBIConnection")
+}, error = function(e) {
+  db_default <<- S7::new_S3_class("DBIConnection")
+})
+
+# S7 generic definitions (internal use only)
+load_data_infile <- S7::new_generic("load_data_infile", "connection")
+upsert_load_data_infile <- S7::new_generic("upsert_load_data_infile", "connection")
+create_table <- S7::new_generic("create_table", "connection")
+add_constraint <- S7::new_generic("add_constraint", "connection")
+drop_constraint <- S7::new_generic("drop_constraint", "connection")
+get_indexes <- S7::new_generic("get_indexes", "connection")
+drop_index <- S7::new_generic("drop_index", "connection")
+add_index <- S7::new_generic("add_index", "connection")
+drop_rows_where <- S7::new_generic("drop_rows_where", "connection")
+keep_rows_where <- S7::new_generic("keep_rows_where", "connection")
+drop_table <- S7::new_generic("drop_table", "connection")
+
+# S7 method definitions
+# load_data_infile methods
+S7::method(load_data_infile, db_default) <- function(connection, 
+                                                       dbconfig = NULL, 
+                                                       table, 
+                                                       dt = NULL, 
+                                                       file = "/xtmp/x123.csv", 
+                                                       force_tablock = FALSE) {
   if (is.null(dt)) {
     return()
   }
@@ -101,19 +190,16 @@ load_data_infile.default <- function(
 
   t1 <- Sys.time()
   dif <- round(as.numeric(difftime(t1, t0, units = "secs")), 1)
-  #if (config$verbose) message(glue::glue("Uploaded {nrow(dt)} rows in {dif} seconds to {table}"))
 
   invisible()
 }
 
-`load_data_infile.Microsoft SQL Server` <- function(
-    connection = NULL,
-    dbconfig = NULL,
-    table,
-    dt,
-    file = tempfile(),
-    force_tablock = FALSE
-) {
+S7::method(load_data_infile, db_mssql) <- function(connection, 
+                                                     dbconfig = NULL, 
+                                                     table, 
+                                                     dt, 
+                                                     file = tempfile(), 
+                                                     force_tablock = FALSE) {
   if (is.null(dt)) {
     return()
   }
@@ -122,14 +208,6 @@ load_data_infile.default <- function(
   }
 
   a <- Sys.time()
-
-  # dont do a validation check if running in parallel
-  # because there will be race conditions with different
-  # instances competing
-  # if (!config$in_parallel & interactive()) {
-  #   sql <- glue::glue("SELECT COUNT(*) FROM {table};")
-  #   n_before <- DBI::dbGetQuery(conn, sql)[1, 1]
-  # }
 
   correct_order <- DBI::dbListFields(connection, table)
   if (length(correct_order) > 0) dt <- dt[, correct_order, with = F]
@@ -153,7 +231,6 @@ load_data_infile.default <- function(
     "nul",
     "-q",
     "-c",
-    # "-t,",
     "-f",
     format_file,
     "-S",
@@ -169,7 +246,6 @@ load_data_infile.default <- function(
     args <- c(args, "-T")
   }
   
-  # Check if bcp is available
   if (Sys.which("bcp") == "") {
     stop("bcp command not found. Please install SQL Server command line tools.")
   }
@@ -180,16 +256,7 @@ load_data_infile.default <- function(
     stdout = NULL
   )
 
-  # TABLOCK is used by bcp by default. It is disabled when performing inserts in parallel.
-  # Upserts can use TABLOCK in parallel, because they initially insert to a random table
-  # before merging. This random db table will therefore not be in use by multiple processes
-  # simultaneously
-  #if (!config$in_parallel | force_tablock) {
   if(FALSE){
-    # sometimes this results in the data not being
-    # uploaded at all, so for the moment I am disabling this
-    # until we can spend more time on it
-    # hint_arg <- "TABLOCK"
     hint_arg <- NULL
   } else {
     hint_arg <- NULL
@@ -226,46 +293,28 @@ load_data_infile.default <- function(
     args <- c(args, "-T")
   }
   
-  # Check if bcp is available
   if (Sys.which("bcp") == "") {
     stop("bcp command not found. Please install SQL Server command line tools.")
   }
   
-  # print(args)
   system2(
     "bcp",
     args = args,
     stdout = NULL
   )
 
-  # dont do a validation check if running in parallel
-  # because there will be race conditions with different
-  # instances competing
-  #if (!config$in_parallel & interactive()) {
-  if(FALSE){
-    sql <- glue::glue("SELECT COUNT(*) FROM {table};")
-    n_after <- DBI::dbGetQuery(conn, sql)[1, 1]
-    n_inserted <- n_after - n_before
-
-    if (n_inserted != nrow(dt)) stop("Wanted to insert ", nrow(dt), " rows but only inserted ", n_inserted)
-  }
   b <- Sys.time()
   dif <- round(as.numeric(difftime(b, a, units = "secs")), 1)
-  #if (config$verbose) message(glue::glue("Uploaded {nrow(dt)} rows in {dif} seconds to {table}"))
-
-  #update_config_last_updated(type = "data", tag = table)
 
   invisible()
 }
 
-`load_data_infile.PostgreSQL` <- function(
-    connection = NULL,
-    dbconfig = NULL,
-    table,
-    dt,
-    file = tempfile(),
-    force_tablock = FALSE
-) {
+S7::method(load_data_infile, db_postgres) <- function(connection, 
+                                                        dbconfig = NULL, 
+                                                        table, 
+                                                        dt, 
+                                                        file = tempfile(), 
+                                                        force_tablock = FALSE) {
   if (is.null(dt)) {
     return()
   }
@@ -319,7 +368,6 @@ load_data_infile.default <- function(
     uri
   )
 
-  # Check if psql is available
   if (Sys.which("psql") == "") {
     stop("psql command not found. Please install PostgreSQL command line tools.")
   }
@@ -332,43 +380,25 @@ load_data_infile.default <- function(
 
   b <- Sys.time()
   dif <- round(as.numeric(difftime(b, a, units = "secs")), 1)
-  #if (config$verbose) message(glue::glue("Uploaded {nrow(dt)} rows in {dif} seconds to {table}"))
 
   invisible()
 }
 
-######### upsert_load_data_infile
-
-upsert_load_data_infile <- function(
-    connection,
-    dbconfig,
-    table,
-    dt,
-    file,
-    fields,
-    keys,
-    drop_indexes){
-  UseMethod("upsert_load_data_infile")
-}
-
-upsert_load_data_infile.default <- function(
-    connection = NULL,
-    dbconfig = NULL,
-    table,
-    dt,
-    file = "/tmp/x123.csv",
-    fields,
-    keys = NULL,
-    drop_indexes = NULL
-) {
+# Continue with upsert_load_data_infile methods
+S7::method(upsert_load_data_infile, db_default) <- function(connection, 
+                                                              dbconfig = NULL, 
+                                                              table, 
+                                                              dt, 
+                                                              file = "/tmp/x123.csv", 
+                                                              fields, 
+                                                              keys = NULL, 
+                                                              drop_indexes = NULL) {
   temp_name <- random_uuid()
-  # ensure that the table is removed **FIRST** (before deleting the connection)
   on.exit(DBI::dbRemoveTable(connection, temp_name), add = TRUE, after = FALSE)
 
   sql <- glue::glue("CREATE TEMPORARY TABLE {temp_name} LIKE {table};")
   DBI::dbExecute(connection, sql)
 
-  # TO SPEED UP EFFICIENCY DROP ALL INDEXES HERE
   if (!is.null(drop_indexes)) {
     for (i in drop_indexes) {
       try(
@@ -403,33 +433,19 @@ upsert_load_data_infile.default <- function(
 
   t1 <- Sys.time()
   dif <- round(as.numeric(difftime(t1, t0, units = "secs")), 1)
-  #if (config$verbose) message(glue::glue("Upserted {nrow(dt)} rows in {dif} seconds from {temp_name} to {table}"))
 
   invisible()
 }
 
-`upsert_load_data_infile.Microsoft SQL Server` <- function(
-    connection,
-    dbconfig,
-    table,
-    dt,
-    file = tempfile(),
-    fields,
-    keys,
-    drop_indexes = NULL
-) {
-  # conn <- schema$output$conn
-  # db_config <- config$db_config
-  # table <- schema$output$db_table
-  # dt <- data_clean
-  # file <- tempfile()
-  # fields <- schema$output$db_fields
-  # keys <- schema$output$keys
-  # drop_indexes <- NULL
-
+S7::method(upsert_load_data_infile, db_mssql) <- function(connection, 
+                                                            dbconfig, 
+                                                            table, 
+                                                            dt, 
+                                                            file = tempfile(), 
+                                                            fields, 
+                                                            keys, 
+                                                            drop_indexes = NULL) {
   temp_name <- paste0("tmp", random_uuid())
-
-  # ensure that the table is removed **FIRST** (before deleting the connection)
   on.exit(DBI::dbRemoveTable(connection, temp_name), add = TRUE, after = FALSE)
 
   sql <- glue::glue("SELECT * INTO {temp_name} FROM {table} WHERE 1 = 0;")
@@ -480,28 +496,22 @@ upsert_load_data_infile.default <- function(
 
   b <- Sys.time()
   dif <- round(as.numeric(difftime(b, a, units = "secs")), 1)
-  #if (config$verbose) message(glue::glue("Upserted {nrow(dt)} rows in {dif} seconds from {temp_name} to {table}"))
 
-  #update_config_last_updated(type = "data", tag = table)
   invisible()
 }
 
-upsert_load_data_infile.PostgreSQL <- function(
-    connection,
-    dbconfig,
-    table,
-    dt,
-    file = tempfile(),
-    fields,
-    keys,
-    drop_indexes = NULL
-) {
-
+S7::method(upsert_load_data_infile, db_postgres) <- function(connection, 
+                                                               dbconfig, 
+                                                               table, 
+                                                               dt, 
+                                                               file = tempfile(), 
+                                                               fields, 
+                                                               keys, 
+                                                               drop_indexes = NULL) {
   temp_name <- DBI::Id(schema = table@name[["schema"]], paste0("tmp", random_uuid()))
   temp_name_text <- DBI::dbQuoteIdentifier(connection, temp_name)
   table_text <- DBI::dbQuoteIdentifier(connection, table)
 
-  # ensure that the table is removed **FIRST** (before deleting the connection)
   on.exit(DBI::dbRemoveTable(connection, temp_name), add = TRUE, after = FALSE)
 
   sql <- glue::glue("SELECT * INTO {temp_name_text} FROM {table_text} WHERE 1 = 0;")
@@ -554,27 +564,12 @@ upsert_load_data_infile.PostgreSQL <- function(
 
   b <- Sys.time()
   dif <- round(as.numeric(difftime(b, a, units = "secs")), 1)
-  #if (config$verbose) message(glue::glue("Upserted {nrow(dt)} rows in {dif} seconds from {temp_name} to {table}"))
 
   invisible()
 }
 
-#' Create database table
-#' 
-#' Internal function to create database tables with appropriate field types.
-#' 
-#' @param connection Database connection
-#' @param table Table name 
-#' @param fields Named vector of field types
-#' @param keys Primary key columns
-#' @param role_create_table Role for table creation (PostgreSQL)
-#' @param ... Additional arguments
-#' @return NULL (called for side effects)
-#' @export
-#' @keywords internal
-create_table <- function(connection, table, fields, keys = NULL, role_create_table = NULL, ...) UseMethod("create_table")
-
-create_table.default <- function(connection, table, fields, keys = NULL, role_create_table = NULL, ...) {
+# create_table methods
+S7::method(create_table, db_default) <- function(connection, table, fields, keys = NULL, role_create_table = NULL, ...) {
   fields_new <- fields
   fields_new[fields == "TEXT"] <- "TEXT CHARACTER SET utf8 COLLATE utf8_unicode_ci"
 
@@ -584,7 +579,7 @@ create_table.default <- function(connection, table, fields, keys = NULL, role_cr
   DBI::dbExecute(connection, sql)
 }
 
-`create_table.Microsoft SQL Server` <- function(connection, table, fields, keys = NULL, role_create_table = NULL, ...) {
+S7::method(create_table, db_mssql) <- function(connection, table, fields, keys = NULL, role_create_table = NULL, ...) {
   fields_new <- fields
   fields_new[fields == "TEXT"] <- "NVARCHAR (1000)"
   fields_new[fields == "DOUBLE"] <- "FLOAT"
@@ -605,7 +600,7 @@ create_table.default <- function(connection, table, fields, keys = NULL, role_cr
   DBI::dbExecute(connection, sql)
 }
 
-`create_table.PostgreSQL` <- function(connection, table, fields, keys = NULL, role_create_table = NULL, ...) {
+S7::method(create_table, db_postgres) <- function(connection, table, fields, keys = NULL, role_create_table = NULL, ...) {
   fields_new <- fields
   fields_new[fields == "TEXT"] <- "VARCHAR"
   fields_new[fields == "DOUBLE"] <- "REAL"
@@ -624,9 +619,7 @@ create_table.default <- function(connection, table, fields, keys = NULL, role_cr
     stringr::str_replace("\\\\", "\\") |>
     stringr::str_replace("\"", "") |>
     stringr::str_replace("\"", "")
-  # print(sql)
 
-  # include set role if appropriate
   if(!is.na(role_create_table)) if(role_create_table!="x"){
     sql <- paste0("SET ROLE ", role_create_table, "; ", sql,"; RESET ROLE")
   }
@@ -634,10 +627,8 @@ create_table.default <- function(connection, table, fields, keys = NULL, role_cr
   DBI::dbExecute(connection, sql)
 }
 
-######### add_constraint
-add_constraint <- function(connection, table, keys) UseMethod("add_constraint")
-
-add_constraint.default <- function(connection, table, keys) {
+# add_constraint methods
+S7::method(add_constraint, db_default) <- function(connection, table, keys) {
   t0 <- Sys.time()
 
   primary_keys <- glue::glue_collapse(keys, sep = ", ")
@@ -648,15 +639,12 @@ add_constraint.default <- function(connection, table, keys) {
   sql <- glue::glue("
           ALTER table {table}
           ADD CONSTRAINT {constraint} PRIMARY KEY CLUSTERED ({primary_keys});")
-  # print(sql)
   a <- DBI::dbExecute(connection, sql)
-  # DBI::dbExecute(connection, "SHOW INDEX FROM x");
   t1 <- Sys.time()
   dif <- round(as.numeric(difftime(t1, t0, units = "secs")), 1)
-  #if (config$verbose) message(glue::glue("Added constraint {constraint} in {dif} seconds to {table}"))
 }
 
-add_constraint.PostgreSQL <- function(connection, table, keys) {
+S7::method(add_constraint, db_postgres) <- function(connection, table, keys) {
   t0 <- Sys.time()
 
   primary_keys <- glue::glue_collapse(keys, sep = ", ")
@@ -674,13 +662,10 @@ add_constraint.PostgreSQL <- function(connection, table, keys) {
 
   t1 <- Sys.time()
   dif <- round(as.numeric(difftime(t1, t0, units = "secs")), 1)
-  #if (config$verbose) message(glue::glue("Added constraint {constraint} in {dif} seconds to {table}"))
 }
 
-######### drop_constraint
-drop_constraint <- function(connection, table) UseMethod("drop_constraint")
-
-drop_constraint.default <- function(connection, table) {
+# drop_constraint methods
+S7::method(drop_constraint, db_default) <- function(connection, table) {
   constraint <- glue::glue("PK_{table}") |>
     stringr::str_remove_all("\\.") |>
     stringr::str_remove_all("\\[") |>
@@ -688,13 +673,11 @@ drop_constraint.default <- function(connection, table) {
   sql <- glue::glue("
           ALTER table {table}
           DROP CONSTRAINT {constraint};")
-  # print(sql)
   try(a <- DBI::dbExecute(connection, sql), TRUE)
 }
 
-get_indexes <- function(connection, table) UseMethod("get_indexes")
-
-`get_indexes.Microsoft SQL Server` <- function(connection, table){
+# get_indexes methods
+S7::method(get_indexes, db_mssql) <- function(connection, table){
   index_name <- NULL
   table_name <- NULL
 
@@ -706,7 +689,7 @@ get_indexes <- function(connection, table) UseMethod("get_indexes")
   return(retval)
 }
 
-get_indexes.PostgreSQL <- function(connection, table){
+S7::method(get_indexes, db_postgres) <- function(connection, table){
   index_name <- NULL
   table_name <- NULL
 
@@ -723,9 +706,8 @@ get_indexes.PostgreSQL <- function(connection, table){
   return(retval)
 }
 
-drop_index <- function(connection, table, index) UseMethod("drop_index")
-
-drop_index.default <- function(connection, table, index) {
+# drop_index methods
+S7::method(drop_index, db_default) <- function(connection, table, index) {
   try(
     DBI::dbExecute(
       connection,
@@ -735,7 +717,7 @@ drop_index.default <- function(connection, table, index) {
   )
 }
 
-`drop_index.Microsoft SQL Server` <- function(connection, table, index) {
+S7::method(drop_index, db_mssql) <- function(connection, table, index) {
   try(
     DBI::dbExecute(
       connection,
@@ -745,7 +727,7 @@ drop_index.default <- function(connection, table, index) {
   )
 }
 
-drop_index.PostgreSQL <- function(connection, table, index) {
+S7::method(drop_index, db_postgres) <- function(connection, table, index) {
   try(
     DBI::dbExecute(
       connection,
@@ -755,30 +737,17 @@ drop_index.PostgreSQL <- function(connection, table, index) {
   )
 }
 
-#' Add database index
-#' 
-#' Internal function to add indexes to database tables.
-#' 
-#' @param connection Database connection
-#' @param table Table name
-#' @param index Index name
-#' @param keys Columns to index
-#' @return NULL (called for side effects)
-#' @export
-#' @keywords internal
-add_index <- function(connection, table, index, keys) UseMethod("add_index")
-
-add_index.default <- function(connection, table, index, keys) {
+# add_index methods
+S7::method(add_index, db_default) <- function(connection, table, index, keys) {
   keys <- glue::glue_collapse(keys, sep = ", ")
 
   sql <- glue::glue("
     ALTER TABLE `{table}` ADD INDEX `{index}` ({keys})
     ;")
-  # print(sql)
   try(a <- DBI::dbExecute(connection, sql), T)
 }
 
-`add_index.Microsoft SQL Server` <- function(connection, table, index, keys) {
+S7::method(add_index, db_mssql) <- function(connection, table, index, keys) {
   keys <- glue::glue_collapse(keys, sep = ", ")
 
   try(
@@ -790,7 +759,7 @@ add_index.default <- function(connection, table, index, keys) {
   )
 }
 
-add_index.PostgreSQL <- function(connection, table, index, keys) {
+S7::method(add_index, db_postgres) <- function(connection, table, index, keys) {
   keys <- glue::glue_collapse(keys, sep = ", ")
 
   try(
@@ -802,82 +771,24 @@ add_index.PostgreSQL <- function(connection, table, index, keys) {
   )
 }
 
-drop_all_rows <- function(connection, table) {
-
-  a <- DBI::dbExecute(connection, glue::glue({
-    "TRUNCATE TABLE {table};"
-  }))
-
-  #update_config_last_updated(type = "data", tag = table)
-}
-
-#' Drop rows from a database table where a condition is met
-#' 
-#' Removes rows from a database table that match the specified SQL condition.
-#' This function provides a safe way to delete specific rows from a table 
-#' using SQL WHERE clause conditions.
-#' 
-#' @param connection A database connection object (e.g., from \code{\link[DBI]{dbConnect}})
-#' @param table Character string specifying the name of the table
-#' @param condition A string containing the SQL WHERE clause condition (without the WHERE keyword)
-#' @return Invisible NULL. The function is called for its side effects.
-#' @export
-#' @exportS3method drop_rows_where "Microsoft SQL Server"
-#' @exportS3method drop_rows_where PostgreSQL
-#' @examples
-#' \dontrun{
-#' # Create a connection and sample data
-#' con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
-#' DBI::dbCreateTable(con, "test_table", 
-#'                    data.frame(id = integer(), value = numeric(), status = character()))
-#' 
-#' # Insert some test data
-#' DBI::dbAppendTable(con, "test_table", 
-#'                    data.frame(id = 1:5, value = c(10, 20, 30, 40, 50), 
-#'                               status = c("active", "inactive", "active", "deleted", "active")))
-#' 
-#' # Drop rows where status is 'deleted'
-#' drop_rows_where(con, "test_table", "status = 'deleted'")
-#' 
-#' # Drop rows where value is greater than 30
-#' drop_rows_where(con, "test_table", "value > 30")
-#' 
-#' # Clean up
-#' DBI::dbDisconnect(con)
-#' }
-
-drop_rows_where <- function(connection, table, condition) UseMethod("drop_rows_where")
-
-`drop_rows_where.Microsoft SQL Server` <- function(connection, table, condition) {
+# drop_rows_where methods
+S7::method(drop_rows_where, db_mssql) <- function(connection, table, condition) {
   t0 <- Sys.time()
 
-  # find out how many rows to delete
   numrows <- DBI::dbGetQuery(connection, glue::glue(
     "SELECT COUNT(*) FROM {table} WHERE {condition};"
   )) |>
     as.numeric()
-  # message(numrows, " rows remaining to be deleted")
 
   num_deleting <- 100000
-  # need to do this, so that we dont get scientific format in the SQL command
   num_deleting_character <- formatC(num_deleting, format = "f", drop0trailing = T)
   num_delete_calls <- ceiling(numrows / num_deleting)
-  # message("We will need to perform ", num_delete_calls, " delete calls of ", num_deleting_character, " rows each.")
 
   indexes <- csutil::easy_split(1:num_delete_calls, number_of_groups = 10)
   notify_indexes <- unlist(lapply(indexes, max))
 
   i <- 0
   while (numrows > 0) {
-
-    # delete a large number of rows
-    # database must be in SIMPLE recovery mode
-    # "ALTER DATABASE sykdomspulsen_surv SET RECOVERY SIMPLE;"
-    # checkpointing will ensure transcation log is cleared after each delete operation
-    # http://craftydba.com/?p=3079
-    #
-    #
-
     b <- DBI::dbExecute(connection, glue::glue(
       "DELETE TOP ({num_deleting_character}) FROM {table} WHERE {condition}; ",
       "CHECKPOINT; "
@@ -888,27 +799,13 @@ drop_rows_where <- function(connection, table, condition) UseMethod("drop_rows_w
     )) |>
       as.numeric()
     i <- i + 1
-    # if (i %in% notify_indexes) message(i, "/", num_delete_calls, " delete calls performed. ", numrows, " rows remaining to be deleted")
   }
 
   t1 <- Sys.time()
   dif <- round(as.numeric(difftime(t1, t0, units = "secs")), 1)
-  # if (config$verbose) message(glue::glue("Deleted rows in {dif} seconds from {table}"))
-
-  #update_config_last_updated(type = "data", tag = table)
 }
 
-drop_rows_where.PostgreSQL <- function(connection, table, condition) {
-  # If there is a need to switch to dropping only a fixed number of rows per call, the syntax is:
-  # DBI::dbExecute(connection, glue::glue(
-  #   "DELETE FROM {table}
-  #   WHERE ctid IN (
-  #     SELECT ctid
-  #     FROM {table}
-  #     WHERE {condition}
-  #     LIMIT {num_deleting}
-  #   ); "
-  #))
+S7::method(drop_rows_where, db_postgres) <- function(connection, table, condition) {
   t0 <- Sys.time()
 
   sql <- glue::glue("delete from {table} where {condition};")
@@ -917,24 +814,10 @@ drop_rows_where.PostgreSQL <- function(connection, table, condition) {
 
   t1 <- Sys.time()
   dif <- round(as.numeric(difftime(t1, t0, units = "secs")), 1)
-  #if (config$verbose) message(glue::glue("Kept rows in {dif} seconds from {table}"))
 }
 
-#' Keep rows matching condition
-#' 
-#' Internal function to keep only rows matching a condition in database tables.
-#' 
-#' @param connection Database connection
-#' @param table Table name
-#' @param condition SQL WHERE condition
-#' @param role_create_table Role for table operations (PostgreSQL)
-#' @return NULL (called for side effects)
-#' @export
-#' @keywords internal
-keep_rows_where <- function(connection, table, condition, role_create_table = NULL) UseMethod("keep_rows_where")
-
-`keep_rows_where.Microsoft SQL Server` <- function(connection, table, condition, role_create_table = NULL) {
-
+# keep_rows_where methods
+S7::method(keep_rows_where, db_mssql) <- function(connection, table, condition, role_create_table = NULL) {
   t0 <- Sys.time()
   temp_name <- paste0("tmp", random_uuid())
 
@@ -947,94 +830,45 @@ keep_rows_where <- function(connection, table, condition, role_create_table = NU
   DBI::dbExecute(connection, sql)
   t1 <- Sys.time()
   dif <- round(as.numeric(difftime(t1, t0, units = "secs")), 1)
-  #if (config$verbose) message(glue::glue("Kept rows in {dif} seconds from {table}"))
-
-  #update_config_last_updated(type = "data", tag = table)
 }
 
-keep_rows_where.PostgreSQL <- function(connection, table, condition, role_create_table = NULL) {
-
+S7::method(keep_rows_where, db_postgres) <- function(connection, table, condition, role_create_table = NULL) {
   t0 <- Sys.time()
   temp_name <- paste0("tmp", random_uuid())
 
   sql <- glue::glue("SELECT * INTO {temp_name} FROM {table} WHERE {condition}")
-  if(!is.na(role_create_table)) if(role_create_table!="x"){ # include set role if appropriate
+  if(!is.na(role_create_table)) if(role_create_table!="x"){
     sql <- paste0("SET ROLE ", role_create_table, "; ", sql,"; RESET ROLE")
   }
   DBI::dbExecute(connection, sql)
 
   sql <- glue::glue("DROP TABLE {table}")
-  if(!is.na(role_create_table)) if(role_create_table!="x"){ # include set role if appropriate
+  if(!is.na(role_create_table)) if(role_create_table!="x"){
     sql <- paste0("SET ROLE ", role_create_table, "; ", sql,"; RESET ROLE")
   }
   DBI::dbExecute(connection, sql)
 
   sql <- glue::glue("ALTER TABLE {temp_name} RENAME TO {table}")
-  if(!is.na(role_create_table)) if(role_create_table!="x"){ # include set role if appropriate
+  if(!is.na(role_create_table)) if(role_create_table!="x"){
     sql <- paste0("SET ROLE ", role_create_table, "; ", sql,"; RESET ROLE")
   }
   DBI::dbExecute(connection, sql)
 
   t1 <- Sys.time()
   dif <- round(as.numeric(difftime(t1, t0, units = "secs")), 1)
-  #if (config$verbose) message(glue::glue("Kept rows in {dif} seconds from {table}"))
 }
 
-list_indexes <- function(connection, table) {
-  retval <- DBI::dbGetQuery(
-    connection,
-    glue::glue("select * from sys.indexes where object_id = (select object_id from sys.objects where name = '{table}')")
-  )
-  return(retval)
-}
-
-
-
-
-#' Drop a database table
-#' 
-#' Safely removes a database table from the database. This function wraps 
-#' \code{\link[DBI]{dbRemoveTable}} with error handling to prevent failures
-#' from stopping execution.
-#' 
-#' @param connection A database connection object (e.g., from \code{\link[DBI]{dbConnect}})
-#' @param table Character string specifying the name of the table to drop
-#' @param role_create_table Character string specifying the role to use when creating tables (PostgreSQL only, optional)
-#' @return Invisible NULL on success, or a try-error object if the operation fails
-#' @export
-#' @exportS3method drop_table "Microsoft SQL Server"
-#' @exportS3method drop_table PostgreSQL
-#' @examples
-#' \dontrun{
-#' # Create a connection (example for SQLite)
-#' con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
-#' 
-#' # Create a test table
-#' DBI::dbCreateTable(con, "test_table", data.frame(id = integer(), name = character()))
-#' 
-#' # Drop the table
-#' drop_table(con, "test_table")
-#' 
-#' # Clean up
-#' DBI::dbDisconnect(con)
-#' }
-drop_table <- function(connection, table, role_create_table = NULL) UseMethod("drop_table")
-
-`drop_table.Microsoft SQL Server` <- function(connection, table, role_create_table = NULL) {
+# drop_table methods
+S7::method(drop_table, db_mssql) <- function(connection, table, role_create_table = NULL) {
   return(try(DBI::dbRemoveTable(connection, name = table), TRUE))
 }
 
-drop_table.PostgreSQL <- function(connection, table, role_create_table = NULL) {
+S7::method(drop_table, db_postgres) <- function(connection, table, role_create_table = NULL) {
   sql <- glue::glue("DROP TABLE {table}")
-  if(!is.na(role_create_table)) if(role_create_table!="x"){ # include set role if appropriate
+  if(!is.na(role_create_table)) if(role_create_table!="x"){
     sql <- paste0("SET ROLE ", role_create_table, "; ", sql,"; RESET ROLE")
   }
 
   return(try(DBI::dbExecute(connection, sql), TRUE))
 }
-
-
-
-
-
 

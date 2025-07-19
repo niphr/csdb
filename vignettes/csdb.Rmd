@@ -1,7 +1,7 @@
 ---
 title: "Introduction to csdb"
-author: "Richard White"
-date: "2020-02-17"
+author: "Richard Aubrey White"
+date: "2025-07-18"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Introduction to csdb}
@@ -12,77 +12,76 @@ vignette: >
 
 
 
-```r
+``` r
 library(data.table)
-#> data.table 1.14.8 using 2 threads (see ?getDTthreads).  Latest news: r-datatable.com
 library(magrittr)
 ```
 
 ## Concept
 
-```r
+``` r
 dbconnection <- csdb::DBConnection_v9$new(
-  driver = Sys.getenv("SC9_DBCONFIG_DRIVER"),
-  server = Sys.getenv("SC9_DBCONFIG_SERVER"),
-  port = as.integer(Sys.getenv("SC9_DBCONFIG_PORT")),
-  db = Sys.getenv("SC9_DBCONFIG_DB_ANON"),
-  user = Sys.getenv("SC9_DBCONFIG_USER"),
-  password = Sys.getenv("SC9_DBCONFIG_PASSWORD"),
-  trusted_connection = Sys.getenv("SC9_DBCONFIG_TRUSTED_CONNETION")
+  driver = Sys.getenv("CS9_DBCONFIG_DRIVER"),
+  server = Sys.getenv("CS9_DBCONFIG_SERVER"),
+  port = as.integer(Sys.getenv("CS9_DBCONFIG_PORT")),
+  db = Sys.getenv("CS9_DBCONFIG_DB_ANON"),
+  user = Sys.getenv("CS9_DBCONFIG_USER"),
+  password = Sys.getenv("CS9_DBCONFIG_PASSWORD"),
+  sslmode = Sys.getenv("CS9_DBCONFIG_SSLMODE")
 )
 dbconnection
 #> (disconnected)
 #> 
-#> Driver:              ODBC Driver 17 for SQL Server 
-#> Server:              dm-prod 
-#> Port:                1433 
-#> DB:                  sc_interactive_anon 
-#> User:                SA 
+#> Driver:              PostgreSQL Unicode 
+#> Server:              db 
+#> Port:                5432 
+#> DB:                  postgres 
+#> User:                yourusername 
 #> Password:            ********************* 
-#> Trusted connection:
+#> Trusted connection:  x
 dbconnection$connect()
 
 dbconnection$connection
-#> <OdbcConnection> dbo@8f6800aff6b4
-#>   Database: sc_interactive_anon
-#>   Microsoft SQL Server Version: 15.00.4236
+#> <OdbcConnection> yourusername@db
+#>   Database: postgres
+#>   PostgreSQL Version: 17.0.5
 dbconnection$autoconnection
-#> <OdbcConnection> dbo@8f6800aff6b4
-#>   Database: sc_interactive_anon
-#>   Microsoft SQL Server Version: 15.00.4236
+#> <OdbcConnection> yourusername@db
+#>   Database: postgres
+#>   PostgreSQL Version: 17.0.5
 dbconnection
 #> (connected)
 #> 
-#> Driver:              ODBC Driver 17 for SQL Server 
-#> Server:              dm-prod 
-#> Port:                1433 
-#> DB:                  sc_interactive_anon 
-#> User:                SA 
+#> Driver:              PostgreSQL Unicode 
+#> Server:              db 
+#> Port:                5432 
+#> DB:                  postgres 
+#> User:                yourusername 
 #> Password:            ********************* 
-#> Trusted connection:
+#> Trusted connection:  x
 
 dbconnection$disconnect()
 dbconnection$connection
 #> Error: external pointer is not valid
 class(dbconnection$connection)
-#> [1] "Microsoft SQL Server"
+#> [1] "PostgreSQL"
 #> attr(,"package")
-#> [1] ".GlobalEnv"
+#> [1] "odbc"
 class(dbconnection$autoconnection)
-#> [1] "Microsoft SQL Server"
+#> [1] "PostgreSQL"
 #> attr(,"package")
-#> [1] ".GlobalEnv"
+#> [1] "odbc"
 
 dbtable <- csdb::DBTable_v9$new(
   dbconfig = list(
-    driver = Sys.getenv("SC9_DBCONFIG_DRIVER"),
-    server = Sys.getenv("SC9_DBCONFIG_SERVER"),
-    port = as.integer(Sys.getenv("SC9_DBCONFIG_PORT")),
-    db = Sys.getenv("SC9_DBCONFIG_DB_ANON"),
-    schema = Sys.getenv("SC9_DBCONFIG_SCHEMA_ANON"),
-    user = Sys.getenv("SC9_DBCONFIG_USER"),
-    password = Sys.getenv("SC9_DBCONFIG_PASSWORD"),
-    trusted_connection = Sys.getenv("SC9_DBCONFIG_TRUSTED_CONNETION")
+    driver = Sys.getenv("CS9_DBCONFIG_DRIVER"),
+    server = Sys.getenv("CS9_DBCONFIG_SERVER"),
+    port = as.integer(Sys.getenv("CS9_DBCONFIG_PORT")),
+    db = Sys.getenv("CS9_DBCONFIG_DB_ANON"),
+    schema = Sys.getenv("CS9_DBCONFIG_SCHEMA_ANON"),
+    user = Sys.getenv("CS9_DBCONFIG_USER"),
+    password = Sys.getenv("CS9_DBCONFIG_PASSWORD"),
+    sslmode = Sys.getenv("CS9_DBCONFIG_SSLMODE")
   ),
   table_name = "anon_test",
   field_types = c(
@@ -118,27 +117,27 @@ dbtable <- csdb::DBTable_v9$new(
     validator_field_types = csdb::validator_field_types_blank,
     validator_field_contents = csdb::validator_field_contents_blank
 )
+dbtable$drop_all_rows()
 dbtable$insert_data(csdb::nor_covid19_cases_by_time_location)
 dbtable$connect()
 dbtable$dbconnection$is_connected()
 #> [1] TRUE
 dbtable$tbl()
-#> # Source:   table<anon_test> [?? x 18]
-#> # Database: Microsoft SQL Server 15.00.4236[dbo@8f6800aff6b4/sc_interactive_anon]
-#>    granula…¹ granu…² count…³ locat…⁴ border age   sex   isoyear isoweek isoye…⁵ season seaso…⁶ calyear
-#>    <chr>     <chr>   <chr>   <chr>    <int> <chr> <chr>   <int>   <int> <chr>   <chr>    <dbl>   <int>
-#>  1 day       county  nor     county…   2020 total total    2020       8 2020-08 2019/…      31    2020
-#>  2 day       county  nor     county…   2020 total total    2020       8 2020-08 2019/…      31    2020
-#>  3 day       county  nor     county…   2020 total total    2020       8 2020-08 2019/…      31    2020
-#>  4 day       county  nor     county…   2020 total total    2020       9 2020-09 2019/…      32    2020
-#>  5 day       county  nor     county…   2020 total total    2020       9 2020-09 2019/…      32    2020
-#>  6 day       county  nor     county…   2020 total total    2020       9 2020-09 2019/…      32    2020
-#>  7 day       county  nor     county…   2020 total total    2020       9 2020-09 2019/…      32    2020
-#>  8 day       county  nor     county…   2020 total total    2020       9 2020-09 2019/…      32    2020
-#>  9 day       county  nor     county…   2020 total total    2020       9 2020-09 2019/…      32    2020
-#> 10 day       county  nor     county…   2020 total total    2020       9 2020-09 2019/…      32    2020
-#> # … with more rows, 5 more variables: calmonth <int>, calyearmonth <chr>, date <date>,
-#> #   covid19_cases_testdate_n <int>, covid19_cases_testdate_pr100000 <dbl>, and abbreviated variable
-#> #   names ¹​granularity_time, ²​granularity_geo, ³​country_iso3, ⁴​location_code, ⁵​isoyearweek,
-#> #   ⁶​seasonweek
+#> # Source:   table<"public"."anon_test"> [?? x 18]
+#> # Database: postgres  [yourusername@localhost:/postgres]
+#>    granularity_time granularity_geo country_iso3 location_code border age   sex   isoyear isoweek isoyearweek season   seasonweek
+#>    <chr>            <chr>           <chr>        <chr>          <int> <chr> <chr>   <int>   <int> <chr>       <chr>         <dbl>
+#>  1 day              county          nor          county_nor03    2020 total total    2020       8 2020-08     2019/20…         31
+#>  2 day              county          nor          county_nor03    2020 total total    2020       8 2020-08     2019/20…         31
+#>  3 day              county          nor          county_nor03    2020 total total    2020       8 2020-08     2019/20…         31
+#>  4 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
+#>  5 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
+#>  6 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
+#>  7 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
+#>  8 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
+#>  9 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
+#> 10 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
+#> # ℹ more rows
+#> # ℹ 6 more variables: calyear <int>, calmonth <int>, calyearmonth <chr>, date <date>, covid19_cases_testdate_n <int>,
+#> #   covid19_cases_testdate_pr100000 <dbl>
 ```
