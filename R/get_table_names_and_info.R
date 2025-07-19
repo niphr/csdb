@@ -1,8 +1,3 @@
-# Global variable declarations to satisfy R CMD check
-utils::globalVariables(c(
-  "size_total_gb", "reserved", "size_data_gb", "data", 
-  "size_index_gb", "index_size", "rows", "name", "nrow"
-))
 
 #' Get table names, number of rows, and size information
 #' 
@@ -40,12 +35,23 @@ utils::globalVariables(c(
 #' print(table_info)
 #' DBI::dbDisconnect(con)
 #' }
-#' @exportS3method get_table_names_and_info "Microsoft SQL Server"
-#' @exportS3method get_table_names_and_info PostgreSQL
+#' @export
 get_table_names_and_info <- function(connection) UseMethod("get_table_names_and_info")
 
 #' @export
 `get_table_names_and_info.Microsoft SQL Server` <- function(connection) {
+  # Declare variables to avoid R CMD check NOTEs
+  . <- NULL
+  table_name <- NULL
+  name <- NULL
+  size_total_gb <- NULL
+  reserved <- NULL
+  size_data_gb <- NULL
+  data <- NULL
+  size_index_gb <- NULL
+  index_size <- NULL
+  rows <- NULL
+  nrow <- NULL
   # table_rows <- connection %>%
   #   DBI::dbGetQuery("select o.name as table_name, i.rowcnt as n from sys.objects o join sys.sysindexes i on o.object_id = i.id where o.is_ms_shipped = 0 and i.rowcnt > 0 order by o.name") %>%
   #   setDT() %>% unique()

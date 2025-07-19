@@ -1,3 +1,12 @@
+# Version 2025.7.19
+
+## Bug Fixes
+* Fixed DBConnection_v9 print method to display "SSL mode" instead of "trusted connection" for PostgreSQL connections
+
+## Development
+* Added S7 package to imports in preparation for S3 to S7 method conversion to improve CRAN compliance
+* S7 transition planned to reduce exported API surface while maintaining functionality through R6 classes
+
 # Version 2025.7.17
 
 - Updated package for CRAN submission with comprehensive improvements

@@ -35,19 +35,19 @@
 #'   user = "myuser",
 #'   password = "mypass"
 #' )
-#' 
+#'
 #' # Connect to the database
 #' db_config$connect()
-#' 
+#'
 #' # Check connection status
 #' db_config$is_connected()
-#' 
+#'
 #' # Use the connection
 #' tables <- DBI::dbListTables(db_config$connection)
-#' 
+#'
 #' # Disconnect when done
 #' db_config$disconnect()
-#' 
+#'
 #' # PostgreSQL example
 #' pg_config <- DBConnection_v9$new(
 #'   driver = "PostgreSQL",
@@ -57,7 +57,7 @@
 #'   user = "myuser",
 #'   password = "mypass"
 #' )
-#' 
+#'
 #' pg_config$connect()
 #' # ... use connection ...
 #' pg_config$disconnect()
@@ -170,7 +170,11 @@ DBConnection_v9 <- R6::R6Class(
       cat("DB:                 ", self$config$db, "\n")
       cat("User:               ", self$config$user, "\n")
       cat("Password:           ", paste0(rep("*", nchar(self$config$password)), collapse=""), "\n")
-      cat("Trusted connection: ", self$config$trusted_connection, "\n")
+      if(self$config$driver %in% c("PostgreSQL Unicode")) {
+        cat("SSL mode:           ", self$config$sslmode, "\n")
+      } else {
+        cat("Trusted connection: ", self$config$trusted_connection, "\n")
+      }
       cat("\n")
 
       invisible(self)

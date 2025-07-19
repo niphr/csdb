@@ -1,11 +1,13 @@
 Package: csdb
 Title: An Abstracted System for Easily Working with Databases with Large Datasets
-Version: 2025.7.17
+Version: 2025.7.19
 Authors@R: c(
   person(c("Richard","Aubrey"), "White", email = "hello@rwhite.no", role = c("aut", "cre"), comment = c(ORCID = "0000-0002-6747-1726")),
   person(c("August", "Sørli"), "Mathisen", email = "august.sorli.mathisen@fhi.no", role = c("aut")),
   person("CSIDS", email = "hello@csids.no", role = c("cph"))
   )
+Author: Richard Aubrey White [aut, cre], August Sørli Mathisen [aut], CSIDS [cph]
+Maintainer: Richard Aubrey White <hello@rwhite.no>
 Description: An abstracted system for easily working with databases with large datasets.
 Depends: R (>= 4.1.0)
 License: MIT + file LICENSE
@@ -19,11 +21,13 @@ Imports: csutil,
     dplyr,
     fs,
     ggplot2,
+    glue,
+    methods,
     odbc,
     R6,
+    S7,
     stringr,
-    uuid,
-    glue
+    uuid
 Suggests: testthat,
     knitr,
     rmarkdown,
