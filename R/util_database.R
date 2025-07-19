@@ -87,52 +87,178 @@ list_indexes <- function(connection, table) {
 
 # Helper function to safely register S4 classes for S7 dispatch
 register_s4_classes <- function() {
-  # Try to register S4 classes if they exist
+  # Register S4 classes from odbc package if available
   tryCatch({
-    # Check if PostgreSQL S4 class exists and register it
-    if (methods::isClass("PostgreSQL")) {
-      S7::S4_register(methods::getClass("PostgreSQL"))
+    # Ensure odbc package is available before trying to register classes
+    if (requireNamespace("odbc", quietly = TRUE)) {
+      # Check if PostgreSQL S4 class exists in odbc package and register it
+      if (methods::isClass("PostgreSQL") && 
+          methods::getClass("PostgreSQL")@package == "odbc") {
+        S7::S4_register(methods::getClass("PostgreSQL"))
+      }
+      
+      # Check if Microsoft SQL Server S4 class exists and register it
+      if (methods::isClass("Microsoft SQL Server") && 
+          methods::getClass("Microsoft SQL Server")@package == "odbc") {
+        S7::S4_register(methods::getClass("Microsoft SQL Server"))
+      }
     }
-  }, error = function(e) NULL)
+  }, error = function(e) {
+    # Silently continue if odbc package not available
+    NULL
+  })
   
+  # Register DBI classes if available
   tryCatch({
-    # Check if Microsoft SQL Server S4 class exists and register it
-    if (methods::isClass("Microsoft SQL Server")) {
-      S7::S4_register(methods::getClass("Microsoft SQL Server"))
-    }
-  }, error = function(e) NULL)
-  
-  tryCatch({
-    # Check if DBIConnection S4 class exists and register it
-    if (methods::isClass("DBIConnection")) {
-      S7::S4_register(methods::getClass("DBIConnection"))
+    if (requireNamespace("DBI", quietly = TRUE)) {
+      if (methods::isClass("DBIConnection")) {
+        S7::S4_register(methods::getClass("DBIConnection"))
+      }
     }
   }, error = function(e) NULL)
 }
 
-# Register S4 classes on package load
+# Helper function to get or create database class objects for S7 dispatch
+get_db_classes <- function() {
+  # Try to get actual S4 classes first, fall back to S3 wrappers
+  
+  # PostgreSQL class
+  db_postgres <- tryCatch({
+    if (requireNamespace("odbc", quietly = TRUE) && 
+        methods::isClass("PostgreSQL") &&
+        methods::getClass("PostgreSQL")@package == "odbc") {
+      methods::getClass("PostgreSQL")
+    } else {
+      S7::new_S3_class("PostgreSQL")
+    }
+  }, error = function(e) S7::new_S3_class("PostgreSQL"))
+  
+  # Microsoft SQL Server class
+  db_mssql <- tryCatch({
+    if (requireNamespace("odbc", quietly = TRUE) && 
+        methods::isClass("Microsoft SQL Server") &&
+        methods::getClass("Microsoft SQL Server")@package == "odbc") {
+      methods::getClass("Microsoft SQL Server")
+    } else {
+      S7::new_S3_class("Microsoft SQL Server")
+    }
+  }, error = function(e) S7::new_S3_class("Microsoft SQL Server"))
+  
+  # Default/DBI class
+  db_default <- tryCatch({
+    if (requireNamespace("DBI", quietly = TRUE) && 
+        methods::isClass("DBIConnection")) {
+      methods::getClass("DBIConnection")
+    } else {
+      S7::new_S3_class("DBIConnection")
+    }
+  }, error = function(e) S7::new_S3_class("DBIConnection"))
+  
+  return(list(
+    postgres = db_postgres,
+    mssql = db_mssql,
+    default = db_default
+  ))
+}
+
+# Public function to re-register database methods
+# This can be called if database connections are not working properly
+#' Re-register database S7 methods
+#' 
+#' Re-registers S7 methods for database operations. Call this function if you 
+#' encounter method dispatch errors with database connections.
+#' 
+#' @return NULL (called for side effects)
+#' @keywords internal
+#' @noRd
+refresh_database_methods <- function() {
+  # Re-register S4 classes
+  register_s4_classes()
+  
+  # Re-get database class objects
+  db_classes <- get_db_classes()
+  db_postgres <<- db_classes$postgres
+  db_mssql <<- db_classes$mssql
+  db_default <<- db_classes$default
+  
+  # Re-register S7 methods
+  S7::methods_register()
+  
+  message("Database methods refreshed. S4 classes re-registered and S7 methods updated.")
+  invisible(NULL)
+}
+
+# Debug function to show method dispatch information
+#' Debug database method dispatch
+#' 
+#' Shows information about registered classes and methods for debugging
+#' method dispatch issues.
+#' 
+#' @param connection Optional database connection object to check
+#' @return List with debugging information
+#' @keywords internal
+#' @noRd
+debug_database_methods <- function(connection = NULL) {
+  info <- list()
+  
+  # Check available packages
+  info$packages <- list(
+    odbc_available = requireNamespace("odbc", quietly = TRUE),
+    DBI_available = requireNamespace("DBI", quietly = TRUE),
+    S7_available = requireNamespace("S7", quietly = TRUE)
+  )
+  
+  # Check registered S4 classes
+  info$s4_classes <- list()
+  if (info$packages$odbc_available) {
+    info$s4_classes$PostgreSQL <- tryCatch({
+      if (methods::isClass("PostgreSQL")) {
+        list(
+          exists = TRUE,
+          package = methods::getClass("PostgreSQL")@package
+        )
+      } else {
+        list(exists = FALSE)
+      }
+    }, error = function(e) list(error = e$message))
+    
+    info$s4_classes$MicrosoftSQLServer <- tryCatch({
+      if (methods::isClass("Microsoft SQL Server")) {
+        list(
+          exists = TRUE,
+          package = methods::getClass("Microsoft SQL Server")@package
+        )
+      } else {
+        list(exists = FALSE)
+      }
+    }, error = function(e) list(error = e$message))
+  }
+  
+  # Check connection object if provided
+  if (!is.null(connection)) {
+    info$connection <- list(
+      class = class(connection),
+      is_s4 = methods::is(connection, "S4"),
+      package = attr(class(connection), "package")
+    )
+  }
+  
+  # Check current database class objects
+  info$db_classes <- list(
+    postgres_type = class(db_postgres),
+    mssql_type = class(db_mssql),
+    default_type = class(db_default)
+  )
+  
+  return(info)
+}
+
+# Register S4 classes and get database class objects
 register_s4_classes()
-
-# Create S7 class objects for method registration
-# Use tryCatch to handle cases where S4 classes don't exist
-# Fall back to S3 class wrappers if S4 classes are not available
-tryCatch({
-  db_postgres <- methods::getClass("PostgreSQL")
-}, error = function(e) {
-  db_postgres <<- S7::new_S3_class("PostgreSQL")
-})
-
-tryCatch({
-  db_mssql <- methods::getClass("Microsoft SQL Server")
-}, error = function(e) {
-  db_mssql <<- S7::new_S3_class("Microsoft SQL Server")
-})
-
-tryCatch({
-  db_default <- methods::getClass("DBIConnection")
-}, error = function(e) {
-  db_default <<- S7::new_S3_class("DBIConnection")
-})
+db_classes <- get_db_classes()
+db_postgres <- db_classes$postgres
+db_mssql <- db_classes$mssql
+db_default <- db_classes$default
 
 # S7 generic definitions (internal use only)
 load_data_infile <- S7::new_generic("load_data_infile", "connection")
