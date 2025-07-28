@@ -247,7 +247,7 @@ Convert internal S3 methods to S7 methods to reduce the exported API surface and
 4. **Cleaner exports**: Only 6 exported functions vs 14 current
 5. **Future-proof architecture**: Ready for S7 ecosystem adoption
 
-### Recent Progress (v25.7.28)
+### Recent Progress (v2025.7.28)
 
 - ✅ **Fixed namespace loading error**: Added `importFrom(methods,initialize)` to NAMESPACE
 - ✅ **Improved .onLoad() function**: Added proper error handling for S7 operations

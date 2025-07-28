@@ -1,6 +1,6 @@
 Package: csdb
 Title: An Abstracted System for Easily Working with Databases with Large Datasets
-Version: 25.7.28
+Version: 2025.7.28
 Authors@R: c(
   person(c("Richard","Aubrey"), "White", email = "hello@rwhite.no", role = c("aut", "cre"), comment = c(ORCID = "0000-0002-6747-1726")),
   person(c("August", "Sørli"), "Mathisen", email = "august.sorli.mathisen@fhi.no", role = c("aut")),
