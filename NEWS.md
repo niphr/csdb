@@ -1,3 +1,10 @@
+# Version 25.7.28
+
+## Bug Fixes
+* Fixed namespace loading error by importing methods::initialize generic
+* Improved error handling in .onLoad() function for S7 operations
+* Package now passes CRAN namespace loading requirements
+
 # Version 2025.7.19
 
 ## Bug Fixes

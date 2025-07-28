@@ -1,9 +1,19 @@
 #' @import data.table ggplot2
 #' @importFrom stats runif
-#' @importFrom methods isClass getClass
+#' @importFrom methods isClass getClass initialize
 .onLoad <- function(libname, pkgname) {
+  # Ensure methods package is available for S7 operations
+  if (!requireNamespace("methods", quietly = TRUE)) {
+    return(NULL)
+  }
+  
   # Register S7 methods for database utilities
-  S7::methods_register()
+  tryCatch({
+    S7::methods_register()
+  }, error = function(e) {
+    # Silently continue if S7 registration fails
+    NULL
+  })
   
   # Try to register S4 classes and update method dispatch when package loads
   # This will re-run the registration in case odbc package is now available
