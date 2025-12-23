@@ -1,4 +1,4 @@
-url: https://www.csids.no/csdb/
+url: https://niphr.github.io/csdb/
 
 template:
   package: csidstemplatepkgdown
@@ -25,3 +25,14 @@ reference:
   desc: "Example datasets included with the package"
   contents:
   - nor_covid19_cases_by_time_location
+
+authors:
+  footer:
+    roles: [cre, aut]
+    text: "Crafted by"
+  sidebar:
+    roles: [cre, aut, cph]
+  before: "This package is proudly brought to you by:"
+  after: "See the [changelog](news/index.html) for other contributors. :pray:"
+  Richard Aubrey White:
+    href: "https://www.rwhite.no"
