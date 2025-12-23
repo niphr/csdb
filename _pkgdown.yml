@@ -1,8 +1,5 @@
 url: https://niphr.github.io/csdb/
 
-template:
-  package: csidstemplatepkgdown
-
 reference:
 - title: "Core Database Classes"
   desc: "Main R6 classes for database connection and table management"
