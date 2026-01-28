@@ -1,3 +1,8 @@
+# Version 26.1.28
+
+## Bug Fixes
+* Improved database connection error messages to include the original driver error details for easier debugging
+
 # Version 2025.7.28
 
 ## Bug Fixes

@@ -284,7 +284,8 @@ DBConnection_v9 <- R6::R6Class(
           }
         },
         error=function(cond){
-          stop("Could not connect to database server '", self$config$server,"'")
+          stop("Could not connect to database server '", self$config$server,"'\n",
+               "Original error: ", conditionMessage(cond))
         }
       )
 
