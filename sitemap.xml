@@ -9,6 +9,8 @@
 <url><loc>https://niphr.github.io/csdb/news/index.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/DBConnection_v9.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/DBTable_v9.html</loc></url>
+<url><loc>https://niphr.github.io/csdb/reference/csdb_get_auth_hook.html</loc></url>
+<url><loc>https://niphr.github.io/csdb/reference/csdb_set_auth_hook.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/get_table_names_and_info.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/index.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/nor_covid19_cases_by_time_location.html</loc></url>
