@@ -11,6 +11,8 @@ reference:
   desc: "Helper functions for database operations and metadata"
   contents:
   - get_table_names_and_info
+  - csdb_set_auth_hook
+  - csdb_get_auth_hook
 
 - title: "Data Validation"
   desc: "Functions for validating field types and data contents"
