@@ -1,3 +1,46 @@
+# Auth hook ----
+
+#' Set authentication hook for database connections
+#'
+#' @description
+#' Register a function to be called when a database connection fails.
+#' This is useful for refreshing Kerberos tickets or other authentication
+#' credentials before retrying the connection.
+#'
+#' @param hook A function with no arguments that performs authentication,
+#'   or NULL to clear the hook.
+#' @return Invisibly returns the previous hook (if any).
+#' @export
+#' @examples
+#' \dontrun{
+#' # Set an auth hook to refresh Kerberos credentials
+#' csdb_set_auth_hook(function() {
+#'   system2("/bin/authenticate.sh", stdout = NULL)
+#' })
+#'
+#' # Clear the hook
+#' csdb_set_auth_hook(NULL)
+#' }
+csdb_set_auth_hook <- function(hook) {
+  if (!is.null(hook) && !is.function(hook)) {
+    stop("hook must be a function or NULL")
+  }
+  old_hook <- getOption("csdb.auth_hook")
+  options(csdb.auth_hook = hook)
+  invisible(old_hook)
+}
+
+#' Get the current authentication hook
+#'
+#' @description
+#' Returns the currently registered authentication hook function.
+#'
+#' @return The current auth hook function, or NULL if none is set.
+#' @export
+csdb_get_auth_hook <- function() {
+  getOption("csdb.auth_hook")
+}
+
 # DBConnection_v9 ----
 #' R6 Class representing a database connection
 #'
@@ -185,6 +228,8 @@ DBConnection_v9 <- R6::R6Class(
     #' @param attempts Number of attempts to be made to try to connect
     connect = function(attempts = 2) {
       success <- FALSE
+      auth_hook_called <- FALSE
+
       for(i in 1:attempts){
         tryCatch({
           private$connect_once()
@@ -194,6 +239,21 @@ DBConnection_v9 <- R6::R6Class(
           message("Attempt ", i,": ", e)
         })
         if(success) break()
+
+        # If first attempt failed and we have an auth hook, call it
+        if (i == 1 && !auth_hook_called) {
+          auth_hook <- csdb_get_auth_hook()
+          if (!is.null(auth_hook)) {
+            message("Calling authentication hook...")
+            tryCatch({
+              auth_hook()
+              auth_hook_called <- TRUE
+            }, error = function(e) {
+              message("Auth hook failed: ", conditionMessage(e))
+            })
+          }
+        }
+
         # sleep to give the db time to recover
         # don't need to sleep on the last failed run
         if(i!=attempts) Sys.sleep(i)

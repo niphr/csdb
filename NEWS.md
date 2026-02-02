@@ -1,3 +1,8 @@
+# Version 2026.2.2
+
+## New Features
+* Added authentication hook system (`csdb_set_auth_hook()`, `csdb_get_auth_hook()`) to allow automatic credential refresh (e.g., Kerberos tickets) when connection fails
+
 # Version 2026.1.28
 
 ## Bug Fixes
