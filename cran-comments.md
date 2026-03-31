@@ -1,15 +1,8 @@
-## New submission
-
-This is a new package resubmission to CRAN.
-
-I have now addressed the issues identified by the previous CRAN review.
-
-The Description field is now populated as requested. 
-
 ## Test environments
 
-* local Ubuntu 22.04.5 LTS, R 4.5.0
-* R-hub builder (linux and windows)
+* local Ubuntu 22.04.5 LTS, R 4.5.1
+* win-builder R 4.6.0 alpha (2026-03-30 r89742 ucrt)
+* R-hub: Linux (R-devel), Windows (R-devel)
 
 ## R CMD check results
 
@@ -17,5 +10,5 @@ The Description field is now populated as requested.
 
 ## Downstream dependencies
 
-None currently. This is a new submission to CRAN.
+None.
 
