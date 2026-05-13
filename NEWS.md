@@ -1,3 +1,8 @@
+# Version 2026.5.13
+
+## Bug Fixes
+* PostgreSQL methods (`create_table`, `keep_rows_where`, `drop_table`) now quote `role_create_table` via `DBI::dbQuoteIdentifier()` when emitting `SET ROLE`. Previously the role name was interpolated raw, which broke on identifiers containing hyphens, mixed case, or reserved words (e.g. `SET ROLE token-user` -> syntax error), and was a SQL-injection vector if the value came from an env var.
+
 # Version 2026.2.2
 
 ## New Features
