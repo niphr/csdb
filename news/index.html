@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">csdb</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">2026.2.2</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">2026.5.13</span>
       </span>
     </div>
 
@@ -51,7 +51,14 @@
     </div>
 
     <div class="section level2">
-<h2 class="page-header" data-toc-text="2026.2.2" id="version-202622">Version 2026.2.2<a class="anchor" aria-label="anchor" href="#version-202622"></a></h2>
+<h2 class="page-header" data-toc-text="2026.5.13" id="version-2026513">Version 2026.5.13<a class="anchor" aria-label="anchor" href="#version-2026513"></a></h2>
+<div class="section level3">
+<h3 id="bug-fixes-2026-5-13">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-2026-5-13"></a></h3>
+<ul><li>PostgreSQL methods (<code>create_table</code>, <code>keep_rows_where</code>, <code>drop_table</code>) now quote <code>role_create_table</code> via <code><a href="https://dbi.r-dbi.org/reference/dbQuoteIdentifier.html" class="external-link">DBI::dbQuoteIdentifier()</a></code> when emitting <code>SET ROLE</code>. Previously the role name was interpolated raw, which broke on identifiers containing hyphens, mixed case, or reserved words (e.g. <code>SET ROLE token-user</code> -&gt; syntax error), and was a SQL-injection vector if the value came from an env var.</li>
+</ul></div>
+</div>
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="2026.2.2" id="version-202622">Version 2026.2.2<small>2026-03-31</small><a class="anchor" aria-label="anchor" href="#version-202622"></a></h2>
 <div class="section level3">
 <h3 id="new-features-2026-2-2">New Features<a class="anchor" aria-label="anchor" href="#new-features-2026-2-2"></a></h3>
 <ul><li>Added authentication hook system (<code><a href="../reference/csdb_set_auth_hook.html">csdb_set_auth_hook()</a></code>, <code><a href="../reference/csdb_get_auth_hook.html">csdb_get_auth_hook()</a></code>) to allow automatic credential refresh (e.g., Kerberos tickets) when connection fails</li>
