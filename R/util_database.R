@@ -747,7 +747,7 @@ S7::method(create_table, db_postgres) <- function(connection, table, fields, key
     stringr::str_replace("\"", "")
 
   if(!is.na(role_create_table)) if(role_create_table!="x"){
-    sql <- paste0("SET ROLE ", role_create_table, "; ", sql,"; RESET ROLE")
+    sql <- paste0("SET ROLE ", DBI::dbQuoteIdentifier(connection, role_create_table), "; ", sql,"; RESET ROLE")
   }
 
   DBI::dbExecute(connection, sql)
@@ -964,19 +964,19 @@ S7::method(keep_rows_where, db_postgres) <- function(connection, table, conditio
 
   sql <- glue::glue("SELECT * INTO {temp_name} FROM {table} WHERE {condition}")
   if(!is.na(role_create_table)) if(role_create_table!="x"){
-    sql <- paste0("SET ROLE ", role_create_table, "; ", sql,"; RESET ROLE")
+    sql <- paste0("SET ROLE ", DBI::dbQuoteIdentifier(connection, role_create_table), "; ", sql,"; RESET ROLE")
   }
   DBI::dbExecute(connection, sql)
 
   sql <- glue::glue("DROP TABLE {table}")
   if(!is.na(role_create_table)) if(role_create_table!="x"){
-    sql <- paste0("SET ROLE ", role_create_table, "; ", sql,"; RESET ROLE")
+    sql <- paste0("SET ROLE ", DBI::dbQuoteIdentifier(connection, role_create_table), "; ", sql,"; RESET ROLE")
   }
   DBI::dbExecute(connection, sql)
 
   sql <- glue::glue("ALTER TABLE {temp_name} RENAME TO {table}")
   if(!is.na(role_create_table)) if(role_create_table!="x"){
-    sql <- paste0("SET ROLE ", role_create_table, "; ", sql,"; RESET ROLE")
+    sql <- paste0("SET ROLE ", DBI::dbQuoteIdentifier(connection, role_create_table), "; ", sql,"; RESET ROLE")
   }
   DBI::dbExecute(connection, sql)
 
@@ -992,7 +992,7 @@ S7::method(drop_table, db_mssql) <- function(connection, table, role_create_tabl
 S7::method(drop_table, db_postgres) <- function(connection, table, role_create_table = NULL) {
   sql <- glue::glue("DROP TABLE {table}")
   if(!is.na(role_create_table)) if(role_create_table!="x"){
-    sql <- paste0("SET ROLE ", role_create_table, "; ", sql,"; RESET ROLE")
+    sql <- paste0("SET ROLE ", DBI::dbQuoteIdentifier(connection, role_create_table), "; ", sql,"; RESET ROLE")
   }
 
   return(try(DBI::dbExecute(connection, sql), TRUE))
