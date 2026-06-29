@@ -33,3 +33,4 @@ Suggests: testthat,
     crayon
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr
+Config/Needs/website: niphr/cstemplate
