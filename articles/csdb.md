@@ -1,0 +1,131 @@
+# Introduction to csdb
+
+``` r
+library(data.table)
+library(magrittr)
+```
+
+## Concept
+
+``` r
+dbconnection <- csdb::DBConnection_v9$new(
+  driver = Sys.getenv("CS9_DBCONFIG_DRIVER"),
+  server = Sys.getenv("CS9_DBCONFIG_SERVER"),
+  port = as.integer(Sys.getenv("CS9_DBCONFIG_PORT")),
+  db = Sys.getenv("CS9_DBCONFIG_DB_ANON"),
+  user = Sys.getenv("CS9_DBCONFIG_USER"),
+  password = Sys.getenv("CS9_DBCONFIG_PASSWORD"),
+  sslmode = Sys.getenv("CS9_DBCONFIG_SSLMODE")
+)
+dbconnection
+#> (disconnected)
+#> 
+#> Driver:              PostgreSQL Unicode 
+#> Server:              db 
+#> Port:                5432 
+#> DB:                  postgres 
+#> User:                yourusername 
+#> Password:            ********************* 
+#> Trusted connection:  x
+dbconnection$connect()
+
+dbconnection$connection
+#> <OdbcConnection> yourusername@db
+#>   Database: postgres
+#>   PostgreSQL Version: 17.0.5
+dbconnection$autoconnection
+#> <OdbcConnection> yourusername@db
+#>   Database: postgres
+#>   PostgreSQL Version: 17.0.5
+dbconnection
+#> (connected)
+#> 
+#> Driver:              PostgreSQL Unicode 
+#> Server:              db 
+#> Port:                5432 
+#> DB:                  postgres 
+#> User:                yourusername 
+#> Password:            ********************* 
+#> Trusted connection:  x
+
+dbconnection$disconnect()
+dbconnection$connection
+#> Error: external pointer is not valid
+class(dbconnection$connection)
+#> [1] "PostgreSQL"
+#> attr(,"package")
+#> [1] "odbc"
+class(dbconnection$autoconnection)
+#> [1] "PostgreSQL"
+#> attr(,"package")
+#> [1] "odbc"
+
+dbtable <- csdb::DBTable_v9$new(
+  dbconfig = list(
+    driver = Sys.getenv("CS9_DBCONFIG_DRIVER"),
+    server = Sys.getenv("CS9_DBCONFIG_SERVER"),
+    port = as.integer(Sys.getenv("CS9_DBCONFIG_PORT")),
+    db = Sys.getenv("CS9_DBCONFIG_DB_ANON"),
+    schema = Sys.getenv("CS9_DBCONFIG_SCHEMA_ANON"),
+    user = Sys.getenv("CS9_DBCONFIG_USER"),
+    password = Sys.getenv("CS9_DBCONFIG_PASSWORD"),
+    sslmode = Sys.getenv("CS9_DBCONFIG_SSLMODE")
+  ),
+  table_name = "anon_test",
+  field_types = c(
+      "granularity_time" = "TEXT",
+      "granularity_geo" = "TEXT",
+      "country_iso3" = "TEXT",
+      "location_code" = "TEXT",
+      "border" = "INTEGER",
+      "age" = "TEXT",
+      "sex" = "TEXT",
+      "isoyear" = "INTEGER",
+      "isoweek" = "INTEGER",
+      "isoyearweek" = "TEXT",
+      "season" = "TEXT",
+      "seasonweek" = "DOUBLE",
+      "calyear" = "INTEGER",
+      "calmonth" = "INTEGER",
+      "calyearmonth" = "TEXT",
+      "date" = "DATE",
+      "covid19_cases_testdate_n" = "INTEGER",
+      "covid19_cases_testdate_pr100000" = "DOUBLE"
+    ),
+    keys = c(
+      "granularity_time",
+      "location_code",
+      "date",
+      "age",
+      "sex"
+    ),
+    indexes = list(
+      "ind1" = c("granularity_time", "granularity_geo", "country_iso3", "location_code", "border", "age", "sex", "date", "isoyear", "isoweek", "isoyearweek")
+    ),
+    validator_field_types = csdb::validator_field_types_blank,
+    validator_field_contents = csdb::validator_field_contents_blank
+)
+dbtable$drop_all_rows()
+dbtable$insert_data(csdb::nor_covid19_cases_by_time_location)
+dbtable$connect()
+dbtable$dbconnection$is_connected()
+#> [1] TRUE
+dbtable$tbl()
+#> # Source:   table<"public"."anon_test"> [?? x 18]
+#> # Database: postgres  [yourusername@localhost:/postgres]
+#>    granularity_time granularity_geo country_iso3 location_code border age   sex   isoyear isoweek isoyearweek season   seasonweek
+#>    <chr>            <chr>           <chr>        <chr>          <int> <chr> <chr>   <int>   <int> <chr>       <chr>         <dbl>
+#>  1 day              county          nor          county_nor03    2020 total total    2020       8 2020-08     2019/20…         31
+#>  2 day              county          nor          county_nor03    2020 total total    2020       8 2020-08     2019/20…         31
+#>  3 day              county          nor          county_nor03    2020 total total    2020       8 2020-08     2019/20…         31
+#>  4 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
+#>  5 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
+#>  6 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
+#>  7 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
+#>  8 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
+#>  9 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
+#> 10 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
+#> # ℹ more rows
+#> # ℹ 6 more variables: calyear <int>, calmonth <int>, calyearmonth <chr>, date <date>, covid19_cases_testdate_n <int>,
+#> #   covid19_cases_testdate_pr100000 <dbl>
+```

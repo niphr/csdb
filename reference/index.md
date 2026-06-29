@@ -1,0 +1,46 @@
+# Package index
+
+## Core Database Classes
+
+Main R6 classes for database connection and table management
+
+- [`DBConnection_v9`](https://niphr.github.io/csdb/reference/DBConnection_v9.md)
+  : R6 Class representing a database connection
+- [`DBTable_v9`](https://niphr.github.io/csdb/reference/DBTable_v9.md) :
+  R6 Class representing a database table with advanced data management
+  capabilities
+
+## Database Utilities
+
+Helper functions for database operations and metadata
+
+- [`get_table_names_and_info()`](https://niphr.github.io/csdb/reference/get_table_names_and_info.md)
+  : Get table names, number of rows, and size information
+- [`csdb_set_auth_hook()`](https://niphr.github.io/csdb/reference/csdb_set_auth_hook.md)
+  : Set authentication hook for database connections
+- [`csdb_get_auth_hook()`](https://niphr.github.io/csdb/reference/csdb_get_auth_hook.md)
+  : Get the current authentication hook
+
+## Data Validation
+
+Functions for validating field types and data contents
+
+- [`validator_field_types_blank()`](https://niphr.github.io/csdb/reference/validator_field_types_blank.md)
+  : Blank field types validator
+- [`validator_field_types_csfmt_rts_data_v1()`](https://niphr.github.io/csdb/reference/validator_field_types_csfmt_rts_data_v1.md)
+  : Field types validator for csfmt_rts_data_v1 schema
+- [`validator_field_types_csfmt_rts_data_v2()`](https://niphr.github.io/csdb/reference/validator_field_types_csfmt_rts_data_v2.md)
+  : Field types validator for csfmt_rts_data_v2 schema
+- [`validator_field_contents_blank()`](https://niphr.github.io/csdb/reference/validator_field_contents_blank.md)
+  : Blank data contents validator
+- [`validator_field_contents_csfmt_rts_data_v1()`](https://niphr.github.io/csdb/reference/validator_field_contents_csfmt_rts_data_v1.md)
+  : Field contents validator for csfmt_rts_data_v1 schema
+- [`validator_field_contents_csfmt_rts_data_v2()`](https://niphr.github.io/csdb/reference/validator_field_contents_csfmt_rts_data_v2.md)
+  : Field contents validator for csfmt_rts_data_v2 schema
+
+## Datasets
+
+Example datasets included with the package
+
+- [`nor_covid19_cases_by_time_location`](https://niphr.github.io/csdb/reference/nor_covid19_cases_by_time_location.md)
+  : Covid-19 data for PCR-confirmed cases in Norway (nation and county)
