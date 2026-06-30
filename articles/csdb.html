@@ -85,8 +85,55 @@ White</h4>
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://r-datatable.com" class="external-link">data.table</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://magrittr.tidyverse.org" class="external-link">magrittr</a></span><span class="op">)</span></span></code></pre></div>
 <div class="section level2">
-<h2 id="concept">Concept<a class="anchor" aria-label="anchor" href="#concept"></a>
+<h2 id="overview">Overview<a class="anchor" aria-label="anchor" href="#overview"></a>
 </h2>
+<p><code>csdb</code> provides an abstracted database-access layer for
+the Core Surveillance (csverse) ecosystem. The package exposes two R6
+classes:</p>
+<ul>
+<li>
+<strong><code>DBConnection_v9</code></strong> — wraps a single ODBC
+database connection and manages its lifecycle (connect, disconnect,
+reconnect).</li>
+<li>
+<strong><code>DBTable_v9</code></strong> — represents one database
+table and provides methods for inserting, upserting, and deleting rows,
+as well as managing indexes and validating field types and
+contents.</li>
+</ul>
+<p>Connection credentials are read from environment variables, keeping
+them out of scripts and version control.</p>
+</div>
+<div class="section level2">
+<h2 id="dbconnection_v9">
+<code>DBConnection_v9</code><a class="anchor" aria-label="anchor" href="#dbconnection_v9"></a>
+</h2>
+<p><code>DBConnection_v9$new()</code> stores connection parameters but
+does not open a connection immediately. Calling <code>$connect()</code>
+opens the connection; <code>$disconnect()</code> closes it. The
+<code>$autoconnection</code> field returns an active connection,
+reconnecting automatically if needed.</p>
+<p>The example below creates a connection object, connects, inspects the
+connection fields, then disconnects. After disconnecting,
+<code>$connection</code> returns an invalid external pointer, while
+<code><a href="https://rdrr.io/r/base/class.html" class="external-link">class()</a></code> still reports the driver type.</p>
+</div>
+<div class="section level2">
+<h2 id="dbtable_v9">
+<code>DBTable_v9</code><a class="anchor" aria-label="anchor" href="#dbtable_v9"></a>
+</h2>
+<p><code>DBTable_v9$new()</code> takes a <code>dbconfig</code> list (the
+same parameters as <code>DBConnection_v9</code>), plus
+<code>table_name</code>, <code>field_types</code>, <code>keys</code>,
+<code>indexes</code>, and validators. Keys define the primary key used
+for upsert operations. Validators can enforce field-type and
+field-content constraints; <code>validator_field_types_blank</code> and
+<code>validator_field_contents_blank</code> skip validation
+entirely.</p>
+<p>The example below creates a table object backed by a live PostgreSQL
+database, clears any existing rows, inserts the bundled
+<code>nor_covid19_cases_by_time_location</code> dataset, connects, and
+then returns a lazy <code>tbl()</code> reference via dbplyr.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">dbconnection</span> <span class="op">&lt;-</span> <span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/DBConnection_v9.html">DBConnection_v9</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span>
 <span>  driver <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"CS9_DBCONFIG_DRIVER"</span><span class="op">)</span>,</span>

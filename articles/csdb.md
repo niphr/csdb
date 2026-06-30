@@ -5,7 +5,46 @@ library(data.table)
 library(magrittr)
 ```
 
-## Concept
+## Overview
+
+`csdb` provides an abstracted database-access layer for the Core
+Surveillance (csverse) ecosystem. The package exposes two R6 classes:
+
+- **`DBConnection_v9`** — wraps a single ODBC database connection and
+  manages its lifecycle (connect, disconnect, reconnect).
+- **`DBTable_v9`** — represents one database table and provides methods
+  for inserting, upserting, and deleting rows, as well as managing
+  indexes and validating field types and contents.
+
+Connection credentials are read from environment variables, keeping them
+out of scripts and version control.
+
+## `DBConnection_v9`
+
+`DBConnection_v9$new()` stores connection parameters but does not open a
+connection immediately. Calling `$connect()` opens the connection;
+`$disconnect()` closes it. The `$autoconnection` field returns an active
+connection, reconnecting automatically if needed.
+
+The example below creates a connection object, connects, inspects the
+connection fields, then disconnects. After disconnecting, `$connection`
+returns an invalid external pointer, while
+[`class()`](https://rdrr.io/r/base/class.html) still reports the driver
+type.
+
+## `DBTable_v9`
+
+`DBTable_v9$new()` takes a `dbconfig` list (the same parameters as
+`DBConnection_v9`), plus `table_name`, `field_types`, `keys`, `indexes`,
+and validators. Keys define the primary key used for upsert operations.
+Validators can enforce field-type and field-content constraints;
+`validator_field_types_blank` and `validator_field_contents_blank` skip
+validation entirely.
+
+The example below creates a table object backed by a live PostgreSQL
+database, clears any existing rows, inserts the bundled
+`nor_covid19_cases_by_time_location` dataset, connects, and then returns
+a lazy `tbl()` reference via dbplyr.
 
 ``` r
 dbconnection <- csdb::DBConnection_v9$new(
