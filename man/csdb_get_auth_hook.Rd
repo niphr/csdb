@@ -12,3 +12,14 @@ The current auth hook function, or NULL if none is set.
 \description{
 Returns the currently registered authentication hook function.
 }
+\examples{
+# Returns NULL when no hook has been set
+csdb_get_auth_hook()
+
+\dontrun{
+# Register a hook and then retrieve it
+csdb_set_auth_hook(function() system2("/bin/kinit", stdout = NULL))
+hook <- csdb_get_auth_hook()
+is.function(hook)
+}
+}

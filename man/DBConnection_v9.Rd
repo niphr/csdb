@@ -63,39 +63,40 @@ pg_config$disconnect()
 }
 }
 \section{Public fields}{
-\if{html}{\out{<div class="r6-fields">}}
-\describe{
-\item{\code{config}}{Configuration details of the database.}
-}
-\if{html}{\out{</div>}}
+  \if{html}{\out{<div class="r6-fields">}}
+  \describe{
+    \item{\code{config}}{Configuration details of the database.}
+  }
+  \if{html}{\out{</div>}}
 }
 \section{Active bindings}{
-\if{html}{\out{<div class="r6-active-bindings">}}
-\describe{
-\item{\code{connection}}{Database connection.}
+  \if{html}{\out{<div class="r6-active-bindings">}}
+  \describe{
+    \item{\code{connection}}{Database connection.}
 
-\item{\code{autoconnection}}{Database connection that automatically connects if possible.}
-}
-\if{html}{\out{</div>}}
+    \item{\code{autoconnection}}{Database connection that automatically connects if possible.}
+  }
+  \if{html}{\out{</div>}}
 }
 \section{Methods}{
 \subsection{Public methods}{
-\itemize{
-\item \href{#method-DBConnection_v9-new}{\code{DBConnection_v9$new()}}
-\item \href{#method-DBConnection_v9-is_connected}{\code{DBConnection_v9$is_connected()}}
-\item \href{#method-DBConnection_v9-print}{\code{DBConnection_v9$print()}}
-\item \href{#method-DBConnection_v9-connect}{\code{DBConnection_v9$connect()}}
-\item \href{#method-DBConnection_v9-disconnect}{\code{DBConnection_v9$disconnect()}}
-\item \href{#method-DBConnection_v9-clone}{\code{DBConnection_v9$clone()}}
-}
+  \itemize{
+    \item \href{#method-DBConnection_v9-initialize}{\code{DBConnection_v9$new()}}
+    \item \href{#method-DBConnection_v9-is_connected}{\code{DBConnection_v9$is_connected()}}
+    \item \href{#method-DBConnection_v9-print}{\code{DBConnection_v9$print()}}
+    \item \href{#method-DBConnection_v9-connect}{\code{DBConnection_v9$connect()}}
+    \item \href{#method-DBConnection_v9-disconnect}{\code{DBConnection_v9$disconnect()}}
+    \item \href{#method-DBConnection_v9-clone}{\code{DBConnection_v9$clone()}}
+  }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-DBConnection_v9-new"></a>}}
-\if{latex}{\out{\hypertarget{method-DBConnection_v9-new}{}}}
-\subsection{Method \code{new()}}{
-Create a new DBConnection_v9 object.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{DBConnection_v9$new(
+\if{html}{\out{<a id="method-DBConnection_v9-initialize"></a>}}
+\if{latex}{\out{\hypertarget{method-DBConnection_v9-initialize}{}}}
+\subsection{\code{DBConnection_v9$new()}}{
+  Create a new DBConnection_v9 object.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{DBConnection_v9$new(
   driver = NULL,
   server = NULL,
   port = NULL,
@@ -106,110 +107,112 @@ Create a new DBConnection_v9 object.
   trusted_connection = NULL,
   sslmode = NULL,
   role_create_table = NULL
-)}\if{html}{\out{</div>}}
+)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{driver}}{Driver}
+      \item{\code{server}}{Server}
+      \item{\code{port}}{Port}
+      \item{\code{db}}{DB}
+      \item{\code{schema}}{Schema (e.g. "dbo")}
+      \item{\code{user}}{User}
+      \item{\code{password}}{Password}
+      \item{\code{trusted_connection}}{NULL or "yes"}
+      \item{\code{sslmode}}{NULL or "require"}
+      \item{\code{role_create_table}}{NULL or the role to take when creating tables.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    A new `DBConnection_v9` object.
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{driver}}{Driver}
-
-\item{\code{server}}{Server}
-
-\item{\code{port}}{Port}
-
-\item{\code{db}}{DB}
-
-\item{\code{schema}}{Schema (e.g. "dbo")}
-
-\item{\code{user}}{User}
-
-\item{\code{password}}{Password}
-
-\item{\code{trusted_connection}}{NULL or "yes"}
-
-\item{\code{sslmode}}{NULL or "require"}
-
-\item{\code{role_create_table}}{NULL or the role to take when creating tables.}
-}
-\if{html}{\out{</div>}}
-}
-\subsection{Returns}{
-A new `DBConnection_v9` object.
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-DBConnection_v9-is_connected"></a>}}
 \if{latex}{\out{\hypertarget{method-DBConnection_v9-is_connected}{}}}
-\subsection{Method \code{is_connected()}}{
-Is the DB schema connected?
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{DBConnection_v9$is_connected()}\if{html}{\out{</div>}}
+\subsection{\code{DBConnection_v9$is_connected()}}{
+  Is the DB schema connected?
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{DBConnection_v9$is_connected()}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    TRUE/FALSE
+  }
 }
 
-\subsection{Returns}{
-TRUE/FALSE
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-DBConnection_v9-print"></a>}}
 \if{latex}{\out{\hypertarget{method-DBConnection_v9-print}{}}}
-\subsection{Method \code{print()}}{
-Class-specific print function.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{DBConnection_v9$print(...)}\if{html}{\out{</div>}}
+\subsection{\code{DBConnection_v9$print()}}{
+  Class-specific print function.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{DBConnection_v9$print(...)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{...}}{Not used.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{...}}{Not used.}
-}
-\if{html}{\out{</div>}}
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-DBConnection_v9-connect"></a>}}
 \if{latex}{\out{\hypertarget{method-DBConnection_v9-connect}{}}}
-\subsection{Method \code{connect()}}{
-Connect to the database
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{DBConnection_v9$connect(attempts = 2)}\if{html}{\out{</div>}}
+\subsection{\code{DBConnection_v9$connect()}}{
+  Connect to the database
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{DBConnection_v9$connect(attempts = 2)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{attempts}}{Number of attempts to be made to try to connect}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{attempts}}{Number of attempts to be made to try to connect}
-}
-\if{html}{\out{</div>}}
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-DBConnection_v9-disconnect"></a>}}
 \if{latex}{\out{\hypertarget{method-DBConnection_v9-disconnect}{}}}
-\subsection{Method \code{disconnect()}}{
-Disconnect from the database
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{DBConnection_v9$disconnect()}\if{html}{\out{</div>}}
+\subsection{\code{DBConnection_v9$disconnect()}}{
+  Disconnect from the database
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{DBConnection_v9$disconnect()}
+    \if{html}{\out{</div>}}
+  }
 }
 
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-DBConnection_v9-clone"></a>}}
 \if{latex}{\out{\hypertarget{method-DBConnection_v9-clone}{}}}
-\subsection{Method \code{clone()}}{
-The objects of this class are cloneable with this method.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{DBConnection_v9$clone(deep = FALSE)}\if{html}{\out{</div>}}
+\subsection{\code{DBConnection_v9$clone()}}{
+  The objects of this class are cloneable with this method.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{DBConnection_v9$clone(deep = FALSE)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{deep}}{Whether to make a deep clone.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{deep}}{Whether to make a deep clone.}
-}
-\if{html}{\out{</div>}}
-}
-}
 }

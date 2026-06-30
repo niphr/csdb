@@ -41,4 +41,8 @@ The raw number of cases and cases per 100.000 population are recorded.
 
 This data was extracted on 2022-05-04.
 }
+\examples{
+head(nor_covid19_cases_by_time_location)
+nrow(nor_covid19_cases_by_time_location)
+}
 \keyword{datasets}
