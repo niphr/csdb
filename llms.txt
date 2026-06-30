@@ -1,10 +1,3 @@
-# csdb
-
-[![CRAN
-status](https://www.r-pkg.org/badges/version/csdb)](https://cran.r-project.org/package=csdb)
-[![CRAN
-downloads](https://cranlogs.r-pkg.org/badges/csdb)](https://cran.r-project.org/package=csdb)
-
 ## Overview
 
 [csdb](https://niphr.github.io/csdb/) provides an abstracted system for
