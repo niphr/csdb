@@ -117,7 +117,7 @@ compliance.
 
 ### Public methods
 
-- [`DBTable_v9$new()`](#method-DBTable_v9-new)
+- [`DBTable_v9$new()`](#method-DBTable_v9-initialize)
 
 - [`DBTable_v9$print()`](#method-DBTable_v9-print)
 
@@ -163,7 +163,7 @@ compliance.
 
 ------------------------------------------------------------------------
 
-### Method `new()`
+### `DBTable_v9$new()`
 
 Create a new DBTable_v9 object.
 
@@ -222,7 +222,7 @@ A new \`DBTable_v9\` object.
 
 ------------------------------------------------------------------------
 
-### Method [`print()`](https://rdrr.io/r/base/print.html)
+### `DBTable_v9$print()`
 
 Class-specific print function.
 
@@ -238,7 +238,7 @@ Class-specific print function.
 
 ------------------------------------------------------------------------
 
-### Method `connect()`
+### `DBTable_v9$connect()`
 
 Connect from the database
 
@@ -248,7 +248,7 @@ Connect from the database
 
 ------------------------------------------------------------------------
 
-### Method `disconnect()`
+### `DBTable_v9$disconnect()`
 
 Disconnect from the database
 
@@ -258,7 +258,7 @@ Disconnect from the database
 
 ------------------------------------------------------------------------
 
-### Method `table_exists()`
+### `DBTable_v9$table_exists()`
 
 Does the table exist
 
@@ -268,7 +268,7 @@ Does the table exist
 
 ------------------------------------------------------------------------
 
-### Method `create_table()`
+### `DBTable_v9$create_table()`
 
 Create the database table
 
@@ -278,7 +278,7 @@ Create the database table
 
 ------------------------------------------------------------------------
 
-### Method `remove_table()`
+### `DBTable_v9$remove_table()`
 
 Drop the database table
 
@@ -288,7 +288,7 @@ Drop the database table
 
 ------------------------------------------------------------------------
 
-### Method `insert_data()`
+### `DBTable_v9$insert_data()`
 
 Inserts data
 
@@ -317,7 +317,7 @@ Inserts data
 
 ------------------------------------------------------------------------
 
-### Method `upsert_data()`
+### `DBTable_v9$upsert_data()`
 
 Upserts data into the database table
 
@@ -346,7 +346,7 @@ Upserts data into the database table
 
 ------------------------------------------------------------------------
 
-### Method `drop_all_rows()`
+### `DBTable_v9$drop_all_rows()`
 
 Drops all rows in the database table
 
@@ -356,7 +356,7 @@ Drops all rows in the database table
 
 ------------------------------------------------------------------------
 
-### Method `drop_rows_where()`
+### `DBTable_v9$drop_rows_where()`
 
 Drops rows in the database table according to the SQL condition.
 
@@ -372,7 +372,7 @@ Drops rows in the database table according to the SQL condition.
 
 ------------------------------------------------------------------------
 
-### Method `keep_rows_where()`
+### `DBTable_v9$keep_rows_where()`
 
 Keeps rows in the database table according to the SQL condition.
 
@@ -388,7 +388,7 @@ Keeps rows in the database table according to the SQL condition.
 
 ------------------------------------------------------------------------
 
-### Method `drop_all_rows_and_then_upsert_data()`
+### `DBTable_v9$drop_all_rows_and_then_upsert_data()`
 
 Drops all rows in the database table and then upserts data.
 
@@ -417,7 +417,7 @@ Drops all rows in the database table and then upserts data.
 
 ------------------------------------------------------------------------
 
-### Method `drop_all_rows_and_then_insert_data()`
+### `DBTable_v9$drop_all_rows_and_then_insert_data()`
 
 Drops all rows in the database table and then inserts data.
 
@@ -446,7 +446,7 @@ Drops all rows in the database table and then inserts data.
 
 ------------------------------------------------------------------------
 
-### Method `tbl()`
+### `DBTable_v9$tbl()`
 
 Provides access to the database table via dplyr::tbl.
 
@@ -456,7 +456,7 @@ Provides access to the database table via dplyr::tbl.
 
 ------------------------------------------------------------------------
 
-### Method `print_dplyr_select()`
+### `DBTable_v9$print_dplyr_select()`
 
 Prints a template dplyr::select call that you can easily copy/paste for
 all your variables.
@@ -467,7 +467,7 @@ all your variables.
 
 ------------------------------------------------------------------------
 
-### Method `add_indexes()`
+### `DBTable_v9$add_indexes()`
 
 Adds indexes to the database table from \`self\$indexes\`
 
@@ -477,7 +477,7 @@ Adds indexes to the database table from \`self\$indexes\`
 
 ------------------------------------------------------------------------
 
-### Method `drop_indexes()`
+### `DBTable_v9$drop_indexes()`
 
 Drops all indees from the database table
 
@@ -487,7 +487,7 @@ Drops all indees from the database table
 
 ------------------------------------------------------------------------
 
-### Method `confirm_indexes()`
+### `DBTable_v9$confirm_indexes()`
 
 Confirms that the names and number of indexes in the database are the
 same as in the R code. Does not confirm the contents of the indexes!
@@ -498,7 +498,7 @@ same as in the R code. Does not confirm the contents of the indexes!
 
 ------------------------------------------------------------------------
 
-### Method [`nrow()`](https://rdrr.io/r/base/nrow.html)
+### `DBTable_v9$nrow()`
 
 Gets the number of rows in the database table
 
@@ -515,7 +515,7 @@ Gets the number of rows in the database table
 
 ------------------------------------------------------------------------
 
-### Method `info()`
+### `DBTable_v9$info()`
 
 Gets the information about the database table
 
@@ -525,7 +525,7 @@ Gets the information about the database table
 
 ------------------------------------------------------------------------
 
-### Method `clone()`
+### `DBTable_v9$clone()`
 
 The objects of this class are cloneable with this method.
 

@@ -84,7 +84,7 @@ automatic reconnection functionality.</p>
 <dd><p>Database connection.</p></dd>
 
 
-<dt><code>autoconnection</code></dt>
+    <dt><code>autoconnection</code></dt>
 <dd><p>Database connection that automatically connects if possible.</p></dd>
 
 
@@ -95,15 +95,14 @@ automatic reconnection functionality.</p>
 
 <div class="section">
 <h3 id="public-methods">Public methods<a class="anchor" aria-label="anchor" href="#public-methods"></a></h3>
-
-<ul><li><p><a href="#method-DBConnection_v9-new"><code>DBConnection_v9$new()</code></a></p></li>
+<p></p><ul><li><p><a href="#method-DBConnection_v9-initialize"><code>DBConnection_v9$new()</code></a></p></li>
 <li><p><a href="#method-DBConnection_v9-is_connected"><code>DBConnection_v9$is_connected()</code></a></p></li>
 <li><p><a href="#method-DBConnection_v9-print"><code>DBConnection_v9$print()</code></a></p></li>
 <li><p><a href="#method-DBConnection_v9-connect"><code>DBConnection_v9$connect()</code></a></p></li>
 <li><p><a href="#method-DBConnection_v9-disconnect"><code>DBConnection_v9$disconnect()</code></a></p></li>
 <li><p><a href="#method-DBConnection_v9-clone"><code>DBConnection_v9$clone()</code></a></p></li>
-</ul></div><p></p><hr><a id="method-DBConnection_v9-new"></a><div class="section">
-<h3 id="method-new-">Method <code>new()</code><a class="anchor" aria-label="anchor" href="#method-new-"></a></h3>
+</ul></div><p></p><hr><a id="method-DBConnection_v9-initialize"></a><div class="section">
+<h3 id="dbconnection-v-new-"><code>DBConnection_v9$new()</code><a class="anchor" aria-label="anchor" href="#dbconnection-v-new-"></a></h3>
 <p>Create a new DBConnection_v9 object.</p><div class="section">
 <h4 id="usage">Usage<a class="anchor" aria-label="anchor" href="#usage"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va"><a href="../reference/DBConnection_v9.html">DBConnection_v9</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span>
@@ -118,77 +117,65 @@ automatic reconnection functionality.</p>
 <span>  sslmode <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  role_create_table <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div><p></p></div>
-</div>
-
-<div class="section">
+</div><p></p><div class="section">
 <h4 id="arguments">Arguments<a class="anchor" aria-label="anchor" href="#arguments"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>driver</code></dt>
 <dd><p>Driver</p></dd>
 
-
-<dt><code>server</code></dt>
+      <dt><code>server</code></dt>
 <dd><p>Server</p></dd>
 
-
-<dt><code>port</code></dt>
+      <dt><code>port</code></dt>
 <dd><p>Port</p></dd>
 
-
-<dt><code>db</code></dt>
+      <dt><code>db</code></dt>
 <dd><p>DB</p></dd>
 
-
-<dt><code>schema</code></dt>
+      <dt><code>schema</code></dt>
 <dd><p>Schema (e.g. "dbo")</p></dd>
 
-
-<dt><code>user</code></dt>
+      <dt><code>user</code></dt>
 <dd><p>User</p></dd>
 
-
-<dt><code>password</code></dt>
+      <dt><code>password</code></dt>
 <dd><p>Password</p></dd>
 
-
-<dt><code>trusted_connection</code></dt>
+      <dt><code>trusted_connection</code></dt>
 <dd><p>NULL or "yes"</p></dd>
 
-
-<dt><code>sslmode</code></dt>
+      <dt><code>sslmode</code></dt>
 <dd><p>NULL or "require"</p></dd>
 
-
-<dt><code>role_create_table</code></dt>
+      <dt><code>role_create_table</code></dt>
 <dd><p>NULL or the role to take when creating tables.</p></dd>
 
 
 </dl><p></p></div>
-</div>
-<div class="section">
+</div><p></p><div class="section">
 <h4 id="returns">Returns<a class="anchor" aria-label="anchor" href="#returns"></a></h4>
 <p>A new `DBConnection_v9` object.</p>
 </div>
 
-</div><p></p><hr><a id="method-DBConnection_v9-is_connected"></a><div class="section">
-<h3 id="method-is-connected-">Method <code>is_connected()</code><a class="anchor" aria-label="anchor" href="#method-is-connected-"></a></h3>
+</div>
+
+<p></p><hr><a id="method-DBConnection_v9-is_connected"></a><div class="section">
+<h3 id="dbconnection-v-is-connected-"><code>DBConnection_v9$is_connected()</code><a class="anchor" aria-label="anchor" href="#dbconnection-v-is-connected-"></a></h3>
 <p>Is the DB schema connected?</p><div class="section">
 <h4 id="usage-1">Usage<a class="anchor" aria-label="anchor" href="#usage-1"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBConnection_v9</span><span class="op">$</span><span class="fu">is_connected</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
-</div>
-
-<div class="section">
+</div><p></p><div class="section">
 <h4 id="returns-1">Returns<a class="anchor" aria-label="anchor" href="#returns-1"></a></h4>
 <p>TRUE/FALSE</p>
 </div>
 
-</div><p></p><hr><a id="method-DBConnection_v9-print"></a><div class="section">
-<h3 id="method-print-">Method <code><a href="https://rdrr.io/r/base/print.html" class="external-link">print()</a></code><a class="anchor" aria-label="anchor" href="#method-print-"></a></h3>
+</div>
+
+<p></p><hr><a id="method-DBConnection_v9-print"></a><div class="section">
+<h3 id="dbconnection-v-print-"><code>DBConnection_v9$print()</code><a class="anchor" aria-label="anchor" href="#dbconnection-v-print-"></a></h3>
 <p>Class-specific print function.</p><div class="section">
 <h4 id="usage-2">Usage<a class="anchor" aria-label="anchor" href="#usage-2"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBConnection_v9</span><span class="op">$</span><span class="fu">print</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span></code></pre></div><p></p></div>
-</div>
-
-<div class="section">
+</div><p></p><div class="section">
 <h4 id="arguments-1">Arguments<a class="anchor" aria-label="anchor" href="#arguments-1"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>...</code></dt>
 <dd><p>Not used.</p></dd>
@@ -197,14 +184,14 @@ automatic reconnection functionality.</p>
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-DBConnection_v9-connect"></a><div class="section">
-<h3 id="method-connect-">Method <code>connect()</code><a class="anchor" aria-label="anchor" href="#method-connect-"></a></h3>
+</div>
+
+<p></p><hr><a id="method-DBConnection_v9-connect"></a><div class="section">
+<h3 id="dbconnection-v-connect-"><code>DBConnection_v9$connect()</code><a class="anchor" aria-label="anchor" href="#dbconnection-v-connect-"></a></h3>
 <p>Connect to the database</p><div class="section">
 <h4 id="usage-3">Usage<a class="anchor" aria-label="anchor" href="#usage-3"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBConnection_v9</span><span class="op">$</span><span class="fu">connect</span><span class="op">(</span>attempts <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></code></pre></div><p></p></div>
-</div>
-
-<div class="section">
+</div><p></p><div class="section">
 <h4 id="arguments-2">Arguments<a class="anchor" aria-label="anchor" href="#arguments-2"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>attempts</code></dt>
 <dd><p>Number of attempts to be made to try to connect</p></dd>
@@ -213,22 +200,23 @@ automatic reconnection functionality.</p>
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-DBConnection_v9-disconnect"></a><div class="section">
-<h3 id="method-disconnect-">Method <code>disconnect()</code><a class="anchor" aria-label="anchor" href="#method-disconnect-"></a></h3>
+</div>
+
+<p></p><hr><a id="method-DBConnection_v9-disconnect"></a><div class="section">
+<h3 id="dbconnection-v-disconnect-"><code>DBConnection_v9$disconnect()</code><a class="anchor" aria-label="anchor" href="#dbconnection-v-disconnect-"></a></h3>
 <p>Disconnect from the database</p><div class="section">
 <h4 id="usage-4">Usage<a class="anchor" aria-label="anchor" href="#usage-4"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBConnection_v9</span><span class="op">$</span><span class="fu">disconnect</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
+</div>
 
-</div><p></p><hr><a id="method-DBConnection_v9-clone"></a><div class="section">
-<h3 id="method-clone-">Method <code>clone()</code><a class="anchor" aria-label="anchor" href="#method-clone-"></a></h3>
+<p></p><hr><a id="method-DBConnection_v9-clone"></a><div class="section">
+<h3 id="dbconnection-v-clone-"><code>DBConnection_v9$clone()</code><a class="anchor" aria-label="anchor" href="#dbconnection-v-clone-"></a></h3>
 <p>The objects of this class are cloneable with this method.</p><div class="section">
 <h4 id="usage-5">Usage<a class="anchor" aria-label="anchor" href="#usage-5"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBConnection_v9</span><span class="op">$</span><span class="fu">clone</span><span class="op">(</span>deep <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div><p></p></div>
-</div>
-
-<div class="section">
+</div><p></p><div class="section">
 <h4 id="arguments-3">Arguments<a class="anchor" aria-label="anchor" href="#arguments-3"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>deep</code></dt>
 <dd><p>Whether to make a deep clone.</p></dd>
@@ -238,6 +226,7 @@ automatic reconnection functionality.</p>
 </div>
 
 </div>
+
 
     </div>
 

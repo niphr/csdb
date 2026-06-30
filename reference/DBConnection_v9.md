@@ -45,7 +45,7 @@ Key features:
 
 ### Public methods
 
-- [`DBConnection_v9$new()`](#method-DBConnection_v9-new)
+- [`DBConnection_v9$new()`](#method-DBConnection_v9-initialize)
 
 - [`DBConnection_v9$is_connected()`](#method-DBConnection_v9-is_connected)
 
@@ -59,7 +59,7 @@ Key features:
 
 ------------------------------------------------------------------------
 
-### Method `new()`
+### `DBConnection_v9$new()`
 
 Create a new DBConnection_v9 object.
 
@@ -126,7 +126,7 @@ A new \`DBConnection_v9\` object.
 
 ------------------------------------------------------------------------
 
-### Method `is_connected()`
+### `DBConnection_v9$is_connected()`
 
 Is the DB schema connected?
 
@@ -140,7 +140,7 @@ TRUE/FALSE
 
 ------------------------------------------------------------------------
 
-### Method [`print()`](https://rdrr.io/r/base/print.html)
+### `DBConnection_v9$print()`
 
 Class-specific print function.
 
@@ -156,7 +156,7 @@ Class-specific print function.
 
 ------------------------------------------------------------------------
 
-### Method `connect()`
+### `DBConnection_v9$connect()`
 
 Connect to the database
 
@@ -172,7 +172,7 @@ Connect to the database
 
 ------------------------------------------------------------------------
 
-### Method `disconnect()`
+### `DBConnection_v9$disconnect()`
 
 Disconnect from the database
 
@@ -182,7 +182,7 @@ Disconnect from the database
 
 ------------------------------------------------------------------------
 
-### Method `clone()`
+### `DBConnection_v9$clone()`
 
 The objects of this class are cloneable with this method.
 
