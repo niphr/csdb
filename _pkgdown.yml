@@ -2,6 +2,21 @@ url: https://niphr.github.io/csdb/
 
 template:
   package: cstemplate
+  params:
+    hero:
+      overline: "R package · Databases"
+      title: "Databases for large datasets."
+      lede: >
+        An abstracted, object-oriented system for large datasets across database
+        systems — robust PostgreSQL connections, bulk loading and upserts, validation,
+        and index management.
+      cta:
+        primary:
+          text: "Get started"
+          href: "articles/csdb.html"
+        secondary:
+          text: "Browse the reference →"
+          href: "reference/index.html"
 
 reference:
 - title: "Core Database Classes"
