@@ -21,12 +21,3 @@ PostgreSQL and SQL Server tables, with configurable indexes.
 Pluggable validators check field types and field contents before data
 reaches the database, with built-in schemas for the csverse
 `csfmt_rts_data` format.
-
-## Overview
-
-[csdb](https://niphr.github.io/csdb/) provides an abstracted system for
-easily working with databases with large datasets.
-
-Read the introduction vignette
-[here](https://niphr.github.io/csdb/articles/csdb.html) or run
-[`help(package="csdb")`](https://niphr.github.io/csdb/reference).
