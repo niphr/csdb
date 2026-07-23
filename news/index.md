@@ -6,6 +6,13 @@ CRAN release: 2026-05-13
 
 ### Bug Fixes
 
+- `DBTable_v9$nrow(use_count = TRUE)` now calls
+  [`dplyr::n()`](https://dplyr.tidyverse.org/reference/context.html)
+  instead of a bare `n()`. This is hygiene only: the bare call sits
+  inside the list passed to
+  [`R6::R6Class()`](https://r6.r-lib.org/reference/R6Class.html), which
+  `codetools` never walks, so it produced no `R CMD check` complaint,
+  and `dbplyr` renders both spellings to identical SQL.
 - PostgreSQL methods (`create_table`, `keep_rows_where`, `drop_table`)
   now quote `role_create_table` via
   [`DBI::dbQuoteIdentifier()`](https://dbi.r-dbi.org/reference/dbQuoteIdentifier.html)

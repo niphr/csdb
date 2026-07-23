@@ -50,7 +50,9 @@
 <h2 class="pkg-version" data-toc-text="2026.5.13" id="version-2026513">Version 2026.5.13<a class="anchor" aria-label="anchor" href="#version-2026513"></a></h2><p class="text-muted">CRAN release: 2026-05-13</p>
 <div class="section level3">
 <h3 id="bug-fixes-2026-5-13">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-2026-5-13"></a></h3>
-<ul><li>PostgreSQL methods (<code>create_table</code>, <code>keep_rows_where</code>, <code>drop_table</code>) now quote <code>role_create_table</code> via <code><a href="https://dbi.r-dbi.org/reference/dbQuoteIdentifier.html" class="external-link">DBI::dbQuoteIdentifier()</a></code> when emitting <code>SET ROLE</code>. Previously the role name was interpolated raw, which broke on identifiers containing hyphens, mixed case, or reserved words (e.g. <code>SET ROLE token-user</code> -&gt; syntax error), and was a SQL-injection vector if the value came from an env var.</li>
+<ul><li>
+<code>DBTable_v9$nrow(use_count = TRUE)</code> now calls <code><a href="https://dplyr.tidyverse.org/reference/context.html" class="external-link">dplyr::n()</a></code> instead of a bare <code>n()</code>. This is hygiene only: the bare call sits inside the list passed to <code><a href="https://r6.r-lib.org/reference/R6Class.html" class="external-link">R6::R6Class()</a></code>, which <code>codetools</code> never walks, so it produced no <code>R CMD check</code> complaint, and <code>dbplyr</code> renders both spellings to identical SQL.</li>
+<li>PostgreSQL methods (<code>create_table</code>, <code>keep_rows_where</code>, <code>drop_table</code>) now quote <code>role_create_table</code> via <code><a href="https://dbi.r-dbi.org/reference/dbQuoteIdentifier.html" class="external-link">DBI::dbQuoteIdentifier()</a></code> when emitting <code>SET ROLE</code>. Previously the role name was interpolated raw, which broke on identifiers containing hyphens, mixed case, or reserved words (e.g. <code>SET ROLE token-user</code> -&gt; syntax error), and was a SQL-injection vector if the value came from an env var.</li>
 </ul></div>
 </div>
     <div class="section level2">
