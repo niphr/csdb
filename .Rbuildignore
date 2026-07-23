@@ -15,3 +15,5 @@ dev
 vignettes/_PRECOMPILER.R
 vignettes/.*\.Rmd\.orig$
 ^CRAN-SUBMISSION$
+^index\.md$
+^pkgdown$
