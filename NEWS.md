@@ -1,6 +1,7 @@
 # Version 2026.5.13
 
 ## Bug Fixes
+* `DBTable_v9$nrow(use_count = TRUE)` now calls `dplyr::n()` instead of a bare `n()`. This is hygiene only: the bare call sits inside the list passed to `R6::R6Class()`, which `codetools` never walks, so it produced no `R CMD check` complaint, and `dbplyr` renders both spellings to identical SQL.
 * PostgreSQL methods (`create_table`, `keep_rows_where`, `drop_table`) now quote `role_create_table` via `DBI::dbQuoteIdentifier()` when emitting `SET ROLE`. Previously the role name was interpolated raw, which broke on identifiers containing hyphens, mixed case, or reserved words (e.g. `SET ROLE token-user` -> syntax error), and was a SQL-injection vector if the value came from an env var.
 
 # Version 2026.2.2

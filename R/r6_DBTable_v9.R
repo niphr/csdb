@@ -941,7 +941,7 @@ DBTable_v9 <- R6::R6Class(
     nrow = function(use_count = FALSE){
       if(use_count){
         retval <- self$tbl() |>
-          dplyr::summarize(n=n()) |>
+          dplyr::summarize(n=dplyr::n()) |>
           dplyr::collect()
         retval <- retval$n
       } else {
