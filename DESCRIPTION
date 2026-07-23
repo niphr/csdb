@@ -28,7 +28,6 @@ Imports: csutil,
 Suggests: testthat,
     knitr,
     rmarkdown,
-    rstudioapi,
     digest,
     crayon
 RoxygenNote: 7.3.3
