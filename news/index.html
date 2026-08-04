@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.5.13</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.4</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -46,6 +46,35 @@
       <small>Source: <a href="https://github.com/niphr/csdb/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="2026.8.4" id="version-202684">Version 2026.8.4<a class="anchor" aria-label="anchor" href="#version-202684"></a></h2>
+<div class="section level3">
+<h3 id="documentation-2026-8-4">Documentation<a class="anchor" aria-label="anchor" href="#documentation-2026-8-4"></a></h3>
+<ul><li>
+<code>README.md</code> now carries what the package is, installation, one quick start, and a table that routes a task to the function that does it. It also states two things the API does not do: <code>create_table()</code> drops and rebuilds a table whose columns differ from <code>names(field_types)</code>, and no method opens a transaction.</li>
+<li>All 11 exported functions gained a <code>@seealso</code> that says whether the introduction vignette demonstrates them. Four appear in a vignette code chunk (<code>DBConnection_v9</code>, <code>DBTable_v9</code>, <code>validator_field_types_blank</code>, <code>validator_field_contents_blank</code>); the other seven appear nowhere in the vignette, and their <code>@seealso</code> says so.</li>
+<li>Added three <code>@family</code> groups: auth hook functions (both address the <code>csdb.auth_hook</code> option, one writing it and one reading it), field type validators (one <code>db_field_types</code> argument, checked once inside <code>DBTable_v9$new()</code>), and field contents validators (one <code>data</code> argument, called from <code>insert_data()</code> and <code>upsert_data()</code>). <code>DBConnection_v9</code> and <code>DBTable_v9</code> are grouped as database classes: <code>DBTable_v9$new()</code> takes a <code>dbconfig</code> list of exactly the 10 arguments <code>DBConnection_v9$new()</code> accepts, and builds one.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="bug-fixes-2026-8-4">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-2026-8-4"></a></h3>
+<ul><li>
+<code><a href="../reference/get_table_names_and_info.html">get_table_names_and_info()</a></code>: the documented PostgreSQL example connected through <code>RPostgres::Postgres()</code>. Those connections are of class <code>PqConnection</code>, and the generic has methods for <code>PostgreSQL</code> and <code>Microsoft SQL Server</code> only, so that example cannot dispatch; it errors with “no applicable method”. It now connects through the <code>PostgreSQL Unicode</code> ODBC driver, which is the class the methods are written for. <code>RPostgres</code> was also absent from <code>Imports</code> and <code>Suggests</code>.</li>
+<li>
+<code><a href="../reference/get_table_names_and_info.html">get_table_names_and_info()</a></code>: the <code>nrow</code> column was documented as the number of rows. It is <code>reltuples</code> from <code>pg_class</code> on PostgreSQL, which is an estimate, and the <code>rows</code> column of <code>sp_spaceused</code> on Microsoft SQL Server. Documented as reported, not as exact.</li>
+<li>
+<code>DBConnection_v9</code>: the documented PostgreSQL example used <code>driver = "PostgreSQL"</code>. Only <code>"PostgreSQL Unicode"</code> selects a PostgreSQL branch in the connection code, so <code>"PostgreSQL"</code> falls through to the generic branch, which does not pass <code>database</code>, and is then followed by <code>USE &lt;db&gt;;</code>. Changed to <code>"PostgreSQL Unicode"</code>.</li>
+<li>
+<code><a href="../reference/validator_field_types_csfmt_rts_data_v2.html">validator_field_types_csfmt_rts_data_v2()</a></code>: the example vector labelled “Valid field types” returned <code>FALSE</code>, because it omitted <code>isoquarter</code> and <code>isoyearquarter</code>, which the v2 schema holds at positions 11 and 12. The example now returns <code>TRUE</code>, and a second call shows the v1 layout returning <code>FALSE</code>.</li>
+<li>
+<code>DBTable_v9</code>: the documented example called <code>$add_indexes(c("name", "date_created"))</code>, but that method takes no arguments and reads <code>self$indexes</code>. Indexes are now declared in the constructor. The same example passed <code>data.frame</code>s to <code>$insert_data()</code> and <code>$upsert_data()</code>, both of which reach <code>data.table</code> syntax (<code>[ , (col) := ]</code>, <code>with = FALSE</code>) and require a <code>data.table</code>. Changed to <code><a href="https://rdrr.io/pkg/data.table/man/data.table.html" class="external-link">data.table::data.table()</a></code>.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="development-2026-8-4">Development<a class="anchor" aria-label="anchor" href="#development-2026-8-4"></a></h3>
+<ul><li>
+<code><a href="../reference/csdb_set_auth_hook.html">csdb_set_auth_hook()</a></code>, <code>DBConnection_v9</code> and <code>DBTable_v9</code> gained runnable examples for the parts that need no database server: setting and restoring the hook, and creating an object without connecting. Their <code>\dontrun{}</code> blocks keep the parts that need a server.</li>
+<li>Added <code>^Rplots\.pdf$</code> to <code>.Rbuildignore</code>.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="2026.5.13" id="version-2026513">Version 2026.5.13<a class="anchor" aria-label="anchor" href="#version-2026513"></a></h2><p class="text-muted">CRAN release: 2026-05-13</p>
 <div class="section level3">

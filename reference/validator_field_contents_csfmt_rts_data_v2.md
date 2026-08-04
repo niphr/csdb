@@ -22,6 +22,19 @@ validator_field_contents_csfmt_rts_data_v2(data)
 TRUE if data is valid for csfmt_rts_data_v2, FALSE otherwise (with error
 attribute)
 
+## See also
+
+[`DBTable_v9`](https://niphr.github.io/csdb/reference/DBTable_v9.md),
+which takes this as its `validator_field_contents` argument and calls it
+from its `insert_data()` and `upsert_data()` methods. The introduction
+vignette,
+[`vignette("csdb", package = "csdb")`](https://niphr.github.io/csdb/articles/csdb.md),
+does not use this validator.
+
+Other field contents validators:
+[`validator_field_contents_blank()`](https://niphr.github.io/csdb/reference/validator_field_contents_blank.md),
+[`validator_field_contents_csfmt_rts_data_v1()`](https://niphr.github.io/csdb/reference/validator_field_contents_csfmt_rts_data_v1.md)
+
 ## Examples
 
 ``` r

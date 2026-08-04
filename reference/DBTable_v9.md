@@ -40,6 +40,19 @@ provides:
 both field types and data contents, ensuring data integrity and schema
 compliance.
 
+## See also
+
+The introduction vignette,
+[`vignette("csdb", package = "csdb")`](https://niphr.github.io/csdb/articles/csdb.md),
+which creates one of these against a PostgreSQL database and inserts the
+bundled `nor_covid19_cases_by_time_location` dataset.
+[`DBConnection_v9`](https://niphr.github.io/csdb/reference/DBConnection_v9.md)
+takes the same arguments as the `dbconfig` list, and one is created here
+to hold the connection.
+
+Other database classes:
+[`DBConnection_v9`](https://niphr.github.io/csdb/reference/DBConnection_v9.md)
+
 ## Public fields
 
 - `dbconnection`:
@@ -117,7 +130,7 @@ compliance.
 
 ### Public methods
 
-- [`DBTable_v9$new()`](#method-DBTable_v9-initialize)
+- [`DBTable_v9$new()`](#method-DBTable_v9-new)
 
 - [`DBTable_v9$print()`](#method-DBTable_v9-print)
 
@@ -163,7 +176,7 @@ compliance.
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$new()`
+### Method `new()`
 
 Create a new DBTable_v9 object.
 
@@ -222,7 +235,7 @@ A new \`DBTable_v9\` object.
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$print()`
+### Method [`print()`](https://rdrr.io/r/base/print.html)
 
 Class-specific print function.
 
@@ -238,7 +251,7 @@ Class-specific print function.
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$connect()`
+### Method `connect()`
 
 Connect from the database
 
@@ -248,7 +261,7 @@ Connect from the database
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$disconnect()`
+### Method `disconnect()`
 
 Disconnect from the database
 
@@ -258,7 +271,7 @@ Disconnect from the database
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$table_exists()`
+### Method `table_exists()`
 
 Does the table exist
 
@@ -268,7 +281,7 @@ Does the table exist
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$create_table()`
+### Method `create_table()`
 
 Create the database table
 
@@ -278,7 +291,7 @@ Create the database table
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$remove_table()`
+### Method `remove_table()`
 
 Drop the database table
 
@@ -288,7 +301,7 @@ Drop the database table
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$insert_data()`
+### Method `insert_data()`
 
 Inserts data
 
@@ -317,7 +330,7 @@ Inserts data
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$upsert_data()`
+### Method `upsert_data()`
 
 Upserts data into the database table
 
@@ -346,7 +359,7 @@ Upserts data into the database table
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$drop_all_rows()`
+### Method `drop_all_rows()`
 
 Drops all rows in the database table
 
@@ -356,7 +369,7 @@ Drops all rows in the database table
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$drop_rows_where()`
+### Method `drop_rows_where()`
 
 Drops rows in the database table according to the SQL condition.
 
@@ -372,7 +385,7 @@ Drops rows in the database table according to the SQL condition.
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$keep_rows_where()`
+### Method `keep_rows_where()`
 
 Keeps rows in the database table according to the SQL condition.
 
@@ -388,7 +401,7 @@ Keeps rows in the database table according to the SQL condition.
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$drop_all_rows_and_then_upsert_data()`
+### Method `drop_all_rows_and_then_upsert_data()`
 
 Drops all rows in the database table and then upserts data.
 
@@ -417,7 +430,7 @@ Drops all rows in the database table and then upserts data.
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$drop_all_rows_and_then_insert_data()`
+### Method `drop_all_rows_and_then_insert_data()`
 
 Drops all rows in the database table and then inserts data.
 
@@ -446,7 +459,7 @@ Drops all rows in the database table and then inserts data.
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$tbl()`
+### Method `tbl()`
 
 Provides access to the database table via dplyr::tbl.
 
@@ -456,7 +469,7 @@ Provides access to the database table via dplyr::tbl.
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$print_dplyr_select()`
+### Method `print_dplyr_select()`
 
 Prints a template dplyr::select call that you can easily copy/paste for
 all your variables.
@@ -467,7 +480,7 @@ all your variables.
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$add_indexes()`
+### Method `add_indexes()`
 
 Adds indexes to the database table from \`self\$indexes\`
 
@@ -477,7 +490,7 @@ Adds indexes to the database table from \`self\$indexes\`
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$drop_indexes()`
+### Method `drop_indexes()`
 
 Drops all indees from the database table
 
@@ -487,7 +500,7 @@ Drops all indees from the database table
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$confirm_indexes()`
+### Method `confirm_indexes()`
 
 Confirms that the names and number of indexes in the database are the
 same as in the R code. Does not confirm the contents of the indexes!
@@ -498,7 +511,7 @@ same as in the R code. Does not confirm the contents of the indexes!
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$nrow()`
+### Method [`nrow()`](https://rdrr.io/r/base/nrow.html)
 
 Gets the number of rows in the database table
 
@@ -515,7 +528,7 @@ Gets the number of rows in the database table
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$info()`
+### Method `info()`
 
 Gets the information about the database table
 
@@ -525,7 +538,7 @@ Gets the information about the database table
 
 ------------------------------------------------------------------------
 
-### `DBTable_v9$clone()`
+### Method `clone()`
 
 The objects of this class are cloneable with this method.
 
@@ -542,12 +555,25 @@ The objects of this class are cloneable with this method.
 ## Examples
 
 ``` r
+# Creating the object opens no connection, and the field types are
+# checked while it is created. These field types do not satisfy the
+# csfmt_rts_data_v1 schema, so the constructor stops.
+try(DBTable_v9$new(
+  dbconfig = list(driver = "PostgreSQL Unicode", server = "localhost"),
+  table_name = "my_data_table",
+  field_types = c("id" = "INTEGER"),
+  keys = "id",
+  validator_field_types = validator_field_types_csfmt_rts_data_v1
+))
+#> Error in initialize(...) : field_types not validated in my_data_table
+
 if (FALSE) { # \dontrun{
 # Create database connection
 db_config <- list(
   driver = "ODBC Driver 17 for SQL Server",
   server = "localhost",
   db = "mydb",
+  schema = "dbo",
   user = "myuser",
   password = "mypass"
 )
@@ -560,12 +586,14 @@ field_types <- c(
   "date_created" = "DATE"
 )
 
-# Create table object
+# Create table object. Indexes are named here, because add_indexes()
+# takes no arguments and reads them from the object.
 my_table <- DBTable_v9$new(
   dbconfig = db_config,
   table_name = "my_data_table",
   field_types = field_types,
   keys = c("id"),
+  indexes = list("ind1" = c("name", "date_created")),
   validator_field_types = validator_field_types_blank,
   validator_field_contents = validator_field_contents_blank
 )
@@ -573,8 +601,8 @@ my_table <- DBTable_v9$new(
 # Create table in database
 my_table$create_table()
 
-# Insert data
-sample_data <- data.frame(
+# Insert data. insert_data() and upsert_data() need a data.table.
+sample_data <- data.table::data.table(
   id = 1:3,
   name = c("Alice", "Bob", "Charlie"),
   value = c(10.5, 20.3, 15.7),
@@ -582,16 +610,16 @@ sample_data <- data.frame(
 )
 my_table$insert_data(sample_data)
 
-# Query data using dplyr
+# Query data using dplyr. tbl() needs dbplyr installed.
 result <- my_table$tbl() |>
   dplyr::filter(value > 15) |>
   dplyr::collect()
 
-# Add indexes for performance
-my_table$add_indexes(c("name", "date_created"))
+# Add the indexes that were named above
+my_table$add_indexes()
 
 # Upsert (insert or update) data
-new_data <- data.frame(
+new_data <- data.table::data.table(
   id = 2:4,
   name = c("Bob_Updated", "Charlie", "David"),
   value = c(25.0, 15.7, 30.2),

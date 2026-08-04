@@ -11,7 +11,7 @@ fields contain valid values according to the surveillance data format requiremen
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.5.13</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.4</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -73,6 +73,17 @@ fields contain valid values according to the surveillance data format requiremen
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>TRUE if data is valid for csfmt_rts_data_v1, FALSE otherwise (with error attribute)</p>
+    </div>
+    <div class="section level2">
+    <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
+    <div class="dont-index"><p><code><a href="DBTable_v9.html">DBTable_v9</a></code>, which takes this as its
+  <code>validator_field_contents</code> argument and calls it from its
+  <code>insert_data()</code> and <code>upsert_data()</code> methods.
+  The introduction vignette,
+  <code><a href="../articles/csdb.html">vignette("csdb", package = "csdb")</a></code>, does not use this validator.</p>
+<p>Other field contents validators:
+<code><a href="validator_field_contents_blank.html">validator_field_contents_blank()</a></code>,
+<code><a href="validator_field_contents_csfmt_rts_data_v2.html">validator_field_contents_csfmt_rts_data_v2()</a></code></p></div>
     </div>
 
     <div class="section level2">

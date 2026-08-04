@@ -28,7 +28,9 @@ A data.table containing table information with columns:
 
 - nrow:
 
-  Numeric. Number of rows in the table
+  Numeric. The row count as the database reports it: `reltuples` from
+  `pg_class` on PostgreSQL, which is an estimate, and the `rows` column
+  of `sp_spaceused` on Microsoft SQL Server
 
 - size_total_gb:
 
@@ -42,24 +44,38 @@ A data.table containing table information with columns:
 
   Numeric. Size of indexes in gigabytes
 
+## See also
+
+[`DBTable_v9`](https://niphr.github.io/csdb/reference/DBTable_v9.md),
+whose `info()` method and whose `nrow(use_count = FALSE)` method call
+this function. The introduction vignette,
+[`vignette("csdb", package = "csdb")`](https://niphr.github.io/csdb/articles/csdb.md),
+does not mention this function.
+
 ## Examples
 
 ``` r
 if (FALSE) { # \dontrun{
 # Microsoft SQL Server example
-con <- DBI::dbConnect(odbc::odbc(), 
-                      driver = "ODBC Driver 17 for SQL Server",
-                      server = "localhost", 
-                      database = "mydb")
+con <- DBI::dbConnect(odbc::odbc(),
+  driver = "ODBC Driver 17 for SQL Server",
+  server = "localhost",
+  database = "mydb"
+)
 table_info <- get_table_names_and_info(con)
 print(table_info)
 DBI::dbDisconnect(con)
 
-# PostgreSQL example  
-con <- DBI::dbConnect(RPostgres::Postgres(),
-                      host = "localhost",
-                      dbname = "mydb",
-                      user = "user")
+# PostgreSQL example. Methods exist for the "PostgreSQL" and
+# "Microsoft SQL Server" connection classes that odbc creates.
+con <- DBI::dbConnect(odbc::odbc(),
+  driver = "PostgreSQL Unicode",
+  server = "localhost",
+  port = 5432,
+  database = "mydb",
+  uid = "user",
+  password = "pass"
+)
 table_info <- get_table_names_and_info(con)
 print(table_info)
 DBI::dbDisconnect(con)

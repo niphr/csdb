@@ -11,7 +11,7 @@ for real-time surveillance data format version 2."><meta property="og:image" con
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.5.13</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.4</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -74,13 +74,25 @@ for real-time surveillance data format version 2.</p>
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>TRUE if field types are valid for csfmt_rts_data_v2, FALSE otherwise</p>
     </div>
+    <div class="section level2">
+    <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
+    <div class="dont-index"><p><code><a href="DBTable_v9.html">DBTable_v9</a></code>, which takes this as its
+  <code>validator_field_types</code> argument and calls it once, while the object
+  is being created.
+  The introduction vignette,
+  <code><a href="../articles/csdb.html">vignette("csdb", package = "csdb")</a></code>, does not use this validator.</p>
+<p>Other field type validators:
+<code><a href="validator_field_types_blank.html">validator_field_types_blank()</a></code>,
+<code><a href="validator_field_types_csfmt_rts_data_v1.html">validator_field_types_csfmt_rts_data_v1()</a></code></p></div>
+    </div>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># Valid field types for csfmt_rts_data_v2 (includes additional fields)</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># Valid field types for csfmt_rts_data_v2. The first 18 must match the</span></span></span>
+<span class="r-in"><span><span class="co"># schema, which unlike v1 carries isoquarter and isoyearquarter.</span></span></span>
 <span class="r-in"><span><span class="va">valid_fields_v2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span></span>
 <span class="r-in"><span>  <span class="st">"granularity_time"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span></span>
-<span class="r-in"><span>  <span class="st">"granularity_geo"</span> <span class="op">=</span> <span class="st">"TEXT"</span>, </span></span>
+<span class="r-in"><span>  <span class="st">"granularity_geo"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span></span>
 <span class="r-in"><span>  <span class="st">"country_iso3"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span></span>
 <span class="r-in"><span>  <span class="st">"location_code"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span></span>
 <span class="r-in"><span>  <span class="st">"border"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span></span>
@@ -89,6 +101,8 @@ for real-time surveillance data format version 2.</p>
 <span class="r-in"><span>  <span class="st">"isoyear"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span></span>
 <span class="r-in"><span>  <span class="st">"isoweek"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span></span>
 <span class="r-in"><span>  <span class="st">"isoyearweek"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span></span>
+<span class="r-in"><span>  <span class="st">"isoquarter"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span></span>
+<span class="r-in"><span>  <span class="st">"isoyearquarter"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span></span>
 <span class="r-in"><span>  <span class="st">"season"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span></span>
 <span class="r-in"><span>  <span class="st">"seasonweek"</span> <span class="op">=</span> <span class="st">"DOUBLE"</span>,</span></span>
 <span class="r-in"><span>  <span class="st">"calyear"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span></span>
@@ -100,6 +114,10 @@ for real-time surveillance data format version 2.</p>
 <span class="r-in"><span>  <span class="st">"cases_n"</span> <span class="op">=</span> <span class="st">"INTEGER"</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">validator_field_types_csfmt_rts_data_v2</span><span class="op">(</span><span class="va">valid_fields_v2</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] TRUE</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># The v1 layout is not valid for v2: it has no isoquarter</span></span></span>
+<span class="r-in"><span><span class="fu">validator_field_types_csfmt_rts_data_v2</span><span class="op">(</span><span class="va">valid_fields_v2</span><span class="op">[</span><span class="op">-</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">11</span>, <span class="fl">12</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] FALSE</span>
 </code></pre></div>
     </div>

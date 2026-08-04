@@ -20,6 +20,19 @@ validator_field_types_blank(db_field_types)
 
 Always returns TRUE
 
+## See also
+
+The introduction vignette,
+[`vignette("csdb", package = "csdb")`](https://niphr.github.io/csdb/articles/csdb.md),
+which passes this to `DBTable_v9$new()` as its `validator_field_types`
+argument.
+[`DBTable_v9`](https://niphr.github.io/csdb/reference/DBTable_v9.md)
+calls the field type validator once, while the object is being created.
+
+Other field type validators:
+[`validator_field_types_csfmt_rts_data_v1()`](https://niphr.github.io/csdb/reference/validator_field_types_csfmt_rts_data_v1.md),
+[`validator_field_types_csfmt_rts_data_v2()`](https://niphr.github.io/csdb/reference/validator_field_types_csfmt_rts_data_v2.md)
+
 ## Examples
 
 ``` r

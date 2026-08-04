@@ -25,6 +25,18 @@ Key features:
 
 - Graceful error handling and recovery
 
+## See also
+
+The introduction vignette,
+[`vignette("csdb", package = "csdb")`](https://niphr.github.io/csdb/articles/csdb.md),
+which creates one of these, connects, and disconnects again.
+[`csdb_set_auth_hook`](https://niphr.github.io/csdb/reference/csdb_set_auth_hook.md)
+registers the function that `connect()` calls after its first failed
+attempt.
+
+Other database classes:
+[`DBTable_v9`](https://niphr.github.io/csdb/reference/DBTable_v9.md)
+
 ## Public fields
 
 - `config`:
@@ -45,7 +57,7 @@ Key features:
 
 ### Public methods
 
-- [`DBConnection_v9$new()`](#method-DBConnection_v9-initialize)
+- [`DBConnection_v9$new()`](#method-DBConnection_v9-new)
 
 - [`DBConnection_v9$is_connected()`](#method-DBConnection_v9-is_connected)
 
@@ -59,7 +71,7 @@ Key features:
 
 ------------------------------------------------------------------------
 
-### `DBConnection_v9$new()`
+### Method `new()`
 
 Create a new DBConnection_v9 object.
 
@@ -126,7 +138,7 @@ A new \`DBConnection_v9\` object.
 
 ------------------------------------------------------------------------
 
-### `DBConnection_v9$is_connected()`
+### Method `is_connected()`
 
 Is the DB schema connected?
 
@@ -140,7 +152,7 @@ TRUE/FALSE
 
 ------------------------------------------------------------------------
 
-### `DBConnection_v9$print()`
+### Method [`print()`](https://rdrr.io/r/base/print.html)
 
 Class-specific print function.
 
@@ -156,7 +168,7 @@ Class-specific print function.
 
 ------------------------------------------------------------------------
 
-### `DBConnection_v9$connect()`
+### Method `connect()`
 
 Connect to the database
 
@@ -172,7 +184,7 @@ Connect to the database
 
 ------------------------------------------------------------------------
 
-### `DBConnection_v9$disconnect()`
+### Method `disconnect()`
 
 Disconnect from the database
 
@@ -182,7 +194,7 @@ Disconnect from the database
 
 ------------------------------------------------------------------------
 
-### `DBConnection_v9$clone()`
+### Method `clone()`
 
 The objects of this class are cloneable with this method.
 
@@ -199,6 +211,30 @@ The objects of this class are cloneable with this method.
 ## Examples
 
 ``` r
+# Creating the object stores the settings. It opens no connection,
+# so this runs without a database server.
+db <- DBConnection_v9$new(
+  driver = "PostgreSQL Unicode",
+  server = "localhost",
+  port = 5432,
+  db = "mydb",
+  user = "myuser",
+  password = "mypass"
+)
+db$is_connected()
+#> [1] FALSE
+db
+#> (disconnected)
+#> 
+#> Driver:              PostgreSQL Unicode 
+#> Server:              localhost 
+#> Port:                5432 
+#> DB:                  mydb 
+#> User:                myuser 
+#> Password:            ****** 
+#> SSL mode:            x 
+#> 
+
 if (FALSE) { # \dontrun{
 # Create a SQL Server connection
 db_config <- DBConnection_v9$new(
@@ -222,9 +258,10 @@ tables <- DBI::dbListTables(db_config$connection)
 # Disconnect when done
 db_config$disconnect()
 
-# PostgreSQL example
+# PostgreSQL example. Only "PostgreSQL Unicode" reaches the
+# PostgreSQL branch of the connection code.
 pg_config <- DBConnection_v9$new(
-  driver = "PostgreSQL",
+  driver = "PostgreSQL Unicode",
   server = "localhost",
   port = 5432,
   db = "mydb",
