@@ -1,3 +1,21 @@
+# Version 2026.8.4
+
+## Documentation
+* `README.md` now carries what the package is, installation, one quick start, and a table that routes a task to the function that does it. It also states two things the API does not do: `create_table()` drops and rebuilds a table whose columns differ from `names(field_types)`, and no method opens a transaction.
+* All 11 exported functions gained a `@seealso` that says whether the introduction vignette demonstrates them. Four appear in a vignette code chunk (`DBConnection_v9`, `DBTable_v9`, `validator_field_types_blank`, `validator_field_contents_blank`); the other seven appear nowhere in the vignette, and their `@seealso` says so.
+* Added three `@family` groups: auth hook functions (both address the `csdb.auth_hook` option, one writing it and one reading it), field type validators (one `db_field_types` argument, checked once inside `DBTable_v9$new()`), and field contents validators (one `data` argument, called from `insert_data()` and `upsert_data()`). `DBConnection_v9` and `DBTable_v9` are grouped as database classes: `DBTable_v9$new()` takes a `dbconfig` list of exactly the 10 arguments `DBConnection_v9$new()` accepts, and builds one.
+
+## Bug Fixes
+* `get_table_names_and_info()`: the documented PostgreSQL example connected through `RPostgres::Postgres()`. Those connections are of class `PqConnection`, and the generic has methods for `PostgreSQL` and `Microsoft SQL Server` only, so that example cannot dispatch; it errors with "no applicable method". It now connects through the `PostgreSQL Unicode` ODBC driver, which is the class the methods are written for. `RPostgres` was also absent from `Imports` and `Suggests`.
+* `get_table_names_and_info()`: the `nrow` column was documented as the number of rows. It is `reltuples` from `pg_class` on PostgreSQL, which is an estimate, and the `rows` column of `sp_spaceused` on Microsoft SQL Server. Documented as reported, not as exact.
+* `DBConnection_v9`: the documented PostgreSQL example used `driver = "PostgreSQL"`. Only `"PostgreSQL Unicode"` selects a PostgreSQL branch in the connection code, so `"PostgreSQL"` falls through to the generic branch, which does not pass `database`, and is then followed by `USE <db>;`. Changed to `"PostgreSQL Unicode"`.
+* `validator_field_types_csfmt_rts_data_v2()`: the example vector labelled "Valid field types" returned `FALSE`, because it omitted `isoquarter` and `isoyearquarter`, which the v2 schema holds at positions 11 and 12. The example now returns `TRUE`, and a second call shows the v1 layout returning `FALSE`.
+* `DBTable_v9`: the documented example called `$add_indexes(c("name", "date_created"))`, but that method takes no arguments and reads `self$indexes`. Indexes are now declared in the constructor. The same example passed `data.frame`s to `$insert_data()` and `$upsert_data()`, both of which reach `data.table` syntax (`[ , (col) := ]`, `with = FALSE`) and require a `data.table`. Changed to `data.table::data.table()`.
+
+## Development
+* `csdb_set_auth_hook()`, `DBConnection_v9` and `DBTable_v9` gained runnable examples for the parts that need no database server: setting and restoring the hook, and creating an object without connecting. Their `\dontrun{}` blocks keep the parts that need a server.
+* Added `^Rplots\.pdf$` to `.Rbuildignore`.
+
 # Version 2026.5.13
 
 ## Bug Fixes

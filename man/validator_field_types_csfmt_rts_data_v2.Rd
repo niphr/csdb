@@ -18,10 +18,11 @@ This validator ensures that the first 18 fields match the expected structure
 for real-time surveillance data format version 2.
 }
 \examples{
-# Valid field types for csfmt_rts_data_v2 (includes additional fields)
+# Valid field types for csfmt_rts_data_v2. The first 18 must match the
+# schema, which unlike v1 carries isoquarter and isoyearquarter.
 valid_fields_v2 <- c(
   "granularity_time" = "TEXT",
-  "granularity_geo" = "TEXT", 
+  "granularity_geo" = "TEXT",
   "country_iso3" = "TEXT",
   "location_code" = "TEXT",
   "border" = "INTEGER",
@@ -30,6 +31,8 @@ valid_fields_v2 <- c(
   "isoyear" = "INTEGER",
   "isoweek" = "INTEGER",
   "isoyearweek" = "TEXT",
+  "isoquarter" = "INTEGER",
+  "isoyearquarter" = "TEXT",
   "season" = "TEXT",
   "seasonweek" = "DOUBLE",
   "calyear" = "INTEGER",
@@ -41,4 +44,19 @@ valid_fields_v2 <- c(
   "cases_n" = "INTEGER"
 )
 validator_field_types_csfmt_rts_data_v2(valid_fields_v2)
+
+# The v1 layout is not valid for v2: it has no isoquarter
+validator_field_types_csfmt_rts_data_v2(valid_fields_v2[-c(11, 12)])
 }
+\seealso{
+\code{\link{DBTable_v9}}, which takes this as its
+  \code{validator_field_types} argument and calls it once, while the object
+  is being created.
+  The introduction vignette,
+  \code{vignette("csdb", package = "csdb")}, does not use this validator.
+
+Other field type validators: 
+\code{\link{validator_field_types_blank}()},
+\code{\link{validator_field_types_csfmt_rts_data_v1}()}
+}
+\concept{field type validators}

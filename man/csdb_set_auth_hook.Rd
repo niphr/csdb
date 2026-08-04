@@ -19,8 +19,15 @@ This is useful for refreshing Kerberos tickets or other authentication
 credentials before retrying the connection.
 }
 \examples{
+# The hook is held in the csdb.auth_hook option. Setting one returns
+# the previous hook, so it can be put back afterwards.
+previous <- csdb_set_auth_hook(function() invisible(NULL))
+is.function(csdb_get_auth_hook())
+csdb_set_auth_hook(previous)
+csdb_get_auth_hook()
+
 \dontrun{
-# Set an auth hook to refresh Kerberos credentials
+# A real hook refreshes credentials, e.g. a Kerberos ticket
 csdb_set_auth_hook(function() {
   system2("/bin/authenticate.sh", stdout = NULL)
 })
@@ -29,3 +36,13 @@ csdb_set_auth_hook(function() {
 csdb_set_auth_hook(NULL)
 }
 }
+\seealso{
+\code{\link{DBConnection_v9}}, whose \code{connect()} method calls
+  the registered hook once, after its first failed attempt.
+  The introduction vignette,
+  \code{vignette("csdb", package = "csdb")}, does not mention this function.
+
+Other auth hook functions: 
+\code{\link{csdb_get_auth_hook}()}
+}
+\concept{auth hook functions}

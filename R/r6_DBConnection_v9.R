@@ -11,9 +11,21 @@
 #'   or NULL to clear the hook.
 #' @return Invisibly returns the previous hook (if any).
 #' @export
+#' @family auth hook functions
+#' @seealso \code{\link{DBConnection_v9}}, whose \code{connect()} method calls
+#'   the registered hook once, after its first failed attempt.
+#'   The introduction vignette,
+#'   \code{vignette("csdb", package = "csdb")}, does not mention this function.
 #' @examples
+#' # The hook is held in the csdb.auth_hook option. Setting one returns
+#' # the previous hook, so it can be put back afterwards.
+#' previous <- csdb_set_auth_hook(function() invisible(NULL))
+#' is.function(csdb_get_auth_hook())
+#' csdb_set_auth_hook(previous)
+#' csdb_get_auth_hook()
+#'
 #' \dontrun{
-#' # Set an auth hook to refresh Kerberos credentials
+#' # A real hook refreshes credentials, e.g. a Kerberos ticket
 #' csdb_set_auth_hook(function() {
 #'   system2("/bin/authenticate.sh", stdout = NULL)
 #' })
@@ -37,6 +49,11 @@ csdb_set_auth_hook <- function(hook) {
 #'
 #' @return The current auth hook function, or NULL if none is set.
 #' @export
+#' @family auth hook functions
+#' @seealso \code{\link{DBConnection_v9}}, whose \code{connect()} method calls
+#'   this function to look up the hook.
+#'   The introduction vignette,
+#'   \code{vignette("csdb", package = "csdb")}, does not mention this function.
 #' @examples
 #' # Returns NULL when no hook has been set
 #' csdb_get_auth_hook()
@@ -77,7 +94,26 @@ csdb_get_auth_hook <- function() {
 #' @import data.table
 #' @import R6
 #' @export DBConnection_v9
+#' @family database classes
+#' @seealso The introduction vignette,
+#'   \code{vignette("csdb", package = "csdb")}, which creates one of these,
+#'   connects, and disconnects again.
+#'   \code{\link{csdb_set_auth_hook}} registers the function that
+#'   \code{connect()} calls after its first failed attempt.
 #' @examples
+#' # Creating the object stores the settings. It opens no connection,
+#' # so this runs without a database server.
+#' db <- DBConnection_v9$new(
+#'   driver = "PostgreSQL Unicode",
+#'   server = "localhost",
+#'   port = 5432,
+#'   db = "mydb",
+#'   user = "myuser",
+#'   password = "mypass"
+#' )
+#' db$is_connected()
+#' db
+#'
 #' \dontrun{
 #' # Create a SQL Server connection
 #' db_config <- DBConnection_v9$new(
@@ -101,9 +137,10 @@ csdb_get_auth_hook <- function() {
 #' # Disconnect when done
 #' db_config$disconnect()
 #'
-#' # PostgreSQL example
+#' # PostgreSQL example. Only "PostgreSQL Unicode" reaches the
+#' # PostgreSQL branch of the connection code.
 #' pg_config <- DBConnection_v9$new(
-#'   driver = "PostgreSQL",
+#'   driver = "PostgreSQL Unicode",
 #'   server = "localhost",
 #'   port = 5432,
 #'   db = "mydb",
@@ -120,7 +157,6 @@ DBConnection_v9 <- R6::R6Class(
 
   # public ----
   public = list(
-
     #' @field config Configuration details of the database.
     config = NULL,
 
@@ -149,7 +185,7 @@ DBConnection_v9 <- R6::R6Class(
       trusted_connection = NULL,
       sslmode = NULL,
       role_create_table = NULL
-      ) {
+    ) {
       force(driver)
       force(server)
       force(port)
@@ -161,9 +197,15 @@ DBConnection_v9 <- R6::R6Class(
       force(sslmode)
       force(role_create_table)
 
-      if(is.null(trusted_connection)) trusted_connection <- "x"
-      if(is.null(sslmode)) sslmode <- "x"
-      if(is.null(role_create_table)) role_create_table <- "x"
+      if (is.null(trusted_connection)) {
+        trusted_connection <- "x"
+      }
+      if (is.null(sslmode)) {
+        sslmode <- "x"
+      }
+      if (is.null(role_create_table)) {
+        role_create_table <- "x"
+      }
 
       self$config <- list(
         driver = driver,
@@ -187,15 +229,19 @@ DBConnection_v9 <- R6::R6Class(
       if (is.null(private$pconnection)) {
         retval <- FALSE
       } else if (DBI::dbIsValid(private$pconnection)) {
-        tryCatch({
-          z <- private$pconnection |>
-            DBI::dbListTables()
-          retval <- TRUE
-        }, error = function(e){
-          retval <<- FALSE
-        }, warning = function(e){
-          retval <<- FALSE
-        })
+        tryCatch(
+          {
+            z <- private$pconnection |>
+              DBI::dbListTables()
+            retval <- TRUE
+          },
+          error = function(e) {
+            retval <<- FALSE
+          },
+          warning = function(e) {
+            retval <<- FALSE
+          }
+        )
       }
       return(retval)
     },
@@ -205,13 +251,13 @@ DBConnection_v9 <- R6::R6Class(
     #' @param ... Not used.
     print = function(...) {
       if (!self$is_connected()) {
-        if(requireNamespace("crayon", quietly = TRUE)) {
+        if (requireNamespace("crayon", quietly = TRUE)) {
           cat(crayon::bgRed(crayon::white("(disconnected)\n\n")))
         } else {
           cat("(disconnected)\n\n")
         }
       } else {
-        if(requireNamespace("crayon", quietly = TRUE)) {
+        if (requireNamespace("crayon", quietly = TRUE)) {
           cat(crayon::bgCyan(crayon::white("(connected)\n\n")))
         } else {
           cat("(connected)\n\n")
@@ -222,8 +268,12 @@ DBConnection_v9 <- R6::R6Class(
       cat("Port:               ", self$config$port, "\n")
       cat("DB:                 ", self$config$db, "\n")
       cat("User:               ", self$config$user, "\n")
-      cat("Password:           ", paste0(rep("*", nchar(self$config$password)), collapse=""), "\n")
-      if(self$config$driver %in% c("PostgreSQL Unicode")) {
+      cat(
+        "Password:           ",
+        paste0(rep("*", nchar(self$config$password)), collapse = ""),
+        "\n"
+      )
+      if (self$config$driver %in% c("PostgreSQL Unicode")) {
         cat("SSL mode:           ", self$config$sslmode, "\n")
       } else {
         cat("Trusted connection: ", self$config$trusted_connection, "\n")
@@ -240,52 +290,63 @@ DBConnection_v9 <- R6::R6Class(
       success <- FALSE
       auth_hook_called <- FALSE
 
-      for(i in 1:attempts){
-        tryCatch({
-          private$connect_once()
-          success <- TRUE
-        },
-        error = function(e){
-          message("Attempt ", i,": ", e)
-        })
-        if(success) break()
+      for (i in 1:attempts) {
+        tryCatch(
+          {
+            private$connect_once()
+            success <- TRUE
+          },
+          error = function(e) {
+            message("Attempt ", i, ": ", e)
+          }
+        )
+        if (success) {
+          break()
+        }
 
         # If first attempt failed and we have an auth hook, call it
         if (i == 1 && !auth_hook_called) {
           auth_hook <- csdb_get_auth_hook()
           if (!is.null(auth_hook)) {
             message("Calling authentication hook...")
-            tryCatch({
-              auth_hook()
-              auth_hook_called <- TRUE
-            }, error = function(e) {
-              message("Auth hook failed: ", conditionMessage(e))
-            })
+            tryCatch(
+              {
+                auth_hook()
+                auth_hook_called <- TRUE
+              },
+              error = function(e) {
+                message("Auth hook failed: ", conditionMessage(e))
+              }
+            )
           }
         }
 
         # sleep to give the db time to recover
         # don't need to sleep on the last failed run
-        if(i!=attempts) Sys.sleep(i)
+        if (i != attempts) Sys.sleep(i)
       }
-      if(!success) stop("Failed to connect to database after ", attempts, " attempts")
+      if (!success) {
+        stop("Failed to connect to database after ", attempts, " attempts")
+      }
     },
 
     #' @description
     #' Disconnect from the database
     disconnect = function() {
-      if(self$is_connected()) suppressWarnings(DBI::dbDisconnect(private$pconnection))
+      if (self$is_connected()) {
+        suppressWarnings(DBI::dbDisconnect(private$pconnection))
+      }
     }
   ),
 
   # active ----
   active = list(
     #' @field connection Database connection.
-    connection = function(){
+    connection = function() {
       private$pconnection
     },
     #' @field autoconnection Database connection that automatically connects if possible.
-    autoconnection = function(){
+    autoconnection = function() {
       self$connect()
       return(private$pconnection)
     }
@@ -295,14 +356,17 @@ DBConnection_v9 <- R6::R6Class(
   private = list(
     pconnection = NULL,
     connect_once = function() {
-      if(self$is_connected()){
+      if (self$is_connected()) {
         return()
       }
 
       # create connection
       tryCatch(
         {
-          if (self$config$trusted_connection == "yes" & self$config$driver %in% c("ODBC Driver 17 for SQL Server")) {
+          if (
+            self$config$trusted_connection == "yes" &
+              self$config$driver %in% c("ODBC Driver 17 for SQL Server")
+          ) {
             private$pconnection <- DBI::dbConnect(
               odbc::odbc(),
               driver = self$config$driver,
@@ -310,7 +374,9 @@ DBConnection_v9 <- R6::R6Class(
               port = self$config$port,
               trusted_connection = "yes"
             )
-          } else if (self$config$driver %in% c("ODBC Driver 17 for SQL Server")) {
+          } else if (
+            self$config$driver %in% c("ODBC Driver 17 for SQL Server")
+          ) {
             private$pconnection <- DBI::dbConnect(
               odbc::odbc(),
               driver = self$config$driver,
@@ -320,7 +386,10 @@ DBConnection_v9 <- R6::R6Class(
               pwd = self$config$password,
               encoding = "utf8"
             )
-          } else if (self$config$sslmode == "require" & self$config$driver %in% c("PostgreSQL Unicode")) {
+          } else if (
+            self$config$sslmode == "require" &
+              self$config$driver %in% c("PostgreSQL Unicode")
+          ) {
             private$pconnection <- DBI::dbConnect(
               odbc::odbc(),
               driver = self$config$driver,
@@ -353,22 +422,33 @@ DBConnection_v9 <- R6::R6Class(
             )
           }
         },
-        error=function(cond){
-          stop("Could not connect to database server '", self$config$server,"'\n",
-               "Original error: ", conditionMessage(cond))
+        error = function(cond) {
+          stop(
+            "Could not connect to database server '",
+            self$config$server,
+            "'\n",
+            "Original error: ",
+            conditionMessage(cond)
+          )
         }
       )
 
       # use db if available
-      if(!is.null(self$config$db) & !self$config$driver %in% c("PostgreSQL Unicode")){
+      if (
+        !is.null(self$config$db) &
+          !self$config$driver %in% c("PostgreSQL Unicode")
+      ) {
         tryCatch(
           {
-            a <- DBI::dbExecute(private$pconnection, glue::glue({
-              "USE {self$config$db};"
-            }))
+            a <- DBI::dbExecute(
+              private$pconnection,
+              glue::glue({
+                "USE {self$config$db};"
+              })
+            )
           },
           error = function(e) {
-            stop("Database '", self$config$db,"' does not exist")
+            stop("Database '", self$config$db, "' does not exist")
           }
         )
       }
@@ -379,4 +459,3 @@ DBConnection_v9 <- R6::R6Class(
     }
   )
 )
-

@@ -23,3 +23,13 @@ hook <- csdb_get_auth_hook()
 is.function(hook)
 }
 }
+\seealso{
+\code{\link{DBConnection_v9}}, whose \code{connect()} method calls
+  this function to look up the hook.
+  The introduction vignette,
+  \code{vignette("csdb", package = "csdb")}, does not mention this function.
+
+Other auth hook functions: 
+\code{\link{csdb_set_auth_hook}()}
+}
+\concept{auth hook functions}

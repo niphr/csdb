@@ -17,3 +17,4 @@ vignettes/.*\.Rmd\.orig$
 ^CRAN-SUBMISSION$
 ^index\.md$
 ^pkgdown$
+^Rplots\.pdf$

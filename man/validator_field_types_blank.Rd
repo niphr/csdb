@@ -25,3 +25,15 @@ validator_field_types_blank(field_types)
 other_types <- c("value" = "DOUBLE", "status" = "BOOLEAN")
 validator_field_types_blank(other_types)
 }
+\seealso{
+The introduction vignette,
+  \code{vignette("csdb", package = "csdb")}, which passes this to
+  \code{DBTable_v9$new()} as its \code{validator_field_types} argument.
+  \code{\link{DBTable_v9}} calls the field type validator once, while the
+  object is being created.
+
+Other field type validators: 
+\code{\link{validator_field_types_csfmt_rts_data_v1}()},
+\code{\link{validator_field_types_csfmt_rts_data_v2}()}
+}
+\concept{field type validators}

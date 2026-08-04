@@ -21,7 +21,7 @@ for real-time surveillance data format version 1.
 # Valid field types for csfmt_rts_data_v1
 valid_fields <- c(
   "granularity_time" = "TEXT",
-  "granularity_geo" = "TEXT", 
+  "granularity_geo" = "TEXT",
   "country_iso3" = "TEXT",
   "location_code" = "TEXT",
   "border" = "INTEGER",
@@ -44,3 +44,15 @@ validator_field_types_csfmt_rts_data_v1(valid_fields)
 invalid_fields <- c("id" = "INTEGER", "name" = "TEXT")
 validator_field_types_csfmt_rts_data_v1(invalid_fields)
 }
+\seealso{
+\code{\link{DBTable_v9}}, which takes this as its
+  \code{validator_field_types} argument and calls it once, while the object
+  is being created.
+  The introduction vignette,
+  \code{vignette("csdb", package = "csdb")}, does not use this validator.
+
+Other field type validators: 
+\code{\link{validator_field_types_blank}()},
+\code{\link{validator_field_types_csfmt_rts_data_v2}()}
+}
+\concept{field type validators}
