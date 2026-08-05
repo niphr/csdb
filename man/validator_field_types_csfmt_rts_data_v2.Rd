@@ -55,8 +55,8 @@ validator_field_types_csfmt_rts_data_v2(valid_fields_v2[-c(11, 12)])
   The introduction vignette,
   \code{vignette("csdb", package = "csdb")}, does not use this validator.
 
-Other field type validators: 
-\code{\link{validator_field_types_blank}()},
-\code{\link{validator_field_types_csfmt_rts_data_v1}()}
+Other field type validators:
+\code{\link[=validator_field_types_blank]{validator_field_types_blank()}},
+\code{\link[=validator_field_types_csfmt_rts_data_v1]{validator_field_types_csfmt_rts_data_v1()}}
 }
 \concept{field type validators}

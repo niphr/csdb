@@ -47,8 +47,8 @@ validator_field_contents_csfmt_rts_data_v1(invalid_data)
   The introduction vignette,
   \code{vignette("csdb", package = "csdb")}, does not use this validator.
 
-Other field contents validators: 
-\code{\link{validator_field_contents_blank}()},
-\code{\link{validator_field_contents_csfmt_rts_data_v2}()}
+Other field contents validators:
+\code{\link[=validator_field_contents_blank]{validator_field_contents_blank()}},
+\code{\link[=validator_field_contents_csfmt_rts_data_v2]{validator_field_contents_csfmt_rts_data_v2()}}
 }
 \concept{field contents validators}

@@ -29,7 +29,7 @@ is.function(hook)
   The introduction vignette,
   \code{vignette("csdb", package = "csdb")}, does not mention this function.
 
-Other auth hook functions: 
-\code{\link{csdb_set_auth_hook}()}
+Other auth hook functions:
+\code{\link[=csdb_set_auth_hook]{csdb_set_auth_hook()}}
 }
 \concept{auth hook functions}
