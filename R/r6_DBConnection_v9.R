@@ -263,20 +263,27 @@ DBConnection_v9 <- R6::R6Class(
           cat("(connected)\n\n")
         }
       }
-      cat("Driver:             ", self$config$driver, "\n")
-      cat("Server:             ", self$config$server, "\n")
-      cat("Port:               ", self$config$port, "\n")
-      cat("DB:                 ", self$config$db, "\n")
-      cat("User:               ", self$config$user, "\n")
-      cat(
-        "Password:           ",
-        paste0(rep("*", nchar(self$config$password)), collapse = ""),
-        "\n"
-      )
-      if (self$config$driver %in% c("PostgreSQL Unicode")) {
-        cat("SSL mode:           ", self$config$sslmode, "\n")
+      if (identical(toupper(self$config$driver), "SQLITE")) {
+        # SQLite reads none of the server settings, so printing them would
+        # only invite someone to set them.
+        cat("Driver:             ", self$config$driver, "\n")
+        cat("File:               ", self$config$db, "\n")
       } else {
-        cat("Trusted connection: ", self$config$trusted_connection, "\n")
+        cat("Driver:             ", self$config$driver, "\n")
+        cat("Server:             ", self$config$server, "\n")
+        cat("Port:               ", self$config$port, "\n")
+        cat("DB:                 ", self$config$db, "\n")
+        cat("User:               ", self$config$user, "\n")
+        cat(
+          "Password:           ",
+          paste0(rep("*", nchar(self$config$password)), collapse = ""),
+          "\n"
+        )
+        if (self$config$driver %in% c("PostgreSQL Unicode")) {
+          cat("SSL mode:           ", self$config$sslmode, "\n")
+        } else {
+          cat("Trusted connection: ", self$config$trusted_connection, "\n")
+        }
       }
       cat("\n")
 
@@ -363,7 +370,27 @@ DBConnection_v9 <- R6::R6Class(
       # create connection
       tryCatch(
         {
-          if (
+          if (identical(toupper(self$config$driver), "SQLITE")) {
+            # SQLite is a file, not a server. `server`, `port`, `user`,
+            # `password`, `trusted_connection`, `sslmode` and
+            # `role_create_table` are all ignored, and `db` is the file path.
+            # This arm has to sit above the unguarded `else` below, which
+            # issues a generic odbc::odbc() call and would otherwise swallow
+            # every driver string that is not one of the two ODBC ones.
+            db_directory <- dirname(self$config$db)
+            if (!dir.exists(db_directory)) {
+              dir.create(db_directory, recursive = TRUE, showWarnings = FALSE)
+            }
+            # extended_types = TRUE is load-bearing, not a nicety: without it
+            # a DATE column reads back as the integer 18262 rather than a
+            # Date, and validator_field_contents_csfmt_rts_data_v1() rejects
+            # it.
+            private$pconnection <- DBI::dbConnect(
+              RSQLite::SQLite(),
+              dbname = self$config$db,
+              extended_types = TRUE
+            )
+          } else if (
             self$config$trusted_connection == "yes" &
               self$config$driver %in% c("ODBC Driver 17 for SQL Server")
           ) {
@@ -434,9 +461,12 @@ DBConnection_v9 <- R6::R6Class(
       )
 
       # use db if available
+      # SQLite is excluded because the file is already the database: it has no
+      # USE statement, and issuing one is a syntax error.
       if (
         !is.null(self$config$db) &
-          !self$config$driver %in% c("PostgreSQL Unicode")
+          !self$config$driver %in% c("PostgreSQL Unicode") &
+          !identical(toupper(self$config$driver), "SQLITE")
       ) {
         tryCatch(
           {

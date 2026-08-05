@@ -1,6 +1,6 @@
 Package: csdb
 Title: An Abstracted System for Easily Working with Databases with Large Datasets
-Version: 2026.8.4
+Version: 2026.8.5
 Authors@R: c(
   person(c("Richard","Aubrey"), "White", email = "hello@rwhite.no", role = c("aut", "cre"), comment = c(ORCID = "0000-0002-6747-1726")),
   person(c("August", "Sørli"), "Mathisen", email = "august.sorli.mathisen@fhi.no", role = c("aut"))
@@ -22,6 +22,7 @@ Imports: csutil,
     methods,
     odbc,
     R6,
+    RSQLite,
     S7,
     stringr,
     uuid
@@ -29,7 +30,8 @@ Suggests: testthat,
     knitr,
     rmarkdown,
     digest,
-    crayon
+    crayon,
+    withr
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr
 Config/testthat/edition: 3

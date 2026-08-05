@@ -682,26 +682,41 @@ DBTable_v9 <- R6::R6Class(
       force(table_name)
       self$table_name <- table_name
 
-      if (self$dbconfig$driver %in% c("ODBC Driver 17 for SQL Server")) {
+      if (identical(toupper(self$dbconfig$driver), "SQLITE")) {
+        # SQLite has no schemas, so the identifier is the bare table name.
+        # This arm does not share the paste() below on purpose: `schema`
+        # arrives as "" rather than NULL, because cs9 builds every dbconfig
+        # from Sys.getenv(). paste(c("", "tab"), collapse = ".") is ".tab",
+        # and str_remove_all("\\[]\\.") does not strip a leading dot.
+        self$table_name_fully_specified_text <- self$table_name
+        self$table_name_fully_specified <- DBI::Id(table = self$table_name)
+        self$table_name_short_for_mssql_fully_specified_for_postgres <- DBI::Id(
+          table = self$table_name
+        )
+        self$table_name_short_for_mssql_fully_specified_for_postgres_text <- self$table_name
+      } else if (self$dbconfig$driver %in% c("ODBC Driver 17 for SQL Server")) {
         table_fully_specified_vec <- c(
           self$dbconfig$db,
           self$dbconfig$schema,
           self$table_name
         )
-      } else {
-        table_fully_specified_vec <- c(self$dbconfig$schema, self$table_name)
-      }
-      self$table_name_fully_specified_text <- paste(
-        table_fully_specified_vec,
-        collapse = "."
-      ) |>
-        stringr::str_remove_all("\\[]\\.")
+        self$table_name_fully_specified_text <- paste(
+          table_fully_specified_vec,
+          collapse = "."
+        ) |>
+          stringr::str_remove_all("\\[]\\.")
 
-      if (self$dbconfig$driver %in% c("ODBC Driver 17 for SQL Server")) {
         self$table_name_fully_specified <- self$table_name_fully_specified_text
         self$table_name_short_for_mssql_fully_specified_for_postgres <- self$table_name
         self$table_name_short_for_mssql_fully_specified_for_postgres_text <- self$table_name
       } else {
+        table_fully_specified_vec <- c(self$dbconfig$schema, self$table_name)
+        self$table_name_fully_specified_text <- paste(
+          table_fully_specified_vec,
+          collapse = "."
+        ) |>
+          stringr::str_remove_all("\\[]\\.")
+
         self$table_name_fully_specified <- DBI::Id(
           #database = self$dbconfig$db, this could be catalog??
           schema = self$dbconfig$schema,

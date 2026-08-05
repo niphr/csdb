@@ -1,3 +1,17 @@
+# Version 2026.8.5
+
+## New Features
+* SQLite is a third backend. `driver = "SQLite"` with `db` set to a file path connects through `RSQLite`, which is now in `Imports`. The driver string is matched case-insensitively, so `sqlite`, `SQLite` and `SQLITE` all select it; the two ODBC driver strings keep exact matching, because they must equal an `odbcinst.ini` entry.
+* `DBConnection_v9` creates the parent directory of `db` if it does not exist, then opens the file with `extended_types = TRUE`. That argument is required, not cosmetic: without it a `DATE` column reads back as the integer `18262` rather than a `Date`, and `validator_field_contents_csfmt_rts_data_v1()` rejects it. No `USE <db>;` is issued, because the file is already the database.
+* `DBConnection_v9$print()` shows the driver and the file path for SQLite, and omits server, port, user, password, SSL mode and trusted connection, none of which SQLite reads.
+* `DBTable_v9` identifiers under SQLite are the bare table name: `DBI::Id(table = <table_name>)` and the plain string. `schema` is ignored entirely, because SQLite has no schemas.
+* `create_table()` on SQLite inlines the primary key in the `CREATE TABLE` statement and marks every key column `NOT NULL`. `add_constraint()` is therefore a no-op there. SQLite has no `ALTER TABLE ... ADD CONSTRAINT ... PRIMARY KEY`; the statement the other backends use is a syntax error.
+* The SQLite field-type map is closed: `TEXT`, `INTEGER`, `DOUBLE`, `BOOLEAN`, `DATE` and `DATETIME` are accepted and anything else is an error naming the column and the type. SQLite accepts any declared type name, so `VARCHAR(100)`, `TEXT(100)` or a misspelling would otherwise create a table with an unintended affinity and no warning.
+
+## Development
+* Added `tests/testthat/test-sqlite-connection.R`, the first tests in the package that open a database connection. SQLite is a file, so they need no server.
+* `RSQLite` is in `Imports` and has no S3 fallback in `get_db_classes()`, which stops with a message naming RSQLite if the real S4 `SQLiteConnection` class is absent. A `S7::new_S3_class()` fallback would be worse than useless: with the real S4 `DBIConnection` default present, methods registered against the fallback lose dispatch silently and run the MySQL-flavoured `db_default` SQL, and registering the real class later does not retarget them.
+
 # Version 2026.8.4
 
 ## Documentation
