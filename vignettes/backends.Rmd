@@ -1,0 +1,141 @@
+---
+title: "PostgreSQL and SQLite side by side"
+author: "Richard Aubrey White"
+date: "2026-08-05"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{PostgreSQL and SQLite side by side}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+`DBTable_v9` takes one `dbconfig` list and does the rest. Change the list and the same table
+definition runs against a different engine. This vignette puts the PostgreSQL list and the SQLite
+list next to each other, then lists what a user must know about the differences.
+
+None of the code below runs. It reaches a database, and the vignette is built where there is none.
+It is written to be copied.
+
+`vignette("csdb", package = "csdb")` is the worked example that does run, on SQLite.
+
+## Two configurations
+
+PostgreSQL reads eight settings. Credentials come from the environment, so that they stay out of
+scripts and out of version control.
+
+```{r postgres-config, eval = FALSE}
+cfg_postgres <- list(
+  driver = "PostgreSQL Unicode",
+  server = "localhost",
+  port = 5432,
+  db = "mydb",
+  schema = "public",
+  user = Sys.getenv("DB_USER"),
+  password = Sys.getenv("DB_PASSWORD"),
+  sslmode = "require"
+)
+```
+
+SQLite reads two. `db` is the path to the file, which `DBConnection_v9` creates on first connect,
+along with any missing parent directory. The other six settings are accepted and ignored, so a
+configuration built from the same environment variables still works.
+
+```{r sqlite-config, eval = FALSE}
+cfg_sqlite <- list(
+  driver = "SQLite",
+  db = "~/data/mydb.sqlite"
+)
+```
+
+The driver string is matched case-insensitively for SQLite: `"sqlite"`, `"SQLite"` and `"SQLITE"`
+all select it. `"PostgreSQL Unicode"` is matched exactly, because it must equal an entry in
+`odbcinst.ini`.
+
+## The same table against each
+
+The table definition does not change. Only the `dbconfig` argument does.
+
+```{r same-table, eval = FALSE}
+field_types <- c(
+  "location_code" = "TEXT",
+  "date" = "DATE",
+  "cases_n" = "INTEGER",
+  "cases_pr100000" = "DOUBLE"
+)
+
+tab_postgres <- csdb::DBTable_v9$new(
+  dbconfig = cfg_postgres,
+  table_name = "cases",
+  field_types = field_types,
+  keys = c("location_code", "date"),
+  indexes = list("ind1" = c("location_code", "date"))
+)
+
+tab_sqlite <- csdb::DBTable_v9$new(
+  dbconfig = cfg_sqlite,
+  table_name = "cases",
+  field_types = field_types,
+  keys = c("location_code", "date"),
+  indexes = list("ind1" = c("location_code", "date"))
+)
+
+d <- data.table::data.table(
+  location_code = "county_nor03",
+  date = as.Date("2024-01-01"),
+  cases_n = 12L,
+  cases_pr100000 = 2.4
+)
+
+tab_postgres$insert_data(d)
+tab_sqlite$insert_data(d)
+```
+
+## What differs
+
+| | PostgreSQL | SQLite |
+|---|---|---|
+| `schema` | Read. Identifiers are `schema.table`. | Ignored entirely. SQLite has no schemas, so identifiers are the bare table name. |
+| Primary key | Added after creation with `ALTER TABLE ... ADD CONSTRAINT`. | Inlined in `CREATE TABLE`, and every key column is `NOT NULL`. It cannot be added later: SQLite has no `ALTER TABLE ... ADD CONSTRAINT`, so `$add_constraint()` is a no-op. |
+| An unrecognised `field_types` value | Passed through to the engine, which decides. | Rejected before any SQL is emitted, naming the column and the type. |
+| `get_table_names_and_info()` row count | The `reltuples` estimate the planner holds. | An exact `COUNT(*)`. |
+| `get_table_names_and_info()` sizes | Real total, data and index sizes in GB. | `NA` in all three size columns. |
+| External client binary | `psql` must be on `PATH`. Bulk loads are staged to a CSV file and shelled out. | None: no `psql` and no `bcp`. Rows go straight through `DBI::dbAppendTable()`. |
+| `$keep_rows_where()` | Copies the surviving rows to a new table, drops the old one, renames. | A single `DELETE`, which leaves the primary key and the indexes in place. |
+
+### Why the field types are closed
+
+SQLite accepts any declared type name. `VARCHAR(100)`, `TEXT(100)` or a misspelling would all
+create a table, with an affinity nobody asked for and no warning. `csdb` therefore accepts six
+types and rejects the rest:
+
+```{r rejected-type, eval = FALSE}
+csdb::DBTable_v9$new(
+  dbconfig = cfg_sqlite,
+  table_name = "cases",
+  field_types = c("location_code" = "VARCHAR(100)", "cases_n" = "INTEGER"),
+  keys = "location_code"
+)$create_table()
+# SQLite does not support the field type(s): location_code (VARCHAR(100)).
+# The supported types are: TEXT, INTEGER, DOUBLE, BOOLEAN, DATE, DATETIME.
+```
+
+`DATE` and `DATETIME` are declared types rather than storage classes. `DBConnection_v9` opens the
+file with `extended_types = TRUE`, which is what reads them back as `Date` and `POSIXct`. Without
+that argument `2020-01-01` returns the integer `18262`.
+
+### Why the primary key cannot be added later
+
+`ALTER TABLE cases ADD CONSTRAINT ... PRIMARY KEY (...)` is `near "CONSTRAINT": syntax error` in
+SQLite. The key must therefore exist from the first `CREATE TABLE`. Two consequences follow.
+`$upsert_data()` needs that key, because `ON CONFLICT (<keys>)` requires a matching `PRIMARY KEY`
+or `UNIQUE` constraint. And every delete path is a `DELETE` rather than a drop-and-rename, because
+a dropped key could not be put back.
+
+## Which one to choose
+
+Use SQLite for tests, for examples, and for a single-writer pipeline on one machine. It is a file:
+there is nothing to install, nothing to start, and nothing to authenticate against.
+
+Use PostgreSQL when more than one process writes, when the data outgrows one machine, or when the
+row counts get large enough that a planner estimate is the honest answer and an exact `COUNT(*)`
+is too slow.

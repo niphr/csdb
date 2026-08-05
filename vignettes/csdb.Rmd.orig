@@ -25,32 +25,31 @@ library(magrittr)
 
 `csdb` provides an abstracted database-access layer for the Core Surveillance (csverse) ecosystem. The package exposes two R6 classes:
 
-- **`DBConnection_v9`** — wraps a single ODBC database connection and manages its lifecycle (connect, disconnect, reconnect).
+- **`DBConnection_v9`** — wraps a single database connection and manages its lifecycle (connect, disconnect, reconnect).
 - **`DBTable_v9`** — represents one database table and provides methods for inserting, upserting, and deleting rows, as well as managing indexes and validating field types and contents.
 
-Connection credentials are read from environment variables, keeping them out of scripts and version control.
+Three backends are supported. Microsoft SQL Server and PostgreSQL connect over ODBC and read their credentials from environment variables, which keeps the credentials out of scripts and version control. SQLite connects through `RSQLite`, where `db` is a file path and no server, port, user or password is read at all.
+
+This vignette runs on SQLite, in a file created by `tempfile()`. Every chunk below therefore executes on a machine with no database server. For what changes when the same code is pointed at PostgreSQL instead, see `vignette("backends", package = "csdb")`.
 
 ## `DBConnection_v9`
 
 `DBConnection_v9$new()` stores connection parameters but does not open a connection immediately. Calling `$connect()` opens the connection; `$disconnect()` closes it. The `$autoconnection` field returns an active connection, reconnecting automatically if needed.
 
-The example below creates a connection object, connects, inspects the connection fields, then disconnects. After disconnecting, `$connection` returns an invalid external pointer, while `class()` still reports the driver type.
+The example below creates a connection object, connects, inspects the connection fields, then disconnects. After disconnecting, `$connection` reports `DISCONNECTED`, while `class()` still reports the driver type, and reading `$autoconnection` opens the file again.
 
 ## `DBTable_v9`
 
 `DBTable_v9$new()` takes a `dbconfig` list (the same parameters as `DBConnection_v9`), plus `table_name`, `field_types`, `keys`, `indexes`, and validators. Keys define the primary key used for upsert operations. Validators can enforce field-type and field-content constraints; `validator_field_types_blank` and `validator_field_contents_blank` skip validation entirely.
 
-The example below creates a table object backed by a live PostgreSQL database, clears any existing rows, inserts the bundled `nor_covid19_cases_by_time_location` dataset, connects, and then returns a lazy `tbl()` reference via dbplyr.
+The example below creates a table object backed by the same SQLite file, clears any existing rows, inserts the bundled `nor_covid19_cases_by_time_location` dataset, connects, and then returns a lazy `tbl()` reference via dbplyr. The file is new, so `$drop_all_rows()` creates the table and its index first and then reports that it removed 0 rows.
 
 ```{r}
+db_file <- tempfile(fileext = ".sqlite")
+
 dbconnection <- csdb::DBConnection_v9$new(
-  driver = Sys.getenv("CS9_DBCONFIG_DRIVER"),
-  server = Sys.getenv("CS9_DBCONFIG_SERVER"),
-  port = as.integer(Sys.getenv("CS9_DBCONFIG_PORT")),
-  db = Sys.getenv("CS9_DBCONFIG_DB_ANON"),
-  user = Sys.getenv("CS9_DBCONFIG_USER"),
-  password = Sys.getenv("CS9_DBCONFIG_PASSWORD"),
-  sslmode = Sys.getenv("CS9_DBCONFIG_SSLMODE")
+  driver = "SQLite",
+  db = db_file
 )
 dbconnection
 dbconnection$connect()
@@ -66,14 +65,8 @@ class(dbconnection$autoconnection)
 
 dbtable <- csdb::DBTable_v9$new(
   dbconfig = list(
-    driver = Sys.getenv("CS9_DBCONFIG_DRIVER"),
-    server = Sys.getenv("CS9_DBCONFIG_SERVER"),
-    port = as.integer(Sys.getenv("CS9_DBCONFIG_PORT")),
-    db = Sys.getenv("CS9_DBCONFIG_DB_ANON"),
-    schema = Sys.getenv("CS9_DBCONFIG_SCHEMA_ANON"),
-    user = Sys.getenv("CS9_DBCONFIG_USER"),
-    password = Sys.getenv("CS9_DBCONFIG_PASSWORD"),
-    sslmode = Sys.getenv("CS9_DBCONFIG_SSLMODE")
+    driver = "SQLite",
+    db = db_file
   ),
   table_name = "anon_test",
   field_types = c(

@@ -5,11 +5,12 @@
 
 ## Overview
 
-[csdb](https://niphr.github.io/csdb/) gives you two R6 classes for one ODBC
-database. `DBConnection_v9` holds the connection settings and opens or closes
-the connection. `DBTable_v9` owns a single table: its columns, keys, indexes and
-validators. Both classes connect through `odbc`. The read, write and index
-methods are specialised for Microsoft SQL Server and for PostgreSQL.
+[csdb](https://niphr.github.io/csdb/) gives you two R6 classes for one database.
+`DBConnection_v9` holds the connection settings and opens or closes the
+connection. `DBTable_v9` owns a single table: its columns, keys, indexes and
+validators. Three backends are supported. Microsoft SQL Server and PostgreSQL
+connect through `odbc`; SQLite connects through `RSQLite`, needs no server and
+no external client binary, and puts the whole database in one file.
 
 ## Installation
 
@@ -22,15 +23,12 @@ pak::pak("niphr/csdb")
 
 ## Quick start
 
+This runs on a bare machine, because SQLite is a file.
+
 ``` r
 cfg <- list(
-  driver = "PostgreSQL Unicode",
-  server = "localhost",
-  port = 5432,
-  db = "mydb",
-  schema = "public",
-  user = Sys.getenv("DB_USER"),
-  password = Sys.getenv("DB_PASSWORD")
+  driver = "SQLite",
+  db = tempfile(fileext = ".sqlite")
 )
 
 tab <- csdb::DBTable_v9$new(
@@ -49,12 +47,16 @@ tab$insert_data(d) # d must be a data.table
 tab$tbl() # lazy reference for dplyr; needs dbplyr
 ```
 
+Swap `cfg` for a PostgreSQL or SQL Server configuration and nothing else in that
+block changes.
+
 `$new()` opens nothing. The first method that reaches the database connects, and
 `$insert_data()`, `$upsert_data()` and `$tbl()` create the table when it is
 absent. Two cautions. When a table of that name exists and its columns differ
 from `names(field_types)`, `$create_table()` drops it and builds it again, which
-discards the rows. And csdb opens no transaction anywhere: `$keep_rows_where()`,
-for one, sends its copy, its drop and its rename as three separate statements.
+discards the rows. And csdb opens no transaction anywhere: `$keep_rows_where()`
+on the two ODBC backends, for one, sends its copy, its drop and its rename as
+three separate statements.
 
 ## Which function do I want?
 
@@ -73,5 +75,11 @@ The type validator runs once, inside `DBTable_v9$new()`. The contents validator
 runs inside `$insert_data()` and `$upsert_data()`, unless the data is `NULL` or
 has no rows, which both methods return on first.
 
-Reference pages, the changelog and the introduction vignette are at
-<https://niphr.github.io/csdb/>.
+## Vignettes
+
+| Vignette | What it is for |
+|---|---|
+| [Introduction to csdb](https://niphr.github.io/csdb/articles/csdb.html) | The worked example. It runs, on SQLite, with no database server. |
+| [PostgreSQL and SQLite side by side](https://niphr.github.io/csdb/articles/backends.html) | The two configurations next to each other, and every difference between them. Nothing in it runs. |
+
+Reference pages and the changelog are at <https://niphr.github.io/csdb/>.

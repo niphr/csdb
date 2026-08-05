@@ -23,6 +23,12 @@
 ## Known limitations
 * `confirm_indexes()` compares index *names* only. An index with the right name and the wrong columns passes. This is the existing behaviour of all three backends and SQLite matches it.
 
+## Documentation
+* The introduction vignette now runs on SQLite, in a file created by `tempfile()`. It is precompiled from `vignettes/csdb.Rmd.orig`, and that precompilation used to need a live PostgreSQL database. `knitr::knit()` defaults to `error = TRUE`, so on a machine without one it did not fail: it exited 0 and wrote seven `#> Error` transcripts into the committed `vignettes/csdb.Rmd`, including a `Could not connect to database server ''`. Anyone can now rebuild the vignette and get the same output.
+* Added `vignettes/backends.Rmd`, which puts a PostgreSQL `dbconfig` and a SQLite `dbconfig` side by side, runs one `DBTable_v9$new()` definition against each, and tabulates what a user must know: `schema` is ignored, the primary key is inlined at `CREATE TABLE` and cannot be added later, an unrecognised field type is rejected rather than passed through, `get_table_names_and_info()` reports an exact `COUNT(*)` and `NA` sizes, and no external client binary is needed. No chunk in it executes.
+* `README.md`'s quick start is now the SQLite one, so it runs on a bare machine, and it links to both vignettes. The `$keep_rows_where()` caution is qualified: the copy, drop and rename it describes is the ODBC path, not the SQLite one.
+* `index.md` and the `_pkgdown.yml` hero lede both name SQLite alongside PostgreSQL and SQL Server.
+
 ## Development
 * Added `tests/testthat/test-sqlite-connection.R`, the first tests in the package that open a database connection. SQLite is a file, so they need no server.
 * Added `tests/testthat/test-sqlite-indexes.R`. The block that proves `confirm_indexes()` emits no DDL reads `PRAGMA schema_version` before and after, not the index names: the names are identical whether the call did nothing or dropped and recreated every index, and `schema_version` increments on every schema change. A separate block creates an index named `sqliteBar` and a table named `sqliteFoo` and asserts both are visible, which is what pins the `ESCAPE` clause on the two catalogue filters.

@@ -8,8 +8,8 @@ template:
       title: "Databases for large datasets."
       lede: >
         An abstracted, object-oriented system for large datasets across database
-        systems — robust PostgreSQL connections, bulk loading and upserts, validation,
-        and index management.
+        systems: robust PostgreSQL, SQL Server and SQLite connections, bulk loading
+        and upserts, validation, and index management.
       cta:
         primary:
           text: "Get started"
