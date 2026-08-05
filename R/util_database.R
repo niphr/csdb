@@ -3,6 +3,31 @@
 
 # Database utility functions
 
+#' Replace non-finite values with NA, by reference
+#'
+#' `Inf`, `-Inf` and `NaN` are written as text by every write path in this
+#' package, which destroys the upload: the CSV backends write the literal
+#' string, and `DBI::dbAppendTable()` stores `Inf` and reads it back as `Inf`.
+#' Setting them to `NA` first is what makes all three backends agree.
+#'
+#' This is shared by `write_data_infile()` and the SQLite `load_data_infile`
+#' method. The `POSIXt` to character conversion is deliberately NOT shared:
+#' the SQLite path needs a `POSIXct` to stay a `POSIXct`, because a connection
+#' opened with `extended_types = TRUE` round-trips it through a `DATETIME`
+#' column correctly.
+#'
+#' @param dt data.table to scrub
+#' @return `dt`, invisibly. Modified by reference.
+#' @keywords internal
+#' @noRd
+scrub_non_finite <- function(dt) {
+  for (i in names(dt)) {
+    dt[is.infinite(get(i)), (i) := NA]
+    dt[is.nan(get(i)), (i) := NA]
+  }
+  invisible(dt)
+}
+
 #' Write data.table to file for database bulk insert
 #'
 #' Internal function to write data.table to CSV file with proper formatting
@@ -31,9 +56,8 @@ write_data_infile <- function(
   # infinites and NANs get written as text
   # which destroys the upload
   # we need to set them to NA
+  scrub_non_finite(dt)
   for (i in names(dt)) {
-    dt[is.infinite(get(i)), (i) := NA]
-    dt[is.nan(get(i)), (i) := NA]
     if (inherits(dt[[i]], "POSIXt")) dt[, (i) := as.character(get(i))]
   }
   fwrite(
@@ -45,25 +69,6 @@ write_data_infile <- function(
     eol = eol,
     quote = quote,
     sep = sep
-  )
-}
-
-#' Truncate all rows from a database table
-#'
-#' Removes all rows from a database table using TRUNCATE TABLE command.
-#' This is more efficient than DELETE for removing all rows.
-#'
-#' @param connection Database connection object
-#' @param table Name of the table to truncate
-#' @return NULL (called for side effects)
-#' @keywords internal
-#' @noRd
-drop_all_rows <- function(connection, table) {
-  a <- DBI::dbExecute(
-    connection,
-    glue::glue({
-      "TRUNCATE TABLE {table};"
-    })
   )
 }
 
@@ -379,6 +384,7 @@ drop_constraint <- S7::new_generic("drop_constraint", "connection")
 get_indexes <- S7::new_generic("get_indexes", "connection")
 drop_index <- S7::new_generic("drop_index", "connection")
 add_index <- S7::new_generic("add_index", "connection")
+drop_all_rows <- S7::new_generic("drop_all_rows", "connection")
 drop_rows_where <- S7::new_generic("drop_rows_where", "connection")
 keep_rows_where <- S7::new_generic("keep_rows_where", "connection")
 drop_table <- S7::new_generic("drop_table", "connection")
@@ -650,6 +656,52 @@ S7::method(load_data_infile, db_postgres) <- function(
   invisible()
 }
 
+# Load a data.table into a SQLite table.
+#
+# There is no staging file and no external client binary here: SQLite is a
+# file, and DBI::dbAppendTable() writes 100,000 rows in about 0.02 seconds.
+# `file` and `force_tablock` are accepted so the call sites in DBTable_v9 need
+# no SQLite arm, and are then ignored.
+#
+# The copy() is load-bearing. The other three backends reach
+# write_data_infile(), which modifies the caller's data.table by reference and
+# has always done so. Doing the same here would leave the caller holding a
+# table whose Inf values had turned into NA, which is a surprising thing for
+# an insert to do to its argument.
+#
+# The comment block is deliberately plain `#` rather than roxygen `#'`:
+# roxygen2 cannot name an S7 method registered against an S4 class.
+S7::method(load_data_infile, db_sqlite) <- function(
+  connection,
+  dbconfig = NULL,
+  table,
+  dt = NULL,
+  file = tempfile(),
+  force_tablock = FALSE
+) {
+  if (is.null(dt)) {
+    return()
+  }
+  if (nrow(dt) == 0) {
+    return()
+  }
+
+  dt <- data.table::copy(dt)
+
+  # Inf survives dbAppendTable and reads back as Inf, where the CSV backends
+  # write NA. Without this the SQLite backend silently disagrees with them.
+  scrub_non_finite(dt)
+
+  correct_order <- DBI::dbListFields(connection, table)
+  if (length(correct_order) > 0) {
+    dt <- dt[, correct_order, with = FALSE]
+  }
+
+  DBI::dbAppendTable(connection, table, dt)
+
+  invisible()
+}
+
 # Continue with upsert_load_data_infile methods
 S7::method(upsert_load_data_infile, db_default) <- function(
   connection,
@@ -863,6 +915,149 @@ S7::method(upsert_load_data_infile, db_postgres) <- function(
 
   b <- Sys.time()
   dif <- round(as.numeric(difftime(b, a, units = "secs")), 1)
+
+  invisible()
+}
+
+# Upsert a data.table into a SQLite table.
+#
+# SQLite has no MERGE and no ON DUPLICATE KEY UPDATE. It has
+# INSERT ... ON CONFLICT, which needs three things the other backends do not:
+#
+#   * a PRIMARY KEY or UNIQUE constraint on the conflict target. The SQLite
+#     create_table method inlines one, which is why creation and upsert are
+#     the same piece of work.
+#   * `WHERE true` between the SELECT and the ON CONFLICT clause. Without it
+#     SQLite's parser cannot tell the ON CONFLICT clause from a join
+#     constraint on the SELECT, and rejects the statement.
+#   * DO NOTHING rather than DO UPDATE SET when every field is a key, because
+#     there is then nothing left to assign.
+#
+# The three preconditions are checked before any SQL is emitted. Empty `keys`
+# would produce `ON CONFLICT ()`, a syntax error that says nothing about the
+# cause. `fields` that are not exactly the table's live columns cannot work at
+# all: CREATE TABLE ... AS SELECT discards defaults and constraints, so a
+# staging table filled from a partial field list would insert NULL into every
+# omitted column.
+#
+# `drop_indexes` is ignored, exactly as the PostgreSQL method already ignores
+# it.
+#
+# The comment block is deliberately plain `#` rather than roxygen `#'`:
+# roxygen2 cannot name an S7 method registered against an S4 class.
+S7::method(upsert_load_data_infile, db_sqlite) <- function(
+  connection,
+  dbconfig = NULL,
+  table,
+  dt,
+  file = tempfile(),
+  fields,
+  keys = NULL,
+  drop_indexes = NULL
+) {
+  if (length(keys) == 0) {
+    stop(
+      "upsert on SQLite needs at least one key column: ",
+      "keys is empty, and ON CONFLICT () is a syntax error."
+    )
+  }
+  if (!all(keys %in% fields)) {
+    stop(
+      "upsert on SQLite needs every key to be one of the fields. ",
+      "Missing from fields: ",
+      paste0(setdiff(keys, fields), collapse = ", "),
+      "."
+    )
+  }
+  live_fields <- DBI::dbListFields(connection, table)
+  if (!setequal(fields, live_fields)) {
+    stop(
+      "upsert on SQLite needs fields to be exactly the columns of the table. ",
+      "In fields but not the table: ",
+      paste0(setdiff(fields, live_fields), collapse = ", "),
+      ". In the table but not fields: ",
+      paste0(setdiff(live_fields, fields), collapse = ", "),
+      "."
+    )
+  }
+
+  table_text <- DBI::dbQuoteIdentifier(connection, table)
+  temp_name <- paste0("tmp", random_uuid())
+  temp_name_text <- DBI::dbQuoteIdentifier(connection, temp_name)
+
+  on.exit(
+    try(
+      DBI::dbExecute(
+        connection,
+        paste0("DROP TABLE IF EXISTS ", temp_name_text)
+      ),
+      silent = TRUE
+    ),
+    add = TRUE,
+    after = FALSE
+  )
+
+  DBI::dbExecute(
+    connection,
+    paste0(
+      "CREATE TEMPORARY TABLE ",
+      temp_name_text,
+      " AS SELECT * FROM ",
+      table_text,
+      " WHERE 0"
+    )
+  )
+
+  load_data_infile(
+    connection = connection,
+    dbconfig = dbconfig,
+    table = temp_name,
+    dt = dt,
+    file = file
+  )
+
+  fields_text <- paste0(
+    DBI::dbQuoteIdentifier(connection, fields),
+    collapse = ", "
+  )
+  keys_text <- paste0(
+    DBI::dbQuoteIdentifier(connection, keys),
+    collapse = ", "
+  )
+
+  update_fields <- setdiff(fields, keys)
+  if (length(update_fields) > 0) {
+    update_fields_text <- DBI::dbQuoteIdentifier(connection, update_fields)
+    resolution <- paste0(
+      "DO UPDATE SET ",
+      paste0(
+        update_fields_text,
+        " = excluded.",
+        update_fields_text,
+        collapse = ", "
+      )
+    )
+  } else {
+    resolution <- "DO NOTHING"
+  }
+
+  DBI::dbExecute(
+    connection,
+    paste0(
+      "INSERT INTO ",
+      table_text,
+      " (",
+      fields_text,
+      ") SELECT ",
+      fields_text,
+      " FROM ",
+      temp_name_text,
+      " WHERE true ON CONFLICT (",
+      keys_text,
+      ") ",
+      resolution
+    )
+  )
 
   invisible()
 }
@@ -1229,6 +1424,31 @@ S7::method(add_index, db_postgres) <- function(connection, table, index, keys) {
   )
 }
 
+# drop_all_rows methods
+#
+# This was a plain function until SQLite arrived. The body below is the whole
+# of that function, unchanged, so SQL Server and PostgreSQL still receive the
+# byte-identical TRUNCATE TABLE statement they always did.
+S7::method(drop_all_rows, db_default) <- function(connection, table) {
+  a <- DBI::dbExecute(
+    connection,
+    glue::glue({
+      "TRUNCATE TABLE {table};"
+    })
+  )
+}
+
+# SQLite has no TRUNCATE: `TRUNCATE TABLE tab` is `near "TRUNCATE": syntax
+# error`. A bare DELETE is the documented equivalent, and it leaves the
+# primary key and every index intact, which matters because the SQLite
+# add_constraint method cannot put a primary key back.
+S7::method(drop_all_rows, db_sqlite) <- function(connection, table) {
+  DBI::dbExecute(
+    connection,
+    paste0("DELETE FROM ", DBI::dbQuoteIdentifier(connection, table))
+  )
+}
+
 # drop_rows_where methods
 S7::method(drop_rows_where, db_mssql) <- function(
   connection,
@@ -1293,6 +1513,22 @@ S7::method(drop_rows_where, db_postgres) <- function(
 
   t1 <- Sys.time()
   dif <- round(as.numeric(difftime(t1, t0, units = "secs")), 1)
+}
+
+S7::method(drop_rows_where, db_sqlite) <- function(
+  connection,
+  table,
+  condition
+) {
+  DBI::dbExecute(
+    connection,
+    paste0(
+      "DELETE FROM ",
+      DBI::dbQuoteIdentifier(connection, table),
+      " WHERE ",
+      condition
+    )
+  )
 }
 
 # keep_rows_where methods
@@ -1369,6 +1605,42 @@ S7::method(keep_rows_where, db_postgres) <- function(
 
   t1 <- Sys.time()
   dif <- round(as.numeric(difftime(t1, t0, units = "secs")), 1)
+}
+
+# Keep only the rows a SQLite table's condition holds for.
+#
+# The predicate is `(<condition>) IS NOT TRUE`, and the parentheses and the
+# `IS NOT TRUE` are both mandatory. `NOT (<condition>)` is NOT the inverse of
+# `WHERE <condition>` in SQL: DELETE removes only rows whose predicate
+# evaluates to TRUE, and the negation of NULL is NULL, so every row on which
+# the condition is NULL would survive a plain negation even though
+# `SELECT ... WHERE <condition>` would not have kept it. `IS NOT TRUE` folds
+# NULL into FALSE and gives the exact complement.
+#
+# This is a DELETE rather than the drop-and-rename the other two backends use,
+# because that would discard the primary key, and the SQLite add_constraint
+# method cannot add one back.
+#
+# `role_create_table` is accepted and ignored: SQLite has no roles.
+#
+# The comment block is deliberately plain `#` rather than roxygen `#'`:
+# roxygen2 cannot name an S7 method registered against an S4 class.
+S7::method(keep_rows_where, db_sqlite) <- function(
+  connection,
+  table,
+  condition,
+  role_create_table = NULL
+) {
+  DBI::dbExecute(
+    connection,
+    paste0(
+      "DELETE FROM ",
+      DBI::dbQuoteIdentifier(connection, table),
+      " WHERE (",
+      condition,
+      ") IS NOT TRUE"
+    )
+  )
 }
 
 # drop_table methods
