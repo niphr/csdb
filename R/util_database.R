@@ -1357,6 +1357,48 @@ S7::method(get_indexes, db_postgres) <- function(connection, table) {
   return(retval)
 }
 
+# List the indexes a SQLite table carries, in creation order.
+#
+# Three details are load-bearing:
+#
+#  1. `tbl_name` is a string VALUE in sqlite_master, not an identifier, so it
+#     is bound as a parameter. DBI::dbQuoteIdentifier() would emit `` `tab` ``
+#     and match nothing.
+#  2. `name NOT LIKE 'sqlite\_%' ESCAPE '\'` removes the index a PRIMARY KEY
+#     creates on its own, `sqlite_autoindex_<table>_1`. Without the filter
+#     this returns c("sqlite_autoindex_tab_1", "ind1") where
+#     names(self$indexes) is "ind1", and confirm_indexes() drops and re-adds
+#     every index on every call.
+#
+#     The ESCAPE clause is mandatory, not decoration. `_` is a
+#     single-character wildcard in SQL LIKE, so the unescaped
+#     `NOT LIKE 'sqlite_%'` also hides every user index whose name begins
+#     "sqlite" followed by any character at all. An index named `sqliteIdx`
+#     would then never be found, and confirm_indexes() would drop and re-add
+#     it on every call: the exact thrash this method exists to prevent.
+#     Written `'sqlite\\_%' ESCAPE '\\'` in R, so a literal backslash reaches
+#     SQLite.
+#  3. `ORDER BY rowid` is creation order, which is the order add_indexes()
+#     iterates names(self$indexes) in. confirm_indexes() compares with
+#     identical(), which is order-sensitive.
+#
+# The return value is `$name`, a plain character vector. A one-column
+# data.frame, or a vector carrying names or any other attribute, fails that
+# identical() and sends confirm_indexes() into a needless drop-and-re-add.
+#
+# The comment block is deliberately plain `#` rather than roxygen `#'`:
+# roxygen2 cannot name an S7 method registered against an S4 class.
+S7::method(get_indexes, db_sqlite) <- function(connection, table) {
+  sql <- paste0(
+    "SELECT name FROM sqlite_master ",
+    "WHERE type = 'index' AND tbl_name = ? ",
+    "AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ",
+    "ORDER BY rowid"
+  )
+  retval <- DBI::dbGetQuery(connection, sql, params = list(table))$name
+  return(retval)
+}
+
 # drop_index methods
 S7::method(drop_index, db_default) <- function(connection, table, index) {
   try(
@@ -1385,6 +1427,28 @@ S7::method(drop_index, db_postgres) <- function(connection, table, index) {
       glue::glue("DROP INDEX IF EXISTS {index}")
     ),
     TRUE
+  )
+}
+
+# Drop a SQLite index.
+#
+# In SQLite an index belongs to the schema, not to the table, so the statement
+# names the index alone: `DROP INDEX <index> ON <table>` is a syntax error.
+# `IF EXISTS` makes dropping an absent index a no-op, which is why there is no
+# try() here where the other three backends have one.
+#
+# `table` is accepted and ignored, because drop_index() is one generic and the
+# other three methods need it.
+#
+# The comment block is deliberately plain `#` rather than roxygen `#'`:
+# roxygen2 cannot name an S7 method registered against an S4 class.
+S7::method(drop_index, db_sqlite) <- function(connection, table, index) {
+  DBI::dbExecute(
+    connection,
+    paste0(
+      "DROP INDEX IF EXISTS ",
+      DBI::dbQuoteIdentifier(connection, index)
+    )
   )
 }
 
@@ -1421,6 +1485,38 @@ S7::method(add_index, db_postgres) <- function(connection, table, index, keys) {
       glue::glue("CREATE INDEX IF NOT EXISTS {index} ON {table} ({keys});")
     ),
     T
+  )
+}
+
+# Create a SQLite index.
+#
+# The table name MUST be unqualified. SQLite lets the INDEX name carry a
+# schema, but never the table: `CREATE INDEX ind ON main.tab (a)` is
+# `near ".": syntax error`. Under this package's SQLite arm the value arriving
+# is already the bare table name, so the method simply does not re-qualify it.
+#
+# `IF NOT EXISTS` makes re-adding an existing index a no-op, and, crucially,
+# leaves `PRAGMA schema_version` untouched when it does nothing.
+#
+# The comment block is deliberately plain `#` rather than roxygen `#'`:
+# roxygen2 cannot name an S7 method registered against an S4 class.
+S7::method(add_index, db_sqlite) <- function(connection, table, index, keys) {
+  keys_quoted <- paste0(
+    DBI::dbQuoteIdentifier(connection, keys),
+    collapse = ", "
+  )
+
+  DBI::dbExecute(
+    connection,
+    paste0(
+      "CREATE INDEX IF NOT EXISTS ",
+      DBI::dbQuoteIdentifier(connection, index),
+      " ON ",
+      DBI::dbQuoteIdentifier(connection, table),
+      " (",
+      keys_quoted,
+      ")"
+    )
   )
 }
 

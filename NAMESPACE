@@ -2,6 +2,7 @@
 
 S3method(get_table_names_and_info,"Microsoft SQL Server")
 S3method(get_table_names_and_info,PostgreSQL)
+S3method(get_table_names_and_info,SQLiteConnection)
 export(DBConnection_v9)
 export(DBTable_v9)
 export(csdb_get_auth_hook)

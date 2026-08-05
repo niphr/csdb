@@ -16,11 +16,22 @@ A data.table containing table information with columns:
   \item{nrow}{Numeric. The row count as the database reports it:
     \code{reltuples} from \code{pg_class} on PostgreSQL, which is an
     estimate, and the \code{rows} column of \code{sp_spaceused} on
-    Microsoft SQL Server}
-  \item{size_total_gb}{Numeric. Total size of the table in gigabytes}
-  \item{size_data_gb}{Numeric. Size of data in gigabytes}
-  \item{size_index_gb}{Numeric. Size of indexes in gigabytes}
+    Microsoft SQL Server. On SQLite it is \code{COUNT(*)}, which is exact
+    rather than an estimate}
+  \item{size_total_gb}{Numeric. Total size of the table in gigabytes.
+    \code{NA_real_} on SQLite}
+  \item{size_data_gb}{Numeric. Size of data in gigabytes.
+    \code{NA_real_} on SQLite}
+  \item{size_index_gb}{Numeric. Size of indexes in gigabytes.
+    \code{NA_real_} on SQLite}
 }
+
+SQLite reports no per-table size. The \code{dbstat} virtual table, which is
+the only thing that could give one, is not compiled into the SQLite that
+\code{RSQLite} ships: querying it fails with \code{no such table: dbstat}.
+\code{pragma page_count} and \code{pragma page_size} exist, but they
+describe the whole file rather than a table, so all three size columns are
+\code{NA_real_}.
 }
 \description{
 Retrieves comprehensive information about database tables including their names,

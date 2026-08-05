@@ -11,11 +11,22 @@
 #'   \item{nrow}{Numeric. The row count as the database reports it:
 #'     \code{reltuples} from \code{pg_class} on PostgreSQL, which is an
 #'     estimate, and the \code{rows} column of \code{sp_spaceused} on
-#'     Microsoft SQL Server}
-#'   \item{size_total_gb}{Numeric. Total size of the table in gigabytes}
-#'   \item{size_data_gb}{Numeric. Size of data in gigabytes}
-#'   \item{size_index_gb}{Numeric. Size of indexes in gigabytes}
+#'     Microsoft SQL Server. On SQLite it is \code{COUNT(*)}, which is exact
+#'     rather than an estimate}
+#'   \item{size_total_gb}{Numeric. Total size of the table in gigabytes.
+#'     \code{NA_real_} on SQLite}
+#'   \item{size_data_gb}{Numeric. Size of data in gigabytes.
+#'     \code{NA_real_} on SQLite}
+#'   \item{size_index_gb}{Numeric. Size of indexes in gigabytes.
+#'     \code{NA_real_} on SQLite}
 #' }
+#'
+#' SQLite reports no per-table size. The \code{dbstat} virtual table, which is
+#' the only thing that could give one, is not compiled into the SQLite that
+#' \code{RSQLite} ships: querying it fails with \code{no such table: dbstat}.
+#' \code{pragma page_count} and \code{pragma page_size} exist, but they
+#' describe the whole file rather than a table, so all three size columns are
+#' \code{NA_real_}.
 #' @export
 #' @seealso \code{\link{DBTable_v9}}, whose \code{info()} method and whose
 #'   \code{nrow(use_count = FALSE)} method call this function.
@@ -133,6 +144,63 @@ get_table_names_and_info.PostgreSQL <- function(connection) {
   order by table_name;"
 
   table_rows <- DBI::dbGetQuery(connection, sql) |> setDT()
+
+  data.table::shouldPrint(table_rows)
+  return(table_rows)
+}
+
+#' @export
+get_table_names_and_info.SQLiteConnection <- function(connection) {
+  # Declare variables to avoid R CMD check NOTEs
+  table_name <- NULL
+
+  # `sqlite_master` is the catalogue. The LIKE clause removes SQLite's own
+  # objects, notably `sqlite_sequence` behind an AUTOINCREMENT column, which
+  # is a real table and would otherwise be reported as a user table.
+  #
+  # The ESCAPE clause is mandatory, not decoration. `_` is a single-character
+  # wildcard in SQL LIKE, so the unescaped `NOT LIKE 'sqlite_%'` also hides
+  # every user table whose name begins "sqlite" followed by any character at
+  # all. A table named `sqliteFoo` would then be missing from this result, and
+  # `DBTable_v9$nrow(use_count = FALSE)` and `DBTable_v9$info()` would return
+  # nothing for it. Written `'sqlite\\_%' ESCAPE '\\'` in R, so a literal
+  # backslash reaches SQLite.
+  names_tables <- DBI::dbGetQuery(
+    connection,
+    paste0(
+      "SELECT name FROM sqlite_master ",
+      "WHERE type = 'table' ",
+      "AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ",
+      "ORDER BY name"
+    )
+  )$name
+
+  # One COUNT(*) per table, so `nrow` is exact. The other two backends read a
+  # stored estimate; SQLite keeps no row count, and on a file-sized database
+  # the scan is cheap.
+  nrow_per_table <- vapply(
+    names_tables,
+    function(x) {
+      as.numeric(DBI::dbGetQuery(
+        connection,
+        paste0("SELECT COUNT(*) FROM ", DBI::dbQuoteIdentifier(connection, x))
+      )[[1]])
+    },
+    numeric(1),
+    USE.NAMES = FALSE
+  )
+
+  # Built column by column rather than from a query, so an empty database
+  # still returns all five columns, with zero rows, and the callers in
+  # DBTable_v9$nrow() and DBTable_v9$info() can subset it unconditionally.
+  table_rows <- data.table::data.table(
+    table_name = names_tables,
+    nrow = nrow_per_table,
+    size_total_gb = NA_real_,
+    size_data_gb = NA_real_,
+    size_index_gb = NA_real_
+  )
+  setorder(table_rows, table_name)
 
   data.table::shouldPrint(table_rows)
   return(table_rows)
