@@ -11,7 +11,7 @@ implementations for different database systems."><meta property="og:image" conte
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.4</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.5</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -21,6 +21,10 @@ implementations for different database systems."><meta property="og:image" conte
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto"><li class="nav-item"><a class="nav-link" href="../articles/csdb.html">Get started</a></li>
 <li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/backends.html">PostgreSQL and SQLite side by side</a></li>
+  </ul></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-cs-family" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">cs* family</button>
@@ -79,19 +83,29 @@ implementations for different database systems.</p>
 <dd><p>Numeric. The row count as the database reports it:
     <code>reltuples</code> from <code>pg_class</code> on PostgreSQL, which is an
     estimate, and the <code>rows</code> column of <code>sp_spaceused</code> on
-    Microsoft SQL Server</p></dd>
+    Microsoft SQL Server. On SQLite it is <code>COUNT(*)</code>, which is exact
+    rather than an estimate</p></dd>
 
   <dt>size_total_gb</dt>
-<dd><p>Numeric. Total size of the table in gigabytes</p></dd>
+<dd><p>Numeric. Total size of the table in gigabytes.
+    <code>NA_real_</code> on SQLite</p></dd>
 
   <dt>size_data_gb</dt>
-<dd><p>Numeric. Size of data in gigabytes</p></dd>
+<dd><p>Numeric. Size of data in gigabytes.
+    <code>NA_real_</code> on SQLite</p></dd>
 
   <dt>size_index_gb</dt>
-<dd><p>Numeric. Size of indexes in gigabytes</p></dd>
+<dd><p>Numeric. Size of indexes in gigabytes.
+    <code>NA_real_</code> on SQLite</p></dd>
 
 
-</dl></div>
+</dl><p>SQLite reports no per-table size. The <code>dbstat</code> virtual table, which is
+the only thing that could give one, is not compiled into the SQLite that
+<code>RSQLite</code> ships: querying it fails with <code>no such table: dbstat</code>.
+<code>pragma page_count</code> and <code>pragma page_size</code> exist, but they
+describe the whole file rather than a table, so all three size columns are
+<code>NA_real_</code>.</p>
+    </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index"><p><code><a href="DBTable_v9.html">DBTable_v9</a></code>, whose <code>info()</code> method and whose

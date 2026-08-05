@@ -1,5 +1,217 @@
 # Changelog
 
+## Version 2026.8.5
+
+### New Features
+
+- SQLite is a third backend. `driver = "SQLite"` with `db` set to a file
+  path connects through `RSQLite`, which is now in `Imports`. The driver
+  string is matched case-insensitively, so `sqlite`, `SQLite` and
+  `SQLITE` all select it; the two ODBC driver strings keep exact
+  matching, because they must equal an `odbcinst.ini` entry.
+
+- `DBConnection_v9` creates the parent directory of `db` if it does not
+  exist, then opens the file with `extended_types = TRUE`. That argument
+  is required, not cosmetic: without it a `DATE` column reads back as
+  the integer `18262` rather than a `Date`, and
+  [`validator_field_contents_csfmt_rts_data_v1()`](https://niphr.github.io/csdb/reference/validator_field_contents_csfmt_rts_data_v1.md)
+  rejects it. No `USE <db>;` is issued, because the file is already the
+  database.
+
+- `DBConnection_v9$print()` shows the driver and the file path for
+  SQLite, and omits server, port, user, password, SSL mode and trusted
+  connection, none of which SQLite reads.
+
+- `DBTable_v9` identifiers under SQLite are the bare table name:
+  `DBI::Id(table = <table_name>)` and the plain string. `schema` is
+  ignored entirely, because SQLite has no schemas.
+
+- `create_table()` on SQLite inlines the primary key in the
+  `CREATE TABLE` statement and marks every key column `NOT NULL`.
+  `add_constraint()` is therefore a no-op there. SQLite has no
+  `ALTER TABLE ... ADD CONSTRAINT ... PRIMARY KEY`; the statement the
+  other backends use is a syntax error.
+
+- The SQLite field-type map is closed: `TEXT`, `INTEGER`, `DOUBLE`,
+  `BOOLEAN`, `DATE` and `DATETIME` are accepted and anything else is an
+  error naming the column and the type. SQLite accepts any declared type
+  name, so `VARCHAR(100)`, `TEXT(100)` or a misspelling would otherwise
+  create a table with an unintended affinity and no warning.
+
+- `insert_data()` on SQLite writes through
+  [`DBI::dbAppendTable()`](https://dbi.r-dbi.org/reference/dbAppendTable.html).
+  There is no staging CSV and no external client binary: SQLite is a
+  file, and `dbAppendTable()` writes 100,000 rows in about 0.02 seconds.
+  The `file` argument is accepted and ignored.
+
+- `insert_data()` on SQLite copies its argument before writing, so the
+  caller’s `data.table` is not modified by reference. The three other
+  backends reach `write_data_infile()`, which has always modified it in
+  place.
+
+- `upsert_data()` on SQLite stages the rows in a temporary table and
+  then issues `INSERT ... ON CONFLICT (<keys>) DO UPDATE SET`, falling
+  back to `DO NOTHING` when every field is a key. SQLite has neither
+  `MERGE` nor `ON DUPLICATE KEY UPDATE`. Three preconditions are checked
+  before any SQL is emitted, because each fails late and obscurely
+  otherwise: `keys` must be non-empty, or the statement is
+  `ON CONFLICT ()`; every key must be one of the fields; and `fields`
+  must be exactly the table’s live columns, because
+  `CREATE TABLE ... AS SELECT` discards defaults and a partial field
+  list would insert NULL into every omitted column.
+
+- `drop_all_rows()` is now an S7 generic. SQL Server and PostgreSQL keep
+  the `TRUNCATE TABLE` statement they always received, unchanged; SQLite
+  gets `DELETE FROM <table>`, because `TRUNCATE TABLE` is a syntax error
+  there. `DELETE` leaves the primary key and every index intact, which
+  matters because the SQLite `add_constraint()` cannot put a dropped
+  primary key back.
+
+- `keep_rows_where()` on SQLite emits
+  `DELETE FROM <table> WHERE (<condition>) IS NOT TRUE`, not
+  `NOT (<condition>)`. The two are not the same statement: `DELETE`
+  removes only rows whose predicate evaluates to TRUE, and the negation
+  of NULL is NULL, so a plain negation silently retains every row on
+  which the condition is NULL, although `SELECT ... WHERE <condition>`
+  would not have kept it. `IS NOT TRUE` folds NULL into FALSE and gives
+  the exact complement. It is also a `DELETE` rather than the
+  drop-and-rename the other two backends use, for the same primary-key
+  reason as `drop_all_rows()`.
+
+- `drop_rows_where()` on SQLite emits
+  `DELETE FROM <table> WHERE <condition>`.
+
+- `add_indexes()` on SQLite emits
+  `CREATE INDEX IF NOT EXISTS <index> ON <table> (<keys>)`, with the
+  table name unqualified. SQLite lets the index name carry a schema but
+  never the table: `CREATE INDEX ind ON main.tab (a)` is
+  `near ".": syntax error`. `drop_indexes()` emits
+  `DROP INDEX IF EXISTS <index>`, which names the index alone, because a
+  SQLite index belongs to the schema rather than to the table.
+
+- `confirm_indexes()` on SQLite now executes no DDL when the indexes
+  already match. `get_indexes()` excludes SQLite’s own index names and
+  orders by `rowid`. Both are required: a `PRIMARY KEY` auto-creates
+  `sqlite_autoindex_<table>_1`, which is a row in `sqlite_master`
+  exactly like a user index, and `rowid` order is creation order, which
+  is the order `add_indexes()` works in. `confirm_indexes()` compares
+  with [`identical()`](https://rdrr.io/r/base/identical.html), so an
+  extra name or a different order would drop and re-add every index on
+  every call. The return value is a plain character vector for the same
+  reason.
+
+- [`get_table_names_and_info()`](https://niphr.github.io/csdb/reference/get_table_names_and_info.md)
+  has a method for `SQLiteConnection`. `nrow` is `COUNT(*)`, which is
+  exact, unlike the `reltuples` estimate PostgreSQL reports and the
+  `sp_spaceused` figure SQL Server reports. All three size columns are
+  `NA_real_`: the `dbstat` virtual table is not compiled into the SQLite
+  that `RSQLite` ships, so there is no per-table size to report, and
+  `pragma page_count` describes the whole file. An empty database
+  returns a zero-row table that still has all five columns.
+
+- Both SQLite catalogue filters write the exclusion as
+  `name NOT LIKE 'sqlite\_%' ESCAPE '\'`, escaping the underscore. `_`
+  is a single-character wildcard in SQL `LIKE`, so the unescaped
+  `'sqlite_%'` hides every name beginning “sqlite” followed by any
+  character at all, not only SQLite’s own objects. A user index named
+  `sqliteIdx` would never be found by `get_indexes()`, and
+  `confirm_indexes()` would drop and re-add it on every call; a user
+  table named `sqliteFoo` would be missing from
+  [`get_table_names_and_info()`](https://niphr.github.io/csdb/reference/get_table_names_and_info.md),
+  so `DBTable_v9$nrow(use_count = FALSE)` and `DBTable_v9$info()` would
+  report nothing for it.
+
+### Known limitations
+
+- `confirm_indexes()` compares index *names* only. An index with the
+  right name and the wrong columns passes. This is the existing
+  behaviour of all three backends and SQLite matches it.
+
+### Documentation
+
+- The introduction vignette now runs on SQLite, in a file created by
+  [`tempfile()`](https://rdrr.io/r/base/tempfile.html). It is
+  precompiled from `vignettes/csdb.Rmd.orig`, and that precompilation
+  used to need a live PostgreSQL database.
+  [`knitr::knit()`](https://rdrr.io/pkg/knitr/man/knit.html) defaults to
+  `error = TRUE`, so on a machine without one it did not fail: it exited
+  0 and wrote seven `#> Error` transcripts into the committed
+  `vignettes/csdb.Rmd`, including a
+  `Could not connect to database server ''`. Anyone can now rebuild the
+  vignette and get the same output.
+- Added `vignettes/backends.Rmd`, which puts a PostgreSQL `dbconfig` and
+  a SQLite `dbconfig` side by side, runs one `DBTable_v9$new()`
+  definition against each, and tabulates what a user must know: `schema`
+  is ignored, the primary key is inlined at `CREATE TABLE` and cannot be
+  added later, an unrecognised field type is rejected rather than passed
+  through,
+  [`get_table_names_and_info()`](https://niphr.github.io/csdb/reference/get_table_names_and_info.md)
+  reports an exact `COUNT(*)` and `NA` sizes, and no external client
+  binary is needed. No chunk in it executes.
+- `README.md`’s quick start is now the SQLite one, so it runs on a bare
+  machine, and it links to both vignettes. The `$keep_rows_where()`
+  caution is qualified: the copy, drop and rename it describes is the
+  ODBC path, not the SQLite one.
+- `index.md` and the `_pkgdown.yml` hero lede both name SQLite alongside
+  PostgreSQL and SQL Server.
+
+### Development
+
+- Added `tests/testthat/test-sqlite-connection.R`, the first tests in
+  the package that open a database connection. SQLite is a file, so they
+  need no server.
+- Added `tests/testthat/test-sqlite-indexes.R`. The block that proves
+  `confirm_indexes()` emits no DDL reads `PRAGMA schema_version` before
+  and after, not the index names: the names are identical whether the
+  call did nothing or dropped and recreated every index, and
+  `schema_version` increments on every schema change. A separate block
+  creates an index named `sqliteBar` and a table named `sqliteFoo` and
+  asserts both are visible, which is what pins the `ESCAPE` clause on
+  the two catalogue filters.
+- Added `tests/testthat/test-sqlite-data.R`, covering the five write and
+  delete paths: type round-trip, the non-finite scrub, the caller’s
+  data.table being left alone, upsert update-not-duplicate, the three
+  upsert preconditions, the NULL-condition row, `drop_all_rows()`
+  leaving the indexes, and identifiers that need quoting.
+- The `Inf`/`NaN` to `NA` loop moved out of `write_data_infile()` into
+  an internal `scrub_non_finite()`, called from there and from the
+  SQLite write path. `Inf` survives
+  [`DBI::dbAppendTable()`](https://dbi.r-dbi.org/reference/dbAppendTable.html)
+  and reads back as `Inf`, so without it SQLite would silently disagree
+  with the two backends that write `NA`. The `POSIXt` to character
+  conversion is not shared: SQLite needs a `POSIXct` to stay one, so
+  that `extended_types = TRUE` round-trips it through a `DATETIME`
+  column.
+- `dbplyr` is in `Imports`. It always was a hard requirement and was
+  never declared: `DBTable_v9$tbl()` calls
+  [`dplyr::tbl()`](https://dplyr.tidyverse.org/reference/tbl.html) on a
+  DBI connection, which dispatches to `dplyr:::tbl.DBIConnection()` and
+  stops in `check_dbplyr()` when dbplyr is absent. Three documented
+  methods go through it, `tbl()`, `print_dplyr_select()` and
+  `nrow(use_count = TRUE)`, and `tbl()` is the only read path the
+  package offers, so a csdb without dbplyr is write-only. The gap never
+  surfaced because nothing in csdb called `tbl()` until the SQLite tests
+  did; on a library without dbplyr those seven blocks error and the
+  other 108 assertions pass. `Suggests` was rejected on measurement:
+  dbplyr adds three packages to an `Imports` closure of 42, and the
+  alternative is to make the package’s only read path optional. No csdb
+  code names dbplyr, so `fix_dbplyr()` in `R/xxx_small_import_fix.R`
+  holds a `dbplyr::` reference for the same reason `fix_r6()` and
+  `fix_s7()` hold theirs: without it `R CMD check` reports “All declared
+  Imports should be used”.
+- `RSQLite` is in `Imports` and has no S3 fallback in
+  `get_db_classes()`, which stops with a message naming RSQLite if the
+  real S4 `SQLiteConnection` class is absent. A
+  [`S7::new_S3_class()`](https://rconsortium.github.io/S7/reference/new_S3_class.html)
+  fallback would be worse than useless: with the real S4 `DBIConnection`
+  default present, methods registered against the fallback lose dispatch
+  silently and run the MySQL-flavoured `db_default` SQL, and registering
+  the real class later does not retarget them.
+- Documentation is generated by roxygen2 8.0.0. `DESCRIPTION` now
+  declares `Config/roxygen2/version` in place of `RoxygenNote`, and
+  every `.Rd` file was regenerated by that version. `NAMESPACE` is
+  unchanged.
+
 ## Version 2026.8.4
 
 ### Documentation

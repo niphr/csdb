@@ -23,7 +23,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.4</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.5</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -34,6 +34,12 @@
       <ul class="navbar-nav me-auto">
 <li class="active nav-item"><a class="nav-link" href="../articles/csdb.html">Get started</a></li>
 <li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
+<li><a class="dropdown-item" href="../articles/backends.html">PostgreSQL and SQLite side by side</a></li>
+  </ul>
+</li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul>
 <ul class="navbar-nav">
@@ -83,6 +89,11 @@ White</h4>
     
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://r-datatable.com" class="external-link">data.table</a></span><span class="op">)</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Attaching package: 'data.table'</span></span>
+<span><span class="co">#&gt; The following object is masked from 'package:base':</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;     %notin%</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://magrittr.tidyverse.org" class="external-link">magrittr</a></span><span class="op">)</span></span></code></pre></div>
 <div class="section level2">
 <h2 id="overview">Overview<a class="anchor" aria-label="anchor" href="#overview"></a>
@@ -92,7 +103,7 @@ the Core Surveillance (csverse) ecosystem. The package exposes two R6
 classes:</p>
 <ul>
 <li>
-<strong><code>DBConnection_v9</code></strong> — wraps a single ODBC
+<strong><code>DBConnection_v9</code></strong> — wraps a single
 database connection and manages its lifecycle (connect, disconnect,
 reconnect).</li>
 <li>
@@ -101,8 +112,16 @@ table and provides methods for inserting, upserting, and deleting rows,
 as well as managing indexes and validating field types and
 contents.</li>
 </ul>
-<p>Connection credentials are read from environment variables, keeping
-them out of scripts and version control.</p>
+<p>Three backends are supported. Microsoft SQL Server and PostgreSQL
+connect over ODBC and read their credentials from environment variables,
+which keeps the credentials out of scripts and version control. SQLite
+connects through <code>RSQLite</code>, where <code>db</code> is a file
+path and no server, port, user or password is read at all.</p>
+<p>This vignette runs on SQLite, in a file created by
+<code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile()</a></code>. Every chunk below therefore executes on a
+machine with no database server. For what changes when the same code is
+pointed at PostgreSQL instead, see
+<code><a href="../articles/backends.html">vignette("backends", package = "csdb")</a></code>.</p>
 </div>
 <div class="section level2">
 <h2 id="dbconnection_v9">
@@ -115,8 +134,9 @@ opens the connection; <code>$disconnect()</code> closes it. The
 reconnecting automatically if needed.</p>
 <p>The example below creates a connection object, connects, inspects the
 connection fields, then disconnects. After disconnecting,
-<code>$connection</code> returns an invalid external pointer, while
-<code><a href="https://rdrr.io/r/base/class.html" class="external-link">class()</a></code> still reports the driver type.</p>
+<code>$connection</code> reports <code>DISCONNECTED</code>, while
+<code><a href="https://rdrr.io/r/base/class.html" class="external-link">class()</a></code> still reports the driver type, and reading
+<code>$autoconnection</code> opens the file again.</p>
 </div>
 <div class="section level2">
 <h2 id="dbtable_v9">
@@ -130,73 +150,57 @@ for upsert operations. Validators can enforce field-type and
 field-content constraints; <code>validator_field_types_blank</code> and
 <code>validator_field_contents_blank</code> skip validation
 entirely.</p>
-<p>The example below creates a table object backed by a live PostgreSQL
-database, clears any existing rows, inserts the bundled
+<p>The example below creates a table object backed by the same SQLite
+file, clears any existing rows, inserts the bundled
 <code>nor_covid19_cases_by_time_location</code> dataset, connects, and
-then returns a lazy <code>tbl()</code> reference via dbplyr.</p>
+then returns a lazy <code>tbl()</code> reference via dbplyr. The file is
+new, so <code>$drop_all_rows()</code> creates the table and its index
+first and then reports that it removed 0 rows.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">dbconnection</span> <span class="op">&lt;-</span> <span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/DBConnection_v9.html">DBConnection_v9</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span>
-<span>  driver <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"CS9_DBCONFIG_DRIVER"</span><span class="op">)</span>,</span>
-<span>  server <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"CS9_DBCONFIG_SERVER"</span><span class="op">)</span>,</span>
-<span>  port <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"CS9_DBCONFIG_PORT"</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  db <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"CS9_DBCONFIG_DB_ANON"</span><span class="op">)</span>,</span>
-<span>  user <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"CS9_DBCONFIG_USER"</span><span class="op">)</span>,</span>
-<span>  password <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"CS9_DBCONFIG_PASSWORD"</span><span class="op">)</span>,</span>
-<span>  sslmode <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"CS9_DBCONFIG_SSLMODE"</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">db_file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".sqlite"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">dbconnection</span> <span class="op">&lt;-</span> <span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/DBConnection_v9.html">DBConnection_v9</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span>
+<span>  driver <span class="op">=</span> <span class="st">"SQLite"</span>,</span>
+<span>  db <span class="op">=</span> <span class="va">db_file</span></span>
 <span><span class="op">)</span></span>
 <span><span class="va">dbconnection</span></span>
 <span><span class="co">#&gt; (disconnected)</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Driver:              PostgreSQL Unicode </span></span>
-<span><span class="co">#&gt; Server:              db </span></span>
-<span><span class="co">#&gt; Port:                5432 </span></span>
-<span><span class="co">#&gt; DB:                  postgres </span></span>
-<span><span class="co">#&gt; User:                yourusername </span></span>
-<span><span class="co">#&gt; Password:            ********************* </span></span>
-<span><span class="co">#&gt; Trusted connection:  x</span></span>
+<span><span class="co">#&gt; Driver:              SQLite </span></span>
+<span><span class="co">#&gt; File:                /tmp/RtmpDYbQNe/file35c6615fad2a3a.sqlite</span></span>
 <span><span class="va">dbconnection</span><span class="op">$</span><span class="fu">connect</span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">dbconnection</span><span class="op">$</span><span class="va">connection</span></span>
-<span><span class="co">#&gt; &lt;OdbcConnection&gt; yourusername@db</span></span>
-<span><span class="co">#&gt;   Database: postgres</span></span>
-<span><span class="co">#&gt;   PostgreSQL Version: 17.0.5</span></span>
+<span><span class="co">#&gt; &lt;SQLiteConnection&gt;</span></span>
+<span><span class="co">#&gt;   Path: /tmp/RtmpDYbQNe/file35c6615fad2a3a.sqlite</span></span>
+<span><span class="co">#&gt;   Extensions: TRUE</span></span>
 <span><span class="va">dbconnection</span><span class="op">$</span><span class="va">autoconnection</span></span>
-<span><span class="co">#&gt; &lt;OdbcConnection&gt; yourusername@db</span></span>
-<span><span class="co">#&gt;   Database: postgres</span></span>
-<span><span class="co">#&gt;   PostgreSQL Version: 17.0.5</span></span>
+<span><span class="co">#&gt; &lt;SQLiteConnection&gt;</span></span>
+<span><span class="co">#&gt;   Path: /tmp/RtmpDYbQNe/file35c6615fad2a3a.sqlite</span></span>
+<span><span class="co">#&gt;   Extensions: TRUE</span></span>
 <span><span class="va">dbconnection</span></span>
 <span><span class="co">#&gt; (connected)</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Driver:              PostgreSQL Unicode </span></span>
-<span><span class="co">#&gt; Server:              db </span></span>
-<span><span class="co">#&gt; Port:                5432 </span></span>
-<span><span class="co">#&gt; DB:                  postgres </span></span>
-<span><span class="co">#&gt; User:                yourusername </span></span>
-<span><span class="co">#&gt; Password:            ********************* </span></span>
-<span><span class="co">#&gt; Trusted connection:  x</span></span>
+<span><span class="co">#&gt; Driver:              SQLite </span></span>
+<span><span class="co">#&gt; File:                /tmp/RtmpDYbQNe/file35c6615fad2a3a.sqlite</span></span>
 <span></span>
 <span><span class="va">dbconnection</span><span class="op">$</span><span class="fu">disconnect</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">dbconnection</span><span class="op">$</span><span class="va">connection</span></span>
-<span><span class="co">#&gt; Error: external pointer is not valid</span></span>
+<span><span class="co">#&gt; &lt;SQLiteConnection&gt;</span></span>
+<span><span class="co">#&gt;   DISCONNECTED</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">class</a></span><span class="op">(</span><span class="va">dbconnection</span><span class="op">$</span><span class="va">connection</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "PostgreSQL"</span></span>
+<span><span class="co">#&gt; [1] "SQLiteConnection"</span></span>
 <span><span class="co">#&gt; attr(,"package")</span></span>
-<span><span class="co">#&gt; [1] "odbc"</span></span>
+<span><span class="co">#&gt; [1] "RSQLite"</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">class</a></span><span class="op">(</span><span class="va">dbconnection</span><span class="op">$</span><span class="va">autoconnection</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "PostgreSQL"</span></span>
+<span><span class="co">#&gt; [1] "SQLiteConnection"</span></span>
 <span><span class="co">#&gt; attr(,"package")</span></span>
-<span><span class="co">#&gt; [1] "odbc"</span></span>
+<span><span class="co">#&gt; [1] "RSQLite"</span></span>
 <span></span>
 <span><span class="va">dbtable</span> <span class="op">&lt;-</span> <span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/DBTable_v9.html">DBTable_v9</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span>
 <span>  dbconfig <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>    driver <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"CS9_DBCONFIG_DRIVER"</span><span class="op">)</span>,</span>
-<span>    server <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"CS9_DBCONFIG_SERVER"</span><span class="op">)</span>,</span>
-<span>    port <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"CS9_DBCONFIG_PORT"</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>    db <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"CS9_DBCONFIG_DB_ANON"</span><span class="op">)</span>,</span>
-<span>    schema <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"CS9_DBCONFIG_SCHEMA_ANON"</span><span class="op">)</span>,</span>
-<span>    user <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"CS9_DBCONFIG_USER"</span><span class="op">)</span>,</span>
-<span>    password <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"CS9_DBCONFIG_PASSWORD"</span><span class="op">)</span>,</span>
-<span>    sslmode <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"CS9_DBCONFIG_SSLMODE"</span><span class="op">)</span></span>
+<span>    driver <span class="op">=</span> <span class="st">"SQLite"</span>,</span>
+<span>    db <span class="op">=</span> <span class="va">db_file</span></span>
 <span>  <span class="op">)</span>,</span>
 <span>  table_name <span class="op">=</span> <span class="st">"anon_test"</span>,</span>
 <span>  field_types <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
@@ -233,28 +237,33 @@ then returns a lazy <code>tbl()</code> reference via dbplyr.</p>
 <span>    validator_field_contents <span class="op">=</span> <span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/validator_field_contents_blank.html">validator_field_contents_blank</a></span></span>
 <span><span class="op">)</span></span>
 <span><span class="va">dbtable</span><span class="op">$</span><span class="fu">drop_all_rows</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Creating table anon_test</span></span>
+<span><span class="co">#&gt; Adding index ind1</span></span>
+<span><span class="co">#&gt; [1] 0</span></span>
 <span><span class="va">dbtable</span><span class="op">$</span><span class="fu">insert_data</span><span class="op">(</span><span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/nor_covid19_cases_by_time_location.html">nor_covid19_cases_by_time_location</a></span><span class="op">)</span></span>
 <span><span class="va">dbtable</span><span class="op">$</span><span class="fu">connect</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">dbtable</span><span class="op">$</span><span class="va">dbconnection</span><span class="op">$</span><span class="fu">is_connected</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span>
 <span><span class="va">dbtable</span><span class="op">$</span><span class="fu">tbl</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; # Source:   table&lt;"public"."anon_test"&gt; [?? x 18]</span></span>
-<span><span class="co">#&gt; # Database: postgres  [yourusername@localhost:/postgres]</span></span>
-<span><span class="co">#&gt;    granularity_time granularity_geo country_iso3 location_code border age   sex   isoyear isoweek isoyearweek season   seasonweek</span></span>
-<span><span class="co">#&gt;    &lt;chr&gt;            &lt;chr&gt;           &lt;chr&gt;        &lt;chr&gt;          &lt;int&gt; &lt;chr&gt; &lt;chr&gt;   &lt;int&gt;   &lt;int&gt; &lt;chr&gt;       &lt;chr&gt;         &lt;dbl&gt;</span></span>
-<span><span class="co">#&gt;  1 day              county          nor          county_nor03    2020 total total    2020       8 2020-08     2019/20…         31</span></span>
-<span><span class="co">#&gt;  2 day              county          nor          county_nor03    2020 total total    2020       8 2020-08     2019/20…         31</span></span>
-<span><span class="co">#&gt;  3 day              county          nor          county_nor03    2020 total total    2020       8 2020-08     2019/20…         31</span></span>
-<span><span class="co">#&gt;  4 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32</span></span>
-<span><span class="co">#&gt;  5 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32</span></span>
-<span><span class="co">#&gt;  6 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32</span></span>
-<span><span class="co">#&gt;  7 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32</span></span>
-<span><span class="co">#&gt;  8 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32</span></span>
-<span><span class="co">#&gt;  9 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32</span></span>
-<span><span class="co">#&gt; 10 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32</span></span>
+<span><span class="co">#&gt; # Source:   table&lt;`anon_test`&gt; [?? x 18]</span></span>
+<span><span class="co">#&gt; # Database: sqlite 3.51.2 [/tmp/RtmpDYbQNe/file35c6615fad2a3a.sqlite]</span></span>
+<span><span class="co">#&gt;    granularity_time granularity_geo country_iso3 location_code border age  </span></span>
+<span><span class="co">#&gt;    &lt;chr&gt;            &lt;chr&gt;           &lt;chr&gt;        &lt;chr&gt;          &lt;int&gt; &lt;chr&gt;</span></span>
+<span><span class="co">#&gt;  1 day              county          nor          county_nor03    2020 total</span></span>
+<span><span class="co">#&gt;  2 day              county          nor          county_nor03    2020 total</span></span>
+<span><span class="co">#&gt;  3 day              county          nor          county_nor03    2020 total</span></span>
+<span><span class="co">#&gt;  4 day              county          nor          county_nor03    2020 total</span></span>
+<span><span class="co">#&gt;  5 day              county          nor          county_nor03    2020 total</span></span>
+<span><span class="co">#&gt;  6 day              county          nor          county_nor03    2020 total</span></span>
+<span><span class="co">#&gt;  7 day              county          nor          county_nor03    2020 total</span></span>
+<span><span class="co">#&gt;  8 day              county          nor          county_nor03    2020 total</span></span>
+<span><span class="co">#&gt;  9 day              county          nor          county_nor03    2020 total</span></span>
+<span><span class="co">#&gt; 10 day              county          nor          county_nor03    2020 total</span></span>
 <span><span class="co">#&gt; # ℹ more rows</span></span>
-<span><span class="co">#&gt; # ℹ 6 more variables: calyear &lt;int&gt;, calmonth &lt;int&gt;, calyearmonth &lt;chr&gt;, date &lt;date&gt;, covid19_cases_testdate_n &lt;int&gt;,</span></span>
-<span><span class="co">#&gt; #   covid19_cases_testdate_pr100000 &lt;dbl&gt;</span></span></code></pre></div>
+<span><span class="co">#&gt; # ℹ 12 more variables: sex &lt;chr&gt;, isoyear &lt;int&gt;, isoweek &lt;int&gt;,</span></span>
+<span><span class="co">#&gt; #   isoyearweek &lt;chr&gt;, season &lt;chr&gt;, seasonweek &lt;dbl&gt;, calyear &lt;int&gt;,</span></span>
+<span><span class="co">#&gt; #   calmonth &lt;int&gt;, calyearmonth &lt;chr&gt;, date &lt;date&gt;,</span></span>
+<span><span class="co">#&gt; #   covid19_cases_testdate_n &lt;int&gt;, covid19_cases_testdate_pr100000 &lt;dbl&gt;</span></span></code></pre></div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

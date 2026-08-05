@@ -2,6 +2,11 @@
 
 ``` r
 library(data.table)
+#> 
+#> Attaching package: 'data.table'
+#> The following object is masked from 'package:base':
+#> 
+#>     %notin%
 library(magrittr)
 ```
 
@@ -10,14 +15,23 @@ library(magrittr)
 `csdb` provides an abstracted database-access layer for the Core
 Surveillance (csverse) ecosystem. The package exposes two R6 classes:
 
-- **`DBConnection_v9`** — wraps a single ODBC database connection and
-  manages its lifecycle (connect, disconnect, reconnect).
+- **`DBConnection_v9`** — wraps a single database connection and manages
+  its lifecycle (connect, disconnect, reconnect).
 - **`DBTable_v9`** — represents one database table and provides methods
   for inserting, upserting, and deleting rows, as well as managing
   indexes and validating field types and contents.
 
-Connection credentials are read from environment variables, keeping them
-out of scripts and version control.
+Three backends are supported. Microsoft SQL Server and PostgreSQL
+connect over ODBC and read their credentials from environment variables,
+which keeps the credentials out of scripts and version control. SQLite
+connects through `RSQLite`, where `db` is a file path and no server,
+port, user or password is read at all.
+
+This vignette runs on SQLite, in a file created by
+[`tempfile()`](https://rdrr.io/r/base/tempfile.html). Every chunk below
+therefore executes on a machine with no database server. For what
+changes when the same code is pointed at PostgreSQL instead, see
+[`vignette("backends", package = "csdb")`](https://niphr.github.io/csdb/articles/backends.md).
 
 ## `DBConnection_v9`
 
@@ -28,9 +42,9 @@ connection, reconnecting automatically if needed.
 
 The example below creates a connection object, connects, inspects the
 connection fields, then disconnects. After disconnecting, `$connection`
-returns an invalid external pointer, while
+reports `DISCONNECTED`, while
 [`class()`](https://rdrr.io/r/base/class.html) still reports the driver
-type.
+type, and reading `$autoconnection` opens the file again.
 
 ## `DBTable_v9`
 
@@ -41,74 +55,58 @@ Validators can enforce field-type and field-content constraints;
 `validator_field_types_blank` and `validator_field_contents_blank` skip
 validation entirely.
 
-The example below creates a table object backed by a live PostgreSQL
-database, clears any existing rows, inserts the bundled
+The example below creates a table object backed by the same SQLite file,
+clears any existing rows, inserts the bundled
 `nor_covid19_cases_by_time_location` dataset, connects, and then returns
-a lazy `tbl()` reference via dbplyr.
+a lazy `tbl()` reference via dbplyr. The file is new, so
+`$drop_all_rows()` creates the table and its index first and then
+reports that it removed 0 rows.
 
 ``` r
+db_file <- tempfile(fileext = ".sqlite")
+
 dbconnection <- csdb::DBConnection_v9$new(
-  driver = Sys.getenv("CS9_DBCONFIG_DRIVER"),
-  server = Sys.getenv("CS9_DBCONFIG_SERVER"),
-  port = as.integer(Sys.getenv("CS9_DBCONFIG_PORT")),
-  db = Sys.getenv("CS9_DBCONFIG_DB_ANON"),
-  user = Sys.getenv("CS9_DBCONFIG_USER"),
-  password = Sys.getenv("CS9_DBCONFIG_PASSWORD"),
-  sslmode = Sys.getenv("CS9_DBCONFIG_SSLMODE")
+  driver = "SQLite",
+  db = db_file
 )
 dbconnection
 #> (disconnected)
 #> 
-#> Driver:              PostgreSQL Unicode 
-#> Server:              db 
-#> Port:                5432 
-#> DB:                  postgres 
-#> User:                yourusername 
-#> Password:            ********************* 
-#> Trusted connection:  x
+#> Driver:              SQLite 
+#> File:                /tmp/RtmpDYbQNe/file35c6615fad2a3a.sqlite
 dbconnection$connect()
 
 dbconnection$connection
-#> <OdbcConnection> yourusername@db
-#>   Database: postgres
-#>   PostgreSQL Version: 17.0.5
+#> <SQLiteConnection>
+#>   Path: /tmp/RtmpDYbQNe/file35c6615fad2a3a.sqlite
+#>   Extensions: TRUE
 dbconnection$autoconnection
-#> <OdbcConnection> yourusername@db
-#>   Database: postgres
-#>   PostgreSQL Version: 17.0.5
+#> <SQLiteConnection>
+#>   Path: /tmp/RtmpDYbQNe/file35c6615fad2a3a.sqlite
+#>   Extensions: TRUE
 dbconnection
 #> (connected)
 #> 
-#> Driver:              PostgreSQL Unicode 
-#> Server:              db 
-#> Port:                5432 
-#> DB:                  postgres 
-#> User:                yourusername 
-#> Password:            ********************* 
-#> Trusted connection:  x
+#> Driver:              SQLite 
+#> File:                /tmp/RtmpDYbQNe/file35c6615fad2a3a.sqlite
 
 dbconnection$disconnect()
 dbconnection$connection
-#> Error: external pointer is not valid
+#> <SQLiteConnection>
+#>   DISCONNECTED
 class(dbconnection$connection)
-#> [1] "PostgreSQL"
+#> [1] "SQLiteConnection"
 #> attr(,"package")
-#> [1] "odbc"
+#> [1] "RSQLite"
 class(dbconnection$autoconnection)
-#> [1] "PostgreSQL"
+#> [1] "SQLiteConnection"
 #> attr(,"package")
-#> [1] "odbc"
+#> [1] "RSQLite"
 
 dbtable <- csdb::DBTable_v9$new(
   dbconfig = list(
-    driver = Sys.getenv("CS9_DBCONFIG_DRIVER"),
-    server = Sys.getenv("CS9_DBCONFIG_SERVER"),
-    port = as.integer(Sys.getenv("CS9_DBCONFIG_PORT")),
-    db = Sys.getenv("CS9_DBCONFIG_DB_ANON"),
-    schema = Sys.getenv("CS9_DBCONFIG_SCHEMA_ANON"),
-    user = Sys.getenv("CS9_DBCONFIG_USER"),
-    password = Sys.getenv("CS9_DBCONFIG_PASSWORD"),
-    sslmode = Sys.getenv("CS9_DBCONFIG_SSLMODE")
+    driver = "SQLite",
+    db = db_file
   ),
   table_name = "anon_test",
   field_types = c(
@@ -145,26 +143,31 @@ dbtable <- csdb::DBTable_v9$new(
     validator_field_contents = csdb::validator_field_contents_blank
 )
 dbtable$drop_all_rows()
+#> Creating table anon_test
+#> Adding index ind1
+#> [1] 0
 dbtable$insert_data(csdb::nor_covid19_cases_by_time_location)
 dbtable$connect()
 dbtable$dbconnection$is_connected()
 #> [1] TRUE
 dbtable$tbl()
-#> # Source:   table<"public"."anon_test"> [?? x 18]
-#> # Database: postgres  [yourusername@localhost:/postgres]
-#>    granularity_time granularity_geo country_iso3 location_code border age   sex   isoyear isoweek isoyearweek season   seasonweek
-#>    <chr>            <chr>           <chr>        <chr>          <int> <chr> <chr>   <int>   <int> <chr>       <chr>         <dbl>
-#>  1 day              county          nor          county_nor03    2020 total total    2020       8 2020-08     2019/20…         31
-#>  2 day              county          nor          county_nor03    2020 total total    2020       8 2020-08     2019/20…         31
-#>  3 day              county          nor          county_nor03    2020 total total    2020       8 2020-08     2019/20…         31
-#>  4 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
-#>  5 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
-#>  6 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
-#>  7 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
-#>  8 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
-#>  9 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
-#> 10 day              county          nor          county_nor03    2020 total total    2020       9 2020-09     2019/20…         32
+#> # Source:   table<`anon_test`> [?? x 18]
+#> # Database: sqlite 3.51.2 [/tmp/RtmpDYbQNe/file35c6615fad2a3a.sqlite]
+#>    granularity_time granularity_geo country_iso3 location_code border age  
+#>    <chr>            <chr>           <chr>        <chr>          <int> <chr>
+#>  1 day              county          nor          county_nor03    2020 total
+#>  2 day              county          nor          county_nor03    2020 total
+#>  3 day              county          nor          county_nor03    2020 total
+#>  4 day              county          nor          county_nor03    2020 total
+#>  5 day              county          nor          county_nor03    2020 total
+#>  6 day              county          nor          county_nor03    2020 total
+#>  7 day              county          nor          county_nor03    2020 total
+#>  8 day              county          nor          county_nor03    2020 total
+#>  9 day              county          nor          county_nor03    2020 total
+#> 10 day              county          nor          county_nor03    2020 total
 #> # ℹ more rows
-#> # ℹ 6 more variables: calyear <int>, calmonth <int>, calyearmonth <chr>, date <date>, covid19_cases_testdate_n <int>,
-#> #   covid19_cases_testdate_pr100000 <dbl>
+#> # ℹ 12 more variables: sex <chr>, isoyear <int>, isoweek <int>,
+#> #   isoyearweek <chr>, season <chr>, seasonweek <dbl>, calyear <int>,
+#> #   calmonth <int>, calyearmonth <chr>, date <date>,
+#> #   covid19_cases_testdate_n <int>, covid19_cases_testdate_pr100000 <dbl>
 ```

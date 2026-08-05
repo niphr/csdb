@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.4</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.5</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -37,6 +37,12 @@
       <ul class="navbar-nav me-auto">
 <li class="nav-item"><a class="nav-link" href="articles/csdb.html">Get started</a></li>
 <li class="nav-item"><a class="nav-link" href="reference/index.html">Reference</a></li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
+<li><a class="dropdown-item" href="articles/backends.html">PostgreSQL and SQLite side by side</a></li>
+  </ul>
+</li>
 <li class="nav-item"><a class="nav-link" href="news/index.html">Changelog</a></li>
       </ul>
 <ul class="navbar-nav">
@@ -74,7 +80,7 @@
 <img src="logo.png" class="logo" alt=""><h1>Databases for large datasets.</h1>
 </div>
     <div class="cs-rule"></div>
-    <p class="cs-lede">An abstracted, object-oriented system for large datasets across database systems — robust PostgreSQL connections, bulk loading and upserts, validation, and index management.
+    <p class="cs-lede">An abstracted, object-oriented system for large datasets across database systems: robust PostgreSQL, SQL Server and SQLite connections, bulk loading and upserts, validation, and index management.
 </p>
     <p class="cs-cta"><a class="cs-btn" href="articles/csdb.html">Get started</a> <a class="cs-btn-link" href="reference/index.html">Browse the reference →</a></p>
   </div>
@@ -94,7 +100,7 @@ Features
 Connection management
 </h3>
 <p>
-<code>DBConnection_v9</code> wraps an ODBC connection with lazy connect, explicit disconnect, and automatic reconnect via <code>$autoconnection</code>.
+<code>DBConnection_v9</code> wraps an ODBC or SQLite connection with lazy connect, explicit disconnect, and automatic reconnect via <code>$autoconnection</code>.
 </p>
 </div>
 <div class="cs-card">
@@ -105,7 +111,7 @@ Connection management
 Bulk table operations
 </h3>
 <p>
-<code>DBTable_v9</code> handles insert, upsert, and key-based row deletion against PostgreSQL and SQL Server tables, with configurable indexes.
+<code>DBTable_v9</code> handles insert, upsert, and key-based row deletion against PostgreSQL, SQL Server and SQLite tables, with configurable indexes.
 </p>
 </div>
 <div class="cs-card">

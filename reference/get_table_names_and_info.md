@@ -30,19 +30,27 @@ A data.table containing table information with columns:
 
   Numeric. The row count as the database reports it: `reltuples` from
   `pg_class` on PostgreSQL, which is an estimate, and the `rows` column
-  of `sp_spaceused` on Microsoft SQL Server
+  of `sp_spaceused` on Microsoft SQL Server. On SQLite it is `COUNT(*)`,
+  which is exact rather than an estimate
 
 - size_total_gb:
 
-  Numeric. Total size of the table in gigabytes
+  Numeric. Total size of the table in gigabytes. `NA_real_` on SQLite
 
 - size_data_gb:
 
-  Numeric. Size of data in gigabytes
+  Numeric. Size of data in gigabytes. `NA_real_` on SQLite
 
 - size_index_gb:
 
-  Numeric. Size of indexes in gigabytes
+  Numeric. Size of indexes in gigabytes. `NA_real_` on SQLite
+
+SQLite reports no per-table size. The `dbstat` virtual table, which is
+the only thing that could give one, is not compiled into the SQLite that
+`RSQLite` ships: querying it fails with `no such table: dbstat`.
+`pragma page_count` and `pragma page_size` exist, but they describe the
+whole file rather than a table, so all three size columns are
+`NA_real_`.
 
 ## See also
 
