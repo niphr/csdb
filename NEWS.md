@@ -1,5 +1,16 @@
 # Version 2026.8.6
 
+## Licensing
+
+* The copyright holder is now **Folkehelseinstituttet**. It read "Core Surveillance", which
+  names the package family rather than a legal entity.
+* `DESCRIPTION` `Authors@R` now declares that holder with `role = "cph"`.
+  It declared no copyright holder at all, and neither did any other package
+  in the fleet. Nothing in `R CMD check` reports that.
+* The copyright year is now 2026. It read 2023.
+* `CLAUDE.md` now carries a Licensing section, so the year gets checked
+  rather than silently ageing.
+
 ## Documentation
 * Repository prose now follows ASD-STE100 (Simplified Technical English). The sweep covered the roxygen2 blocks in `R/`, both vignettes, and `README.md`. It changed no claim and no executable code. `index.md` needed no change.
 * No roxygen sentence runs over 25 words. Counted per authored unit, which is one `@description`, `@param`, `@return`, `@seealso`, paragraph or Rd `\item`, the count fell from 6 to 0. The longest sentence fell from 36 words to 24.

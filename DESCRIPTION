@@ -1,10 +1,26 @@
 Package: csdb
 Title: An Abstracted System for Easily Working with Databases with Large Datasets
 Version: 2026.8.6
-Authors@R: c(
-  person(c("Richard","Aubrey"), "White", email = "hello@rwhite.no", role = c("aut", "cre"), comment = c(ORCID = "0000-0002-6747-1726")),
-  person(c("August", "Sørli"), "Mathisen", email = "august.sorli.mathisen@fhi.no", role = c("aut"))
-  )
+Authors@R:
+    c(
+      person(
+        given = c("Richard", "Aubrey"),
+        family = "White",
+        email = "hello@rwhite.no",
+        role = c("aut", "cre"),
+        comment = c(ORCID = "0000-0002-6747-1726")
+      ),
+      person(
+        given = c("August", "Sørli"),
+        family = "Mathisen",
+        email = "august.sorli.mathisen@fhi.no",
+        role = "aut"
+      ),
+      person(
+        given = "Folkehelseinstituttet",
+        role = "cph"
+      )
+    )
 Description: Provides object-oriented database management tools for working with large datasets across multiple database systems. Features include robust connection management for 'PostgreSQL' databases, advanced table operations with bulk data loading and upsert functionality, comprehensive data validation through customizable field type and content validators, efficient index management, and cross-database compatibility. Designed for high-performance data operations in surveillance systems and large-scale data processing workflows.
 Depends: R (>= 4.1.0)
 License: MIT + file LICENSE
