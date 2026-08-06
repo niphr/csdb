@@ -8,8 +8,8 @@
 [csdb](https://niphr.github.io/csdb/) gives you two R6 classes for one database.
 `DBConnection_v9` holds the connection settings and opens or closes the
 connection. `DBTable_v9` owns a single table: its columns, keys, indexes and
-validators. Three backends are supported. Microsoft SQL Server and PostgreSQL
-connect through `odbc`; SQLite connects through `RSQLite`, needs no server and
+validators. csdb supports three backends. Microsoft SQL Server and PostgreSQL
+connect through `odbc`. SQLite connects through `RSQLite`, needs no server and
 no external client binary, and puts the whole database in one file.
 
 ## Installation
@@ -54,9 +54,9 @@ block changes.
 `$insert_data()`, `$upsert_data()` and `$tbl()` create the table when it is
 absent. Two cautions. When a table of that name exists and its columns differ
 from `names(field_types)`, `$create_table()` drops it and builds it again, which
-discards the rows. And csdb opens no transaction anywhere: `$keep_rows_where()`
-on the two ODBC backends, for one, sends its copy, its drop and its rename as
-three separate statements.
+discards the rows. And csdb opens no transaction anywhere. On the two ODBC
+backends, `$keep_rows_where()` is one example: it sends its copy, its drop and
+its rename as three separate statements.
 
 ## Which function do I want?
 
@@ -72,8 +72,8 @@ three separate statements.
 | require valid `granularity_time`, `granularity_geo`, `border` and `sex` values, and a `Date` in `date` | `validator_field_contents_csfmt_rts_data_v1()`, `validator_field_contents_csfmt_rts_data_v2()` |
 
 The type validator runs once, inside `DBTable_v9$new()`. The contents validator
-runs inside `$insert_data()` and `$upsert_data()`, unless the data is `NULL` or
-has no rows, which both methods return on first.
+runs inside `$insert_data()` and `$upsert_data()`. Both methods return before
+the validator when the data is `NULL` or has no rows.
 
 ## Vignettes
 

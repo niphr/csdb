@@ -7,7 +7,7 @@
 #'
 #' This data was extracted on 2022-05-04.
 #'
-#' @format A csfmt_rts_data_v1 with 11028 rows and 18 variables:
+#' @format A data.table with 11028 rows and 18 variables:
 #' \describe{
 #'   \item{granularity_time}{day/isoweek}
 #'   \item{granularity_geo}{nation, county}
@@ -15,6 +15,7 @@
 #'   \item{location_code}{norge, 11 counties}
 #'   \item{border}{2020}
 #'   \item{age}{total}
+#'   \item{sex}{total}
 #'   \item{isoyear}{Isoyear of event}
 #'   \item{isoweek}{Isoweek of event}
 #'   \item{isoyearweek}{Isoyearweek of event}
@@ -32,5 +33,3 @@
 #' head(nor_covid19_cases_by_time_location)
 #' nrow(nor_covid19_cases_by_time_location)
 "nor_covid19_cases_by_time_location"
-
-

@@ -13,14 +13,16 @@ vignette: >
 definition runs against a different engine. This vignette puts the PostgreSQL list and the SQLite
 list next to each other, then lists what a user must know about the differences.
 
-None of the code below runs. It reaches a database, and the vignette is built where there is none.
-It is written to be copied.
+None of the code below runs. It reaches a database, and the build machine has none. Copy it into
+your own script.
 
 `vignette("csdb", package = "csdb")` is the worked example that does run, on SQLite.
 
 ## Two configurations
 
-PostgreSQL reads eight settings. Credentials come from the environment, so that they stay out of
+PostgreSQL reads nine settings. This example sets eight of them. The ninth is
+`role_create_table`, which makes `create_table` issue `SET ROLE` before it creates a table.
+This example reads the credentials from the environment itself, so that they stay out of
 scripts and out of version control.
 
 ```{r postgres-config, eval = FALSE}
@@ -37,7 +39,7 @@ cfg_postgres <- list(
 ```
 
 SQLite reads two. `db` is the path to the file, which `DBConnection_v9` creates on first connect,
-along with any missing parent directory. The other six settings are accepted and ignored, so a
+along with any missing parent directory. The other seven settings are accepted and ignored, so a
 configuration built from the same environment variables still works.
 
 ```{r sqlite-config, eval = FALSE}
@@ -47,9 +49,9 @@ cfg_sqlite <- list(
 )
 ```
 
-The driver string is matched case-insensitively for SQLite: `"sqlite"`, `"SQLite"` and `"SQLITE"`
-all select it. `"PostgreSQL Unicode"` is matched exactly, because it must equal an entry in
-`odbcinst.ini`.
+csdb matches the driver string case-insensitively for SQLite: `"sqlite"`, `"SQLite"` and
+`"SQLITE"` all select it. csdb matches `"PostgreSQL Unicode"` exactly, because it MUST equal an
+entry in `odbcinst.ini`.
 
 ## The same table against each
 
@@ -105,8 +107,8 @@ tab_sqlite$insert_data(d)
 ### Why the field types are closed
 
 SQLite accepts any declared type name. `VARCHAR(100)`, `TEXT(100)` or a misspelling would all
-create a table, with an affinity nobody asked for and no warning. `csdb` therefore accepts six
-types and rejects the rest:
+create a table, with an unintended affinity and no warning. `csdb` therefore accepts six types
+and rejects the rest:
 
 ```{r rejected-type, eval = FALSE}
 csdb::DBTable_v9$new(
@@ -126,8 +128,8 @@ that argument `2020-01-01` returns the integer `18262`.
 ### Why the primary key cannot be added later
 
 `ALTER TABLE cases ADD CONSTRAINT ... PRIMARY KEY (...)` is `near "CONSTRAINT": syntax error` in
-SQLite. The key must therefore exist from the first `CREATE TABLE`. Two consequences follow.
-`$upsert_data()` needs that key, because `ON CONFLICT (<keys>)` requires a matching `PRIMARY KEY`
+SQLite. The key MUST therefore exist from the first `CREATE TABLE`. Two consequences follow.
+`$upsert_data()` needs that key, because `ON CONFLICT (<keys>)` needs a matching `PRIMARY KEY`
 or `UNIQUE` constraint. And every delete path is a `DELETE` rather than a drop-and-rename, because
 a dropped key could not be put back.
 
@@ -136,6 +138,6 @@ a dropped key could not be put back.
 Use SQLite for tests, for examples, and for a single-writer pipeline on one machine. It is a file:
 there is nothing to install, nothing to start, and nothing to authenticate against.
 
-Use PostgreSQL when more than one process writes, when the data outgrows one machine, or when the
-row counts get large enough that a planner estimate is the honest answer and an exact `COUNT(*)`
-is too slow.
+Use PostgreSQL when more than one process writes, or when the data outgrows one machine. Also use
+it when the row counts get large enough that an exact `COUNT(*)` is too slow. A planner estimate
+is then the honest answer.

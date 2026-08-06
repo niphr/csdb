@@ -7,14 +7,14 @@
 validator_field_contents_blank(data)
 }
 \arguments{
-\item{data}{A data.frame or data.table containing the data to validate}
+\item{data}{A data.frame or data.table containing the data to validate.}
 }
 \value{
-Always returns TRUE
+Always returns TRUE.
 }
 \description{
 A pass-through validator that accepts any data without validation.
-This is useful as a placeholder when no specific data content validation is needed.
+Use it as a placeholder when you need no check on the data contents.
 }
 \examples{
 # This validator always returns TRUE regardless of input

@@ -4,23 +4,23 @@
 \alias{DBConnection_v9}
 \title{R6 Class representing a database connection}
 \description{
-A robust database connection manager that handles connections to various database systems
-including Microsoft SQL Server and PostgreSQL. This class provides connection management,
-authentication, and automatic reconnection capabilities.
+A database connection manager that handles connections to various database
+systems including Microsoft SQL Server and PostgreSQL. This class provides
+connection management, authentication, and automatic reconnection.
 }
 \details{
-The DBConnection_v9 class encapsulates database connection logic and provides a consistent
-interface for connecting to different database systems. It supports both trusted connections
-and user/password authentication, handles connection failures gracefully, and provides
-automatic reconnection functionality.
+The DBConnection_v9 class holds the database connection logic and provides a
+consistent interface to different database systems. It supports both trusted
+connections and user/password authentication. It handles connection
+failures, and it reconnects automatically.
 
 Key features:
 \itemize{
-  \item Support for multiple database systems (SQL Server, PostgreSQL)
-  \item Automatic connection management with retry logic
-  \item Secure credential handling
-  \item Connection status monitoring
-  \item Graceful error handling and recovery
+  \item Support for multiple database systems (SQL Server, PostgreSQL).
+  \item Automatic connection management with retry logic.
+  \item Secure credential handling.
+  \item Connection status monitoring.
+  \item Graceful error handling and recovery.
 }
 }
 \examples{
@@ -138,15 +138,15 @@ Other database classes:
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
-      \item{\code{driver}}{Driver}
-      \item{\code{server}}{Server}
-      \item{\code{port}}{Port}
-      \item{\code{db}}{DB}
-      \item{\code{schema}}{Schema (e.g. "dbo")}
-      \item{\code{user}}{User}
-      \item{\code{password}}{Password}
-      \item{\code{trusted_connection}}{NULL or "yes"}
-      \item{\code{sslmode}}{NULL or "require"}
+      \item{\code{driver}}{Driver.}
+      \item{\code{server}}{Server.}
+      \item{\code{port}}{Port.}
+      \item{\code{db}}{DB.}
+      \item{\code{schema}}{Schema (e.g. "dbo").}
+      \item{\code{user}}{User.}
+      \item{\code{password}}{Password.}
+      \item{\code{trusted_connection}}{NULL or "yes".}
+      \item{\code{sslmode}}{NULL or "require".}
       \item{\code{role_create_table}}{NULL or the role to take when creating tables.}
     }
     \if{html}{\out{</div>}}
@@ -167,7 +167,7 @@ Other database classes:
     \if{html}{\out{</div>}}
   }
   \subsection{Returns}{
-    TRUE/FALSE
+    TRUE/FALSE.
   }
 }
 
@@ -194,7 +194,7 @@ Other database classes:
 \if{html}{\out{<a id="method-DBConnection_v9-connect"></a>}}
 \if{latex}{\out{\hypertarget{method-DBConnection_v9-connect}{}}}
 \subsection{\code{DBConnection_v9$connect()}}{
-  Connect to the database
+  Connect to the database.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBConnection_v9$connect(attempts = 2)}
@@ -203,7 +203,7 @@ Other database classes:
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
-      \item{\code{attempts}}{Number of attempts to be made to try to connect}
+      \item{\code{attempts}}{Number of attempts to connect.}
     }
     \if{html}{\out{</div>}}
   }
@@ -213,7 +213,7 @@ Other database classes:
 \if{html}{\out{<a id="method-DBConnection_v9-disconnect"></a>}}
 \if{latex}{\out{\hypertarget{method-DBConnection_v9-disconnect}{}}}
 \subsection{\code{DBConnection_v9$disconnect()}}{
-  Disconnect from the database
+  Disconnect from the database.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBConnection_v9$disconnect()}

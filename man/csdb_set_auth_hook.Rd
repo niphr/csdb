@@ -14,9 +14,9 @@ or NULL to clear the hook.}
 Invisibly returns the previous hook (if any).
 }
 \description{
-Register a function to be called when a database connection fails.
-This is useful for refreshing Kerberos tickets or other authentication
-credentials before retrying the connection.
+Registers a function that csdb calls when a database connection fails. Use
+it to refresh a Kerberos ticket, or other authentication credentials,
+before the next connection attempt.
 }
 \examples{
 # The hook is held in the csdb.auth_hook option. Setting one returns

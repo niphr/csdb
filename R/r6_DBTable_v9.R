@@ -1,10 +1,10 @@
 #' Blank field types validator
 #'
 #' A pass-through validator that accepts any field types without validation.
-#' This is useful as a placeholder when no specific field type validation is needed.
+#' Use it as a placeholder when you need no check on the field types.
 #'
-#' @param db_field_types A named character vector of database field types
-#' @return Always returns TRUE
+#' @param db_field_types A named character vector of database field types.
+#' @return Always returns TRUE.
 #' @export
 #' @family field type validators
 #' @seealso The introduction vignette,
@@ -27,10 +27,10 @@ validator_field_types_blank <- function(db_field_types) {
 #' Blank data contents validator
 #'
 #' A pass-through validator that accepts any data without validation.
-#' This is useful as a placeholder when no specific data content validation is needed.
+#' Use it as a placeholder when you need no check on the data contents.
 #'
-#' @param data A data.frame or data.table containing the data to validate
-#' @return Always returns TRUE
+#' @param data A data.frame or data.table containing the data to validate.
+#' @return Always returns TRUE.
 #' @export
 #' @family field contents validators
 #' @seealso The introduction vignette,
@@ -52,12 +52,13 @@ validator_field_contents_blank <- function(data) {
 
 #' Field types validator for csfmt_rts_data_v1 schema
 #'
-#' Validates that field types conform to the csfmt_rts_data_v1 schema specification.
-#' This validator ensures that the first 16 fields match the expected structure
-#' for real-time surveillance data format version 1.
+#' Checks that field types conform to the csfmt_rts_data_v1 schema
+#' specification. The validator checks the first 16 entries of
+#' \code{db_field_types} against the expected structure of that schema.
 #'
-#' @param db_field_types A named character vector of database field types
-#' @return TRUE if field types are valid for csfmt_rts_data_v1, FALSE otherwise
+#' @param db_field_types A named character vector of database field types.
+#' @return TRUE if field types are valid for csfmt_rts_data_v1, FALSE
+#'   otherwise.
 #' @export
 #' @family field type validators
 #' @seealso \code{\link{DBTable_v9}}, which takes this as its
@@ -129,12 +130,13 @@ validator_field_types_csfmt_rts_data_v1 <- function(db_field_types) {
 
 #' Field contents validator for csfmt_rts_data_v1 schema
 #'
-#' Validates that data contents conform to the csfmt_rts_data_v1 schema specification.
-#' This validator checks that granularity_time, granularity_geo, border, sex, and date
-#' fields contain valid values according to the surveillance data format requirements.
+#' Checks that data contents conform to the csfmt_rts_data_v1 schema
+#' specification. The validator checks the granularity_time, granularity_geo,
+#' border, sex, and date fields against the values that schema allows.
 #'
-#' @param data A data.frame or data.table containing the data to validate
-#' @return TRUE if data is valid for csfmt_rts_data_v1, FALSE otherwise (with error attribute)
+#' @param data A data.frame or data.table containing the data to validate.
+#' @return TRUE if data is valid for csfmt_rts_data_v1, FALSE otherwise (with
+#'   error attribute).
 #' @export
 #' @family field contents validators
 #' @seealso \code{\link{DBTable_v9}}, which takes this as its
@@ -264,12 +266,13 @@ validator_field_contents_csfmt_rts_data_v1 <- function(data) {
 
 #' Field types validator for csfmt_rts_data_v2 schema
 #'
-#' Validates that field types conform to the csfmt_rts_data_v2 schema specification.
-#' This validator ensures that the first 18 fields match the expected structure
-#' for real-time surveillance data format version 2.
+#' Checks that field types conform to the csfmt_rts_data_v2 schema
+#' specification. The validator checks the first 18 entries of
+#' \code{db_field_types} against the expected structure of that schema.
 #'
-#' @param db_field_types A named character vector of database field types
-#' @return TRUE if field types are valid for csfmt_rts_data_v2, FALSE otherwise
+#' @param db_field_types A named character vector of database field types.
+#' @return TRUE if field types are valid for csfmt_rts_data_v2, FALSE
+#'   otherwise.
 #' @export
 #' @family field type validators
 #' @seealso \code{\link{DBTable_v9}}, which takes this as its
@@ -347,13 +350,13 @@ validator_field_types_csfmt_rts_data_v2 <- function(db_field_types) {
 
 #' Field contents validator for csfmt_rts_data_v2 schema
 #'
-#' Validates that data contents conform to the csfmt_rts_data_v2 schema specification.
-#' This validator checks that granularity_time, granularity_geo, border, sex, and date
-#' fields contain valid values according to the surveillance data format requirements
-#' for version 2.
+#' Checks that data contents conform to the csfmt_rts_data_v2 schema
+#' specification. The validator checks the granularity_time, granularity_geo,
+#' border, sex, and date fields against the values that schema allows.
 #'
-#' @param data A data.frame or data.table containing the data to validate
-#' @return TRUE if data is valid for csfmt_rts_data_v2, FALSE otherwise (with error attribute)
+#' @param data A data.frame or data.table containing the data to validate.
+#' @return TRUE if data is valid for csfmt_rts_data_v2, FALSE otherwise (with
+#'   error attribute).
 #' @export
 #' @family field contents validators
 #' @seealso \code{\link{DBTable_v9}}, which takes this as its
@@ -482,38 +485,38 @@ validator_field_contents_csfmt_rts_data_v2 <- function(data) {
 }
 
 # DBTable_v9 ----
-#' R6 Class representing a database table with advanced data management capabilities
+#' R6 Class representing a database table
 #'
 #' @description
-#' A comprehensive database table management class that provides high-level operations
-#' for data manipulation, schema validation, and table administration. This class
-#' combines database connectivity with data validation and efficient bulk operations.
+#' A database table management class that provides operations for data
+#' manipulation, schema validation, and table administration. This class
+#' combines database connectivity with data validation and bulk operations.
 #'
 #' @details
-#' The DBTable_v9 class is a sophisticated database table abstraction that provides:
+#' The DBTable_v9 class is a database table abstraction that provides:
 #'
 #' \strong{Core functionality:}
 #' \itemize{
-#'   \item Table creation and schema management
-#'   \item Data insertion with bulk loading capabilities
-#'   \item Upsert operations (insert or update)
-#'   \item Index management (creation, deletion)
-#'   \item Data validation through customizable validators
-#'   \item Integration with dplyr for data queries
+#'   \item Table creation and schema management.
+#'   \item Data insertion with bulk loading capabilities.
+#'   \item Upsert operations (insert or update).
+#'   \item Index management (creation, deletion).
+#'   \item Data validation through customizable validators.
+#'   \item Integration with dplyr for data queries.
 #' }
 #'
 #' \strong{Advanced features:}
 #' \itemize{
-#'   \item Automatic table creation based on field specifications
-#'   \item Schema validation with custom validator functions
-#'   \item Efficient bulk data loading using database-specific methods
-#'   \item Index optimization for query performance
-#'   \item Cross-database compatibility (SQL Server, PostgreSQL)
+#'   \item Automatic table creation based on field specifications.
+#'   \item Schema validation with custom validator functions.
+#'   \item Efficient bulk data loading using database-specific methods.
+#'   \item Index optimization for query performance.
+#'   \item Cross-database compatibility (SQL Server, PostgreSQL).
 #' }
 #'
 #' \strong{Data validation:}
-#' The class supports custom validation functions for both field types and data contents,
-#' ensuring data integrity and schema compliance.
+#' The class supports custom validation functions for both field types and data
+#' contents, which ensure data integrity and schema compliance.
 #'
 #' @import data.table
 #' @import R6
@@ -780,7 +783,7 @@ DBTable_v9 <- R6::R6Class(
 
     #' @description
     #' Class-specific print function.
-    #' @param ... Not in use.
+    #' @param ... Not used.
     print = function(...) {
       if (!self$dbconnection$is_connected()) {
         if (requireNamespace("crayon", quietly = TRUE)) {
@@ -834,20 +837,20 @@ DBTable_v9 <- R6::R6Class(
     },
 
     #' @description
-    #' Connect from the database
+    #' Connect to the database.
     connect = function() {
       self$dbconnection$connect()
       private$lazy_creation_of_table()
     },
 
     #' @description
-    #' Disconnect from the database
+    #' Disconnect from the database.
     disconnect = function() {
       self$dbconnection$disconnect()
     },
 
     #' @description
-    #' Does the table exist
+    #' Does the table exist?
     table_exists = function() {
       return(DBI::dbExistsTable(
         self$dbconnection$autoconnection,
@@ -856,7 +859,7 @@ DBTable_v9 <- R6::R6Class(
     },
 
     #' @description
-    #' Create the database table
+    #' Create the database table.
     create_table = function() {
       # self$connect calls self$create_table.
       # cannot have infinite loop
@@ -886,7 +889,7 @@ DBTable_v9 <- R6::R6Class(
     },
 
     #' @description
-    #' Drop the database table
+    #' Drop the database table.
     remove_table = function() {
       if (self$table_exists()) {
         message(glue::glue("Dropping table {self$table_name}"))
@@ -898,11 +901,10 @@ DBTable_v9 <- R6::R6Class(
     },
 
     #' @description
-    #' Inserts data
+    #' Inserts data into the database table.
     #' @param newdata The data to insert.
-    #' @param confirm_insert_via_nrow Checks nrow() before insert and after insert. If nrow() has not increased sufficiently, then attempt an upsert.
+    #' @param confirm_insert_via_nrow Checks nrow() before the insert and after the insert. If nrow() did not increase enough, the method attempts an upsert.
     #' @param verbose Boolean.
-    #' Inserts data into the database table
     insert_data = function(
       newdata,
       confirm_insert_via_nrow = FALSE,
@@ -976,9 +978,9 @@ DBTable_v9 <- R6::R6Class(
     },
 
     #' @description
-    #' Upserts data into the database table
+    #' Upserts data into the database table.
     #' @param newdata The data to insert.
-    #' @param drop_indexes A vector containing the indexes to be dropped before upserting (can increase performance).
+    #' @param drop_indexes A vector of the indexes to drop before the upsert (can increase performance).
     #' @param verbose Boolean.
     upsert_data = function(
       newdata,
@@ -1026,7 +1028,7 @@ DBTable_v9 <- R6::R6Class(
     },
 
     #' @description
-    #' Drops all rows in the database table
+    #' Drops all rows in the database table.
     drop_all_rows = function() {
       private$lazy_creation_of_table()
       drop_all_rows(
@@ -1064,7 +1066,7 @@ DBTable_v9 <- R6::R6Class(
     #' @description
     #' Drops all rows in the database table and then upserts data.
     #' @param newdata The data to insert.
-    #' @param drop_indexes A vector containing the indexes to be dropped before upserting (can increase performance).
+    #' @param drop_indexes A vector of the indexes to drop before the upsert (can increase performance).
     #' @param verbose Boolean.
     drop_all_rows_and_then_upsert_data = function(
       newdata,
@@ -1083,7 +1085,7 @@ DBTable_v9 <- R6::R6Class(
     #' @description
     #' Drops all rows in the database table and then inserts data.
     #' @param newdata The data to insert.
-    #' @param confirm_insert_via_nrow Checks nrow() before insert and after insert. If nrow() has not increased sufficiently, then attempt an upsert.
+    #' @param confirm_insert_via_nrow Checks nrow() before the insert and after the insert. If nrow() did not increase enough, the method attempts an upsert.
     #' @param verbose Boolean.
     drop_all_rows_and_then_insert_data = function(
       newdata,
@@ -1110,7 +1112,7 @@ DBTable_v9 <- R6::R6Class(
     },
 
     #' @description
-    #' Prints a template dplyr::select call that you can easily copy/paste for all your variables.
+    #' Prints a template dplyr::select call that you can copy and paste for all your variables.
     print_dplyr_select = function() {
       private$lazy_creation_of_table()
       x <- self$tbl() |>
@@ -1123,7 +1125,7 @@ DBTable_v9 <- R6::R6Class(
     },
 
     #' @description
-    #' Adds indexes to the database table from `self$indexes`
+    #' Adds indexes to the database table from `self$indexes`.
     add_indexes = function() {
       private$lazy_creation_of_table()
       for (i in names(self$indexes)) {
@@ -1139,7 +1141,7 @@ DBTable_v9 <- R6::R6Class(
     },
 
     #' @description
-    #' Drops all indees from the database table
+    #' Drops all indexes from the database table.
     drop_indexes = function() {
       private$lazy_creation_of_table()
       for (i in names(self$indexes)) {
@@ -1154,7 +1156,7 @@ DBTable_v9 <- R6::R6Class(
 
     #' @description
     #' Confirms that the names and number of indexes in the database are the same as in the R code.
-    #' Does not confirm the contents of the indexes!
+    #' Does not confirm the contents of the indexes.
     confirm_indexes = function() {
       indexes_db <- get_indexes(
         connection = self$dbconnection$autoconnection,
@@ -1168,8 +1170,8 @@ DBTable_v9 <- R6::R6Class(
     },
 
     #' @description
-    #' Gets the number of rows in the database table
-    #' @param use_count If true, then uses the count command, which is slow but accurate. If false, then uses summary statistics, which is fast but inaccurate.
+    #' Gets the number of rows in the database table.
+    #' @param use_count If TRUE, then uses the count command, which is slow but accurate. If FALSE, then uses summary statistics, which is fast but inaccurate.
     nrow = function(use_count = FALSE) {
       if (use_count) {
         retval <- self$tbl() |>
@@ -1184,7 +1186,7 @@ DBTable_v9 <- R6::R6Class(
     },
 
     #' @description
-    #' Gets the information about the database table
+    #' Gets the information about the database table.
     info = function() {
       retval <- get_table_names_and_info(self$dbconnection$autoconnection)
       retval <- retval[table_name %in% self$table_name]

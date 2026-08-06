@@ -7,7 +7,8 @@
 csdb_get_auth_hook()
 }
 \value{
-The current auth hook function, or NULL if none is set.
+The current authentication hook function, or NULL when no hook is
+  set.
 }
 \description{
 Returns the currently registered authentication hook function.

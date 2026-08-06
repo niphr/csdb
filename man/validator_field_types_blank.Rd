@@ -7,14 +7,14 @@
 validator_field_types_blank(db_field_types)
 }
 \arguments{
-\item{db_field_types}{A named character vector of database field types}
+\item{db_field_types}{A named character vector of database field types.}
 }
 \value{
-Always returns TRUE
+Always returns TRUE.
 }
 \description{
 A pass-through validator that accepts any field types without validation.
-This is useful as a placeholder when no specific field type validation is needed.
+Use it as a placeholder when you need no check on the field types.
 }
 \examples{
 # This validator always returns TRUE regardless of input

@@ -3,9 +3,9 @@
 #' Set authentication hook for database connections
 #'
 #' @description
-#' Register a function to be called when a database connection fails.
-#' This is useful for refreshing Kerberos tickets or other authentication
-#' credentials before retrying the connection.
+#' Registers a function that csdb calls when a database connection fails. Use
+#' it to refresh a Kerberos ticket, or other authentication credentials,
+#' before the next connection attempt.
 #'
 #' @param hook A function with no arguments that performs authentication,
 #'   or NULL to clear the hook.
@@ -47,7 +47,8 @@ csdb_set_auth_hook <- function(hook) {
 #' @description
 #' Returns the currently registered authentication hook function.
 #'
-#' @return The current auth hook function, or NULL if none is set.
+#' @return The current authentication hook function, or NULL when no hook is
+#'   set.
 #' @export
 #' @family auth hook functions
 #' @seealso \code{\link{DBConnection_v9}}, whose \code{connect()} method calls
@@ -72,23 +73,23 @@ csdb_get_auth_hook <- function() {
 #' R6 Class representing a database connection
 #'
 #' @description
-#' A robust database connection manager that handles connections to various database systems
-#' including Microsoft SQL Server and PostgreSQL. This class provides connection management,
-#' authentication, and automatic reconnection capabilities.
+#' A database connection manager that handles connections to various database
+#' systems including Microsoft SQL Server and PostgreSQL. This class provides
+#' connection management, authentication, and automatic reconnection.
 #'
 #' @details
-#' The DBConnection_v9 class encapsulates database connection logic and provides a consistent
-#' interface for connecting to different database systems. It supports both trusted connections
-#' and user/password authentication, handles connection failures gracefully, and provides
-#' automatic reconnection functionality.
+#' The DBConnection_v9 class holds the database connection logic and provides a
+#' consistent interface to different database systems. It supports both trusted
+#' connections and user/password authentication. It handles connection
+#' failures, and it reconnects automatically.
 #'
 #' Key features:
 #' \itemize{
-#'   \item Support for multiple database systems (SQL Server, PostgreSQL)
-#'   \item Automatic connection management with retry logic
-#'   \item Secure credential handling
-#'   \item Connection status monitoring
-#'   \item Graceful error handling and recovery
+#'   \item Support for multiple database systems (SQL Server, PostgreSQL).
+#'   \item Automatic connection management with retry logic.
+#'   \item Secure credential handling.
+#'   \item Connection status monitoring.
+#'   \item Graceful error handling and recovery.
 #' }
 #'
 #' @import data.table
@@ -163,15 +164,15 @@ DBConnection_v9 <- R6::R6Class(
     #' @description
     #' Create a new DBConnection_v9 object.
     #'
-    #' @param driver Driver
-    #' @param server Server
-    #' @param port Port
-    #' @param db DB
-    #' @param schema Schema (e.g. "dbo")
-    #' @param user User
-    #' @param password Password
-    #' @param trusted_connection NULL or "yes"
-    #' @param sslmode NULL or "require"
+    #' @param driver Driver.
+    #' @param server Server.
+    #' @param port Port.
+    #' @param db DB.
+    #' @param schema Schema (e.g. "dbo").
+    #' @param user User.
+    #' @param password Password.
+    #' @param trusted_connection NULL or "yes".
+    #' @param sslmode NULL or "require".
     #' @param role_create_table NULL or the role to take when creating tables.
     #' @return A new `DBConnection_v9` object.
     initialize = function(
@@ -223,7 +224,7 @@ DBConnection_v9 <- R6::R6Class(
 
     #' @description
     #' Is the DB schema connected?
-    #' @return TRUE/FALSE
+    #' @return TRUE/FALSE.
     is_connected = function() {
       retval <- FALSE
       if (is.null(private$pconnection)) {
@@ -291,8 +292,8 @@ DBConnection_v9 <- R6::R6Class(
     },
 
     #' @description
-    #' Connect to the database
-    #' @param attempts Number of attempts to be made to try to connect
+    #' Connect to the database.
+    #' @param attempts Number of attempts to connect.
     connect = function(attempts = 2) {
       success <- FALSE
       auth_hook_called <- FALSE
@@ -338,7 +339,7 @@ DBConnection_v9 <- R6::R6Class(
     },
 
     #' @description
-    #' Disconnect from the database
+    #' Disconnect from the database.
     disconnect = function() {
       if (self$is_connected()) {
         suppressWarnings(DBI::dbDisconnect(private$pconnection))

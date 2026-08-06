@@ -7,15 +7,16 @@
 validator_field_types_csfmt_rts_data_v1(db_field_types)
 }
 \arguments{
-\item{db_field_types}{A named character vector of database field types}
+\item{db_field_types}{A named character vector of database field types.}
 }
 \value{
-TRUE if field types are valid for csfmt_rts_data_v1, FALSE otherwise
+TRUE if field types are valid for csfmt_rts_data_v1, FALSE
+  otherwise.
 }
 \description{
-Validates that field types conform to the csfmt_rts_data_v1 schema specification.
-This validator ensures that the first 16 fields match the expected structure
-for real-time surveillance data format version 1.
+Checks that field types conform to the csfmt_rts_data_v1 schema
+specification. The validator checks the first 16 entries of
+\code{db_field_types} against the expected structure of that schema.
 }
 \examples{
 # Valid field types for csfmt_rts_data_v1

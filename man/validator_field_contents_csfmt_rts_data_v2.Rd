@@ -7,16 +7,16 @@
 validator_field_contents_csfmt_rts_data_v2(data)
 }
 \arguments{
-\item{data}{A data.frame or data.table containing the data to validate}
+\item{data}{A data.frame or data.table containing the data to validate.}
 }
 \value{
-TRUE if data is valid for csfmt_rts_data_v2, FALSE otherwise (with error attribute)
+TRUE if data is valid for csfmt_rts_data_v2, FALSE otherwise (with
+  error attribute).
 }
 \description{
-Validates that data contents conform to the csfmt_rts_data_v2 schema specification.
-This validator checks that granularity_time, granularity_geo, border, sex, and date
-fields contain valid values according to the surveillance data format requirements
-for version 2.
+Checks that data contents conform to the csfmt_rts_data_v2 schema
+specification. The validator checks the granularity_time, granularity_geo,
+border, sex, and date fields against the values that schema allows.
 }
 \examples{
 # Valid data for csfmt_rts_data_v2 (all required columns present)

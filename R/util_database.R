@@ -5,19 +5,19 @@
 
 #' Replace non-finite values with NA, by reference
 #'
-#' `Inf`, `-Inf` and `NaN` are written as text by every write path in this
-#' package, which destroys the upload: the CSV backends write the literal
-#' string, and `DBI::dbAppendTable()` stores `Inf` and reads it back as `Inf`.
-#' Setting them to `NA` first is what makes all three backends agree.
+#' Every write path in this package writes `Inf`, `-Inf` and `NaN` as text,
+#' which destroys the upload. The CSV backends write the literal string.
+#' `DBI::dbAppendTable()` stores `Inf` and reads it back as `Inf`. This
+#' function sets them to `NA` first, which makes all three backends agree.
 #'
-#' This is shared by `write_data_infile()` and the SQLite `load_data_infile`
-#' method. The `POSIXt` to character conversion is deliberately NOT shared:
-#' the SQLite path needs a `POSIXct` to stay a `POSIXct`, because a connection
-#' opened with `extended_types = TRUE` round-trips it through a `DATETIME`
-#' column correctly.
+#' `write_data_infile()` and the SQLite `load_data_infile` method both call
+#' this function. The two paths do not share the `POSIXt` to character
+#' conversion, and that is deliberate. The SQLite path needs a `POSIXct` to
+#' stay a `POSIXct`. A connection opened with `extended_types = TRUE`
+#' round-trips a `POSIXct` through a `DATETIME` column correctly.
 #'
-#' @param dt data.table to scrub
-#' @return `dt`, invisibly. Modified by reference.
+#' @param dt data.table to scrub.
+#' @return `dt`, invisibly. The function changes `dt` by reference.
 #' @keywords internal
 #' @noRd
 scrub_non_finite <- function(dt) {
@@ -30,18 +30,18 @@ scrub_non_finite <- function(dt) {
 
 #' Write data.table to file for database bulk insert
 #'
-#' Internal function to write data.table to CSV file with proper formatting
-#' for database bulk insert operations. Handles special cases like infinites,
-#' NaNs, and POSIXt objects.
+#' Internal function that writes a data.table to a CSV file. The format suits a
+#' database bulk insert. The function handles the special cases: infinite
+#' values, `NaN` values, and `POSIXt` objects.
 #'
-#' @param dt data.table to write
-#' @param file Output file path
-#' @param colnames Logical indicating whether to include column names
-#' @param eol End of line character
-#' @param quote Quoting behavior
-#' @param na String to use for NA values
-#' @param sep Column separator
-#' @return NULL (called for side effects)
+#' @param dt data.table to write.
+#' @param file Output file path.
+#' @param colnames Logical, whether to include the column names.
+#' @param eol End of line character.
+#' @param quote Quoting behavior.
+#' @param na String to use for NA values.
+#' @param sep Column separator.
+#' @return NULL. The function is called for its side effects.
 #' @keywords internal
 #' @noRd
 write_data_infile <- function(
@@ -74,12 +74,12 @@ write_data_infile <- function(
 
 #' List indexes for a database table
 #'
-#' Internal function to list all indexes for a specific table.
-#' Currently only supports Microsoft SQL Server.
+#' Internal function that lists all indexes for one table. It supports
+#' Microsoft SQL Server only.
 #'
-#' @param connection Database connection object
-#' @param table Name of the table to list indexes for
-#' @return data.frame with index information
+#' @param connection Database connection object.
+#' @param table Name of the table to list indexes for.
+#' @return data.frame with index information.
 #' @keywords internal
 #' @noRd
 list_indexes <- function(connection, table) {
@@ -252,7 +252,7 @@ get_db_classes <- function() {
 #' Re-registers S7 methods for database operations. Call this function if you
 #' encounter method dispatch errors with database connections.
 #'
-#' @return NULL (called for side effects)
+#' @return NULL. The function is called for its side effects.
 #' @keywords internal
 #' @noRd
 refresh_database_methods <- function() {
@@ -278,11 +278,11 @@ refresh_database_methods <- function() {
 # Debug function to show method dispatch information
 #' Debug database method dispatch
 #'
-#' Shows information about registered classes and methods for debugging
-#' method dispatch issues.
+#' Shows information about registered classes and methods. Use it to debug
+#' method dispatch.
 #'
-#' @param connection Optional database connection object to check
-#' @return List with debugging information
+#' @param connection Optional database connection object to check.
+#' @return List with debugging information.
 #' @keywords internal
 #' @noRd
 debug_database_methods <- function(connection = NULL) {
@@ -1168,12 +1168,12 @@ S7::method(create_table, db_postgres) <- function(
 
 #' The csdb field types that SQLite accepts, and what each becomes
 #'
-#' The map is closed on purpose. SQLite accepts any declared type name, so
-#' passing an unrecognised one straight through would create a table with an
-#' unintended affinity and no warning at all: `TEXT(100)`, `VARCHAR(100)` and
-#' a misspelling would all succeed. DATE and DATETIME are declared types
-#' rather than storage classes, and are what a connection opened with
-#' `extended_types = TRUE` reads back as `Date` and `POSIXct`.
+#' The map is closed on purpose. SQLite accepts any declared type name. An
+#' unrecognised name passed straight through would create a table with an
+#' unintended affinity and no warning. `TEXT(100)`, `VARCHAR(100)` and a
+#' misspelling would all succeed. `DATE` and `DATETIME` are declared types
+#' rather than storage classes. A connection opened with
+#' `extended_types = TRUE` reads them back as `Date` and `POSIXct`.
 #'
 #' @keywords internal
 #' @noRd

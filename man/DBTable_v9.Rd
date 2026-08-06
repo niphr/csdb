@@ -2,37 +2,37 @@
 % Please edit documentation in R/r6_DBTable_v9.R
 \name{DBTable_v9}
 \alias{DBTable_v9}
-\title{R6 Class representing a database table with advanced data management capabilities}
+\title{R6 Class representing a database table}
 \description{
-A comprehensive database table management class that provides high-level operations
-for data manipulation, schema validation, and table administration. This class
-combines database connectivity with data validation and efficient bulk operations.
+A database table management class that provides operations for data
+manipulation, schema validation, and table administration. This class
+combines database connectivity with data validation and bulk operations.
 }
 \details{
-The DBTable_v9 class is a sophisticated database table abstraction that provides:
+The DBTable_v9 class is a database table abstraction that provides:
 
 \strong{Core functionality:}
 \itemize{
-  \item Table creation and schema management
-  \item Data insertion with bulk loading capabilities
-  \item Upsert operations (insert or update)
-  \item Index management (creation, deletion)
-  \item Data validation through customizable validators
-  \item Integration with dplyr for data queries
+  \item Table creation and schema management.
+  \item Data insertion with bulk loading capabilities.
+  \item Upsert operations (insert or update).
+  \item Index management (creation, deletion).
+  \item Data validation through customizable validators.
+  \item Integration with dplyr for data queries.
 }
 
 \strong{Advanced features:}
 \itemize{
-  \item Automatic table creation based on field specifications
-  \item Schema validation with custom validator functions
-  \item Efficient bulk data loading using database-specific methods
-  \item Index optimization for query performance
-  \item Cross-database compatibility (SQL Server, PostgreSQL)
+  \item Automatic table creation based on field specifications.
+  \item Schema validation with custom validator functions.
+  \item Efficient bulk data loading using database-specific methods.
+  \item Index optimization for query performance.
+  \item Cross-database compatibility (SQL Server, PostgreSQL).
 }
 
 \strong{Data validation:}
-The class supports custom validation functions for both field types and data contents,
-ensuring data integrity and schema compliance.
+The class supports custom validation functions for both field types and data
+contents, which ensure data integrity and schema compliance.
 }
 \examples{
 # Creating the object opens no connection, and the field types are
@@ -230,7 +230,7 @@ Other database classes:
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
-      \item{\code{...}}{Not in use.}
+      \item{\code{...}}{Not used.}
     }
     \if{html}{\out{</div>}}
   }
@@ -240,7 +240,7 @@ Other database classes:
 \if{html}{\out{<a id="method-DBTable_v9-connect"></a>}}
 \if{latex}{\out{\hypertarget{method-DBTable_v9-connect}{}}}
 \subsection{\code{DBTable_v9$connect()}}{
-  Connect from the database
+  Connect to the database.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$connect()}
@@ -252,7 +252,7 @@ Other database classes:
 \if{html}{\out{<a id="method-DBTable_v9-disconnect"></a>}}
 \if{latex}{\out{\hypertarget{method-DBTable_v9-disconnect}{}}}
 \subsection{\code{DBTable_v9$disconnect()}}{
-  Disconnect from the database
+  Disconnect from the database.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$disconnect()}
@@ -264,7 +264,7 @@ Other database classes:
 \if{html}{\out{<a id="method-DBTable_v9-table_exists"></a>}}
 \if{latex}{\out{\hypertarget{method-DBTable_v9-table_exists}{}}}
 \subsection{\code{DBTable_v9$table_exists()}}{
-  Does the table exist
+  Does the table exist?
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$table_exists()}
@@ -276,7 +276,7 @@ Other database classes:
 \if{html}{\out{<a id="method-DBTable_v9-create_table"></a>}}
 \if{latex}{\out{\hypertarget{method-DBTable_v9-create_table}{}}}
 \subsection{\code{DBTable_v9$create_table()}}{
-  Create the database table
+  Create the database table.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$create_table()}
@@ -288,7 +288,7 @@ Other database classes:
 \if{html}{\out{<a id="method-DBTable_v9-remove_table"></a>}}
 \if{latex}{\out{\hypertarget{method-DBTable_v9-remove_table}{}}}
 \subsection{\code{DBTable_v9$remove_table()}}{
-  Drop the database table
+  Drop the database table.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$remove_table()}
@@ -300,7 +300,7 @@ Other database classes:
 \if{html}{\out{<a id="method-DBTable_v9-insert_data"></a>}}
 \if{latex}{\out{\hypertarget{method-DBTable_v9-insert_data}{}}}
 \subsection{\code{DBTable_v9$insert_data()}}{
-  Inserts data
+  Inserts data into the database table.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$insert_data(
@@ -314,9 +314,8 @@ Other database classes:
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{newdata}}{The data to insert.}
-      \item{\code{confirm_insert_via_nrow}}{Checks nrow() before insert and after insert. If nrow() has not increased sufficiently, then attempt an upsert.}
-      \item{\code{verbose}}{Boolean.
-Inserts data into the database table}
+      \item{\code{confirm_insert_via_nrow}}{Checks nrow() before the insert and after the insert. If nrow() did not increase enough, the method attempts an upsert.}
+      \item{\code{verbose}}{Boolean.}
     }
     \if{html}{\out{</div>}}
   }
@@ -326,7 +325,7 @@ Inserts data into the database table}
 \if{html}{\out{<a id="method-DBTable_v9-upsert_data"></a>}}
 \if{latex}{\out{\hypertarget{method-DBTable_v9-upsert_data}{}}}
 \subsection{\code{DBTable_v9$upsert_data()}}{
-  Upserts data into the database table
+  Upserts data into the database table.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$upsert_data(
@@ -340,7 +339,7 @@ Inserts data into the database table}
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{newdata}}{The data to insert.}
-      \item{\code{drop_indexes}}{A vector containing the indexes to be dropped before upserting (can increase performance).}
+      \item{\code{drop_indexes}}{A vector of the indexes to drop before the upsert (can increase performance).}
       \item{\code{verbose}}{Boolean.}
     }
     \if{html}{\out{</div>}}
@@ -351,7 +350,7 @@ Inserts data into the database table}
 \if{html}{\out{<a id="method-DBTable_v9-drop_all_rows"></a>}}
 \if{latex}{\out{\hypertarget{method-DBTable_v9-drop_all_rows}{}}}
 \subsection{\code{DBTable_v9$drop_all_rows()}}{
-  Drops all rows in the database table
+  Drops all rows in the database table.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$drop_all_rows()}
@@ -415,7 +414,7 @@ Inserts data into the database table}
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{newdata}}{The data to insert.}
-      \item{\code{drop_indexes}}{A vector containing the indexes to be dropped before upserting (can increase performance).}
+      \item{\code{drop_indexes}}{A vector of the indexes to drop before the upsert (can increase performance).}
       \item{\code{verbose}}{Boolean.}
     }
     \if{html}{\out{</div>}}
@@ -440,7 +439,7 @@ Inserts data into the database table}
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{newdata}}{The data to insert.}
-      \item{\code{confirm_insert_via_nrow}}{Checks nrow() before insert and after insert. If nrow() has not increased sufficiently, then attempt an upsert.}
+      \item{\code{confirm_insert_via_nrow}}{Checks nrow() before the insert and after the insert. If nrow() did not increase enough, the method attempts an upsert.}
       \item{\code{verbose}}{Boolean.}
     }
     \if{html}{\out{</div>}}
@@ -463,7 +462,7 @@ Inserts data into the database table}
 \if{html}{\out{<a id="method-DBTable_v9-print_dplyr_select"></a>}}
 \if{latex}{\out{\hypertarget{method-DBTable_v9-print_dplyr_select}{}}}
 \subsection{\code{DBTable_v9$print_dplyr_select()}}{
-  Prints a template dplyr::select call that you can easily copy/paste for all your variables.
+  Prints a template dplyr::select call that you can copy and paste for all your variables.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$print_dplyr_select()}
@@ -475,7 +474,7 @@ Inserts data into the database table}
 \if{html}{\out{<a id="method-DBTable_v9-add_indexes"></a>}}
 \if{latex}{\out{\hypertarget{method-DBTable_v9-add_indexes}{}}}
 \subsection{\code{DBTable_v9$add_indexes()}}{
-  Adds indexes to the database table from `self$indexes`
+  Adds indexes to the database table from `self$indexes`.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$add_indexes()}
@@ -487,7 +486,7 @@ Inserts data into the database table}
 \if{html}{\out{<a id="method-DBTable_v9-drop_indexes"></a>}}
 \if{latex}{\out{\hypertarget{method-DBTable_v9-drop_indexes}{}}}
 \subsection{\code{DBTable_v9$drop_indexes()}}{
-  Drops all indees from the database table
+  Drops all indexes from the database table.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$drop_indexes()}
@@ -500,7 +499,7 @@ Inserts data into the database table}
 \if{latex}{\out{\hypertarget{method-DBTable_v9-confirm_indexes}{}}}
 \subsection{\code{DBTable_v9$confirm_indexes()}}{
   Confirms that the names and number of indexes in the database are the same as in the R code.
-Does not confirm the contents of the indexes!
+Does not confirm the contents of the indexes.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$confirm_indexes()}
@@ -512,7 +511,7 @@ Does not confirm the contents of the indexes!
 \if{html}{\out{<a id="method-DBTable_v9-nrow"></a>}}
 \if{latex}{\out{\hypertarget{method-DBTable_v9-nrow}{}}}
 \subsection{\code{DBTable_v9$nrow()}}{
-  Gets the number of rows in the database table
+  Gets the number of rows in the database table.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$nrow(use_count = FALSE)}
@@ -521,7 +520,7 @@ Does not confirm the contents of the indexes!
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
-      \item{\code{use_count}}{If true, then uses the count command, which is slow but accurate. If false, then uses summary statistics, which is fast but inaccurate.}
+      \item{\code{use_count}}{If TRUE, then uses the count command, which is slow but accurate. If FALSE, then uses summary statistics, which is fast but inaccurate.}
     }
     \if{html}{\out{</div>}}
   }
@@ -531,7 +530,7 @@ Does not confirm the contents of the indexes!
 \if{html}{\out{<a id="method-DBTable_v9-info"></a>}}
 \if{latex}{\out{\hypertarget{method-DBTable_v9-info}{}}}
 \subsection{\code{DBTable_v9$info()}}{
-  Gets the information about the database table
+  Gets the information about the database table.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$info()}

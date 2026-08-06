@@ -1,32 +1,33 @@
 #' Get table names, number of rows, and size information
 #'
-#' Retrieves comprehensive information about database tables including their names,
-#' row counts, and storage size metrics. This function provides database-specific
-#' implementations for different database systems.
+#' Gets information about database tables: their names, their row counts, and
+#' their storage sizes. The function is a generic, with one method for each
+#' supported database system.
 #'
-#' @param connection A database connection object (e.g., from \code{\link[DBI]{dbConnect}})
+#' @param connection A database connection object, for example from
+#'   \code{\link[DBI]{dbConnect}}.
 #' @return A data.table containing table information with columns:
 #' \describe{
-#'   \item{table_name}{Character. Name of the table}
-#'   \item{nrow}{Numeric. The row count as the database reports it:
-#'     \code{reltuples} from \code{pg_class} on PostgreSQL, which is an
-#'     estimate, and the \code{rows} column of \code{sp_spaceused} on
-#'     Microsoft SQL Server. On SQLite it is \code{COUNT(*)}, which is exact
-#'     rather than an estimate}
+#'   \item{table_name}{Character. Name of the table.}
+#'   \item{nrow}{Numeric. The row count as the database reports it. On
+#'     PostgreSQL it is \code{reltuples} from \code{pg_class}, which is an
+#'     estimate. On Microsoft SQL Server it is the \code{rows} column of
+#'     \code{sp_spaceused}. On SQLite it is \code{COUNT(*)}, which is exact
+#'     rather than an estimate.}
 #'   \item{size_total_gb}{Numeric. Total size of the table in gigabytes.
-#'     \code{NA_real_} on SQLite}
+#'     \code{NA_real_} on SQLite.}
 #'   \item{size_data_gb}{Numeric. Size of data in gigabytes.
-#'     \code{NA_real_} on SQLite}
+#'     \code{NA_real_} on SQLite.}
 #'   \item{size_index_gb}{Numeric. Size of indexes in gigabytes.
-#'     \code{NA_real_} on SQLite}
+#'     \code{NA_real_} on SQLite.}
 #' }
 #'
-#' SQLite reports no per-table size. The \code{dbstat} virtual table, which is
-#' the only thing that could give one, is not compiled into the SQLite that
-#' \code{RSQLite} ships: querying it fails with \code{no such table: dbstat}.
-#' \code{pragma page_count} and \code{pragma page_size} exist, but they
-#' describe the whole file rather than a table, so all three size columns are
-#' \code{NA_real_}.
+#' SQLite reports no per-table size. The \code{dbstat} virtual table is the
+#' only source of one. The SQLite build that \code{RSQLite} ships does not
+#' compile \code{dbstat} in: a query against it fails with
+#' \code{no such table: dbstat}. \code{pragma page_count} and
+#' \code{pragma page_size} exist, but they describe the whole file rather than
+#' one table, so all three size columns are \code{NA_real_}.
 #' @export
 #' @seealso \code{\link{DBTable_v9}}, whose \code{info()} method and whose
 #'   \code{nrow(use_count = FALSE)} method call this function.
