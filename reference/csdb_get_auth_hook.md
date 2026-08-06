@@ -10,7 +10,7 @@ csdb_get_auth_hook()
 
 ## Value
 
-The current auth hook function, or NULL if none is set.
+The current authentication hook function, or NULL when no hook is set.
 
 ## See also
 

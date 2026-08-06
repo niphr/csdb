@@ -1,5 +1,60 @@
 # Changelog
 
+## Version 2026.8.7
+
+### Documentation
+
+- Repository prose now follows ASD-STE100 (Simplified Technical
+  English). The sweep covered the roxygen2 blocks in `R/`, both
+  vignettes, and `README.md`. It changed no claim and no executable
+  code. `index.md` needed no change.
+- No roxygen sentence runs over 25 words. Counted per authored unit,
+  which is one `@description`, `@param`, `@return`, `@seealso`,
+  paragraph or Rd `\item`, the count fell from 6 to 0. The longest
+  sentence fell from 36 words to 24.
+- Roxygen fields and `\itemize` items now end in a full stop. Without
+  one, a sentence splitter runs straight through the field boundary and
+  reports a merge as one sentence. That is where the 74-word to 97-word
+  readings came from, in blocks whose longest authored sentence was
+  under 25 words.
+- `vignettes/csdb.Rmd`, `vignettes/backends.Rmd` and `README.md` are
+  also at zero sentences over 25 words. The counts before were 3, 1 and
+  2.
+- `vignettes/csdb.Rmd` and `vignettes/csdb.Rmd.orig` carry identical
+  prose edits, so the generated file and its source stay in sync.
+  `vignettes/_PRECOMPILER.R` was not re-run, and no chunk output
+  changed.
+- The v3 statement in the introduction vignette keeps its size. `csdb`
+  CAN store a `csfmt_rts_data_v3`, with the `_blank` pair or with a
+  validator of your own. What is missing is a validator that knows the
+  v3 shape.
+- Ornamental adjectives are gone from the reference pages: “robust” from
+  `DBConnection_v9`, “sophisticated” and “comprehensive” from
+  `DBTable_v9`, and “comprehensive” from
+  [`get_table_names_and_info()`](https://niphr.github.io/csdb/reference/get_table_names_and_info.md).
+  The `DBTable_v9` title is now “R6 Class representing a database
+  table”, parallel with `DBConnection_v9`.
+
+### Bug Fixes
+
+- `DBTable_v9$connect()` was documented as “Connect from the database”.
+  It connects to the database, which is what `DBConnection_v9$connect()`
+  already said.
+- `DBTable_v9$drop_indexes()` was documented as “Drops all indees from
+  the database table”. The word is “indexes”.
+- `DBTable_v9$insert_data()` carried a stray prose line after
+  `@param verbose`, so roxygen2 rendered the `verbose` argument as
+  “Boolean. Inserts data into the database table”. That sentence is now
+  the method’s `@description`, and `verbose` reads “Boolean.”
+
+### Development
+
+- `man/` was regenerated with roxygen2 8.0.0, the version `DESCRIPTION`
+  declares. `NAMESPACE` is unchanged.
+- Release notes for 2026.8.6 and earlier are left as they shipped. A
+  changelog is a record, and rewording a released entry changes that
+  record.
+
 ## Version 2026.8.6
 
 ### Documentation

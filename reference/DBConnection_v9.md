@@ -1,29 +1,28 @@
 # R6 Class representing a database connection
 
-A robust database connection manager that handles connections to various
+A database connection manager that handles connections to various
 database systems including Microsoft SQL Server and PostgreSQL. This
 class provides connection management, authentication, and automatic
-reconnection capabilities.
+reconnection.
 
 ## Details
 
-The DBConnection_v9 class encapsulates database connection logic and
-provides a consistent interface for connecting to different database
-systems. It supports both trusted connections and user/password
-authentication, handles connection failures gracefully, and provides
-automatic reconnection functionality.
+The DBConnection_v9 class holds the database connection logic and
+provides a consistent interface to different database systems. It
+supports both trusted connections and user/password authentication. It
+handles connection failures, and it reconnects automatically.
 
 Key features:
 
-- Support for multiple database systems (SQL Server, PostgreSQL)
+- Support for multiple database systems (SQL Server, PostgreSQL).
 
-- Automatic connection management with retry logic
+- Automatic connection management with retry logic.
 
-- Secure credential handling
+- Secure credential handling.
 
-- Connection status monitoring
+- Connection status monitoring.
 
-- Graceful error handling and recovery
+- Graceful error handling and recovery.
 
 ## See also
 
@@ -94,39 +93,39 @@ Create a new DBConnection_v9 object.
 
 - `driver`:
 
-  Driver
+  Driver.
 
 - `server`:
 
-  Server
+  Server.
 
 - `port`:
 
-  Port
+  Port.
 
 - `db`:
 
-  DB
+  DB.
 
 - `schema`:
 
-  Schema (e.g. "dbo")
+  Schema (e.g. "dbo").
 
 - `user`:
 
-  User
+  User.
 
 - `password`:
 
-  Password
+  Password.
 
 - `trusted_connection`:
 
-  NULL or "yes"
+  NULL or "yes".
 
 - `sslmode`:
 
-  NULL or "require"
+  NULL or "require".
 
 - `role_create_table`:
 
@@ -148,7 +147,7 @@ Is the DB schema connected?
 
 #### Returns
 
-TRUE/FALSE
+TRUE/FALSE.
 
 ------------------------------------------------------------------------
 
@@ -170,7 +169,7 @@ Class-specific print function.
 
 ### `DBConnection_v9$connect()`
 
-Connect to the database
+Connect to the database.
 
 #### Usage
 
@@ -180,13 +179,13 @@ Connect to the database
 
 - `attempts`:
 
-  Number of attempts to be made to try to connect
+  Number of attempts to connect.
 
 ------------------------------------------------------------------------
 
 ### `DBConnection_v9$disconnect()`
 
-Disconnect from the database
+Disconnect from the database.
 
 #### Usage
 

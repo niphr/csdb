@@ -1,8 +1,7 @@
 # Blank data contents validator
 
-A pass-through validator that accepts any data without validation. This
-is useful as a placeholder when no specific data content validation is
-needed.
+A pass-through validator that accepts any data without validation. Use
+it as a placeholder when you need no check on the data contents.
 
 ## Usage
 
@@ -14,11 +13,11 @@ validator_field_contents_blank(data)
 
 - data:
 
-  A data.frame or data.table containing the data to validate
+  A data.frame or data.table containing the data to validate.
 
 ## Value
 
-Always returns TRUE
+Always returns TRUE.
 
 ## See also
 

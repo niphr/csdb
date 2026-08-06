@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.6</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.7</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -50,6 +50,36 @@
       <small>Source: <a href="https://github.com/niphr/csdb/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="2026.8.7" id="version-202687">Version 2026.8.7<a class="anchor" aria-label="anchor" href="#version-202687"></a></h2>
+<div class="section level3">
+<h3 id="documentation-2026-8-7">Documentation<a class="anchor" aria-label="anchor" href="#documentation-2026-8-7"></a></h3>
+<ul><li>Repository prose now follows ASD-STE100 (Simplified Technical English). The sweep covered the roxygen2 blocks in <code>R/</code>, both vignettes, and <code>README.md</code>. It changed no claim and no executable code. <code>index.md</code> needed no change.</li>
+<li>No roxygen sentence runs over 25 words. Counted per authored unit, which is one <code>@description</code>, <code>@param</code>, <code>@return</code>, <code>@seealso</code>, paragraph or Rd <code>\item</code>, the count fell from 6 to 0. The longest sentence fell from 36 words to 24.</li>
+<li>Roxygen fields and <code>\itemize</code> items now end in a full stop. Without one, a sentence splitter runs straight through the field boundary and reports a merge as one sentence. That is where the 74-word to 97-word readings came from, in blocks whose longest authored sentence was under 25 words.</li>
+<li>
+<code>vignettes/csdb.Rmd</code>, <code>vignettes/backends.Rmd</code> and <code>README.md</code> are also at zero sentences over 25 words. The counts before were 3, 1 and 2.</li>
+<li>
+<code>vignettes/csdb.Rmd</code> and <code>vignettes/csdb.Rmd.orig</code> carry identical prose edits, so the generated file and its source stay in sync. <code>vignettes/_PRECOMPILER.R</code> was not re-run, and no chunk output changed.</li>
+<li>The v3 statement in the introduction vignette keeps its size. <code>csdb</code> CAN store a <code>csfmt_rts_data_v3</code>, with the <code>_blank</code> pair or with a validator of your own. What is missing is a validator that knows the v3 shape.</li>
+<li>Ornamental adjectives are gone from the reference pages: “robust” from <code>DBConnection_v9</code>, “sophisticated” and “comprehensive” from <code>DBTable_v9</code>, and “comprehensive” from <code><a href="../reference/get_table_names_and_info.html">get_table_names_and_info()</a></code>. The <code>DBTable_v9</code> title is now “R6 Class representing a database table”, parallel with <code>DBConnection_v9</code>.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="bug-fixes-2026-8-7">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-2026-8-7"></a></h3>
+<ul><li>
+<code>DBTable_v9$connect()</code> was documented as “Connect from the database”. It connects to the database, which is what <code>DBConnection_v9$connect()</code> already said.</li>
+<li>
+<code>DBTable_v9$drop_indexes()</code> was documented as “Drops all indees from the database table”. The word is “indexes”.</li>
+<li>
+<code>DBTable_v9$insert_data()</code> carried a stray prose line after <code>@param verbose</code>, so roxygen2 rendered the <code>verbose</code> argument as “Boolean. Inserts data into the database table”. That sentence is now the method’s <code>@description</code>, and <code>verbose</code> reads “Boolean.”</li>
+</ul></div>
+<div class="section level3">
+<h3 id="development-2026-8-7">Development<a class="anchor" aria-label="anchor" href="#development-2026-8-7"></a></h3>
+<ul><li>
+<code>man/</code> was regenerated with roxygen2 8.0.0, the version <code>DESCRIPTION</code> declares. <code>NAMESPACE</code> is unchanged.</li>
+<li>Release notes for 2026.8.6 and earlier are left as they shipped. A changelog is a record, and rewording a released entry changes that record.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="2026.8.6" id="version-202686">Version 2026.8.6<a class="anchor" aria-label="anchor" href="#version-202686"></a></h2>
 <div class="section level3">

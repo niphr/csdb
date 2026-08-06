@@ -1,8 +1,8 @@
 # Blank field types validator
 
 A pass-through validator that accepts any field types without
-validation. This is useful as a placeholder when no specific field type
-validation is needed.
+validation. Use it as a placeholder when you need no check on the field
+types.
 
 ## Usage
 
@@ -14,11 +14,11 @@ validator_field_types_blank(db_field_types)
 
 - db_field_types:
 
-  A named character vector of database field types
+  A named character vector of database field types.
 
 ## Value
 
-Always returns TRUE
+Always returns TRUE.
 
 ## See also
 

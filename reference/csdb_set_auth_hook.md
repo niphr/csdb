@@ -1,8 +1,8 @@
 # Set authentication hook for database connections
 
-Register a function to be called when a database connection fails. This
-is useful for refreshing Kerberos tickets or other authentication
-credentials before retrying the connection.
+Registers a function that csdb calls when a database connection fails.
+Use it to refresh a Kerberos ticket, or other authentication
+credentials, before the next connection attempt.
 
 ## Usage
 

@@ -7,8 +7,7 @@ Main R6 classes for database connection and table management
 - [`DBConnection_v9`](https://niphr.github.io/csdb/reference/DBConnection_v9.md)
   : R6 Class representing a database connection
 - [`DBTable_v9`](https://niphr.github.io/csdb/reference/DBTable_v9.md) :
-  R6 Class representing a database table with advanced data management
-  capabilities
+  R6 Class representing a database table
 
 ## Database Utilities
 

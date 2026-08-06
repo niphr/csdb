@@ -23,7 +23,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.6</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.7</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -92,16 +92,18 @@ the rest. Change the list and the same table definition runs against a
 different engine. This vignette puts the PostgreSQL list and the SQLite
 list next to each other, then lists what a user must know about the
 differences.</p>
-<p>None of the code below runs. It reaches a database, and the vignette
-is built where there is none. It is written to be copied.</p>
+<p>None of the code below runs. It reaches a database, and the build
+machine has none. Copy it into your own script.</p>
 <p><code><a href="../articles/csdb.html">vignette("csdb", package = "csdb")</a></code> is the worked example
 that does run, on SQLite.</p>
 <div class="section level2">
 <h2 id="two-configurations">Two configurations<a class="anchor" aria-label="anchor" href="#two-configurations"></a>
 </h2>
-<p>PostgreSQL reads eight settings. Credentials come from the
-environment, so that they stay out of scripts and out of version
-control.</p>
+<p>PostgreSQL reads nine settings. This example sets eight of them. The
+ninth is <code>role_create_table</code>, which makes
+<code>create_table</code> issue <code>SET ROLE</code> before it creates
+a table. This example reads the credentials from the environment itself,
+so that they stay out of scripts and out of version control.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cfg_postgres</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>  driver <span class="op">=</span> <span class="st">"PostgreSQL Unicode"</span>,</span>
@@ -115,7 +117,7 @@ control.</p>
 <span><span class="op">)</span></span></code></pre></div>
 <p>SQLite reads two. <code>db</code> is the path to the file, which
 <code>DBConnection_v9</code> creates on first connect, along with any
-missing parent directory. The other six settings are accepted and
+missing parent directory. The other seven settings are accepted and
 ignored, so a configuration built from the same environment variables
 still works.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
@@ -123,10 +125,10 @@ still works.</p>
 <span>  driver <span class="op">=</span> <span class="st">"SQLite"</span>,</span>
 <span>  db <span class="op">=</span> <span class="st">"~/data/mydb.sqlite"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p>The driver string is matched case-insensitively for SQLite:
+<p>csdb matches the driver string case-insensitively for SQLite:
 <code>"sqlite"</code>, <code>"SQLite"</code> and <code>"SQLITE"</code>
-all select it. <code>"PostgreSQL Unicode"</code> is matched exactly,
-because it must equal an entry in <code>odbcinst.ini</code>.</p>
+all select it. csdb matches <code>"PostgreSQL Unicode"</code> exactly,
+because it MUST equal an entry in <code>odbcinst.ini</code>.</p>
 </div>
 <div class="section level2">
 <h2 id="the-same-table-against-each">The same table against each<a class="anchor" aria-label="anchor" href="#the-same-table-against-each"></a>
@@ -238,7 +240,7 @@ indexes in place.</td>
 </h3>
 <p>SQLite accepts any declared type name. <code>VARCHAR(100)</code>,
 <code>TEXT(100)</code> or a misspelling would all create a table, with
-an affinity nobody asked for and no warning. <code>csdb</code> therefore
+an unintended affinity and no warning. <code>csdb</code> therefore
 accepts six types and rejects the rest:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/DBTable_v9.html">DBTable_v9</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span>
@@ -259,10 +261,10 @@ than storage classes. <code>DBConnection_v9</code> opens the file with
 <h3 id="why-the-primary-key-cannot-be-added-later">Why the primary key cannot be added later<a class="anchor" aria-label="anchor" href="#why-the-primary-key-cannot-be-added-later"></a>
 </h3>
 <p><code>ALTER TABLE cases ADD CONSTRAINT ... PRIMARY KEY (...)</code>
-is <code>near "CONSTRAINT": syntax error</code> in SQLite. The key must
+is <code>near "CONSTRAINT": syntax error</code> in SQLite. The key MUST
 therefore exist from the first <code>CREATE TABLE</code>. Two
 consequences follow. <code>$upsert_data()</code> needs that key, because
-<code>ON CONFLICT (&lt;keys&gt;)</code> requires a matching
+<code>ON CONFLICT (&lt;keys&gt;)</code> needs a matching
 <code>PRIMARY KEY</code> or <code>UNIQUE</code> constraint. And every
 delete path is a <code>DELETE</code> rather than a drop-and-rename,
 because a dropped key could not be put back.</p>
@@ -274,10 +276,10 @@ because a dropped key could not be put back.</p>
 <p>Use SQLite for tests, for examples, and for a single-writer pipeline
 on one machine. It is a file: there is nothing to install, nothing to
 start, and nothing to authenticate against.</p>
-<p>Use PostgreSQL when more than one process writes, when the data
-outgrows one machine, or when the row counts get large enough that a
-planner estimate is the honest answer and an exact <code>COUNT(*)</code>
-is too slow.</p>
+<p>Use PostgreSQL when more than one process writes, or when the data
+outgrows one machine. Also use it when the row counts get large enough
+that an exact <code>COUNT(*)</code> is too slow. A planner estimate is
+then the honest answer.</p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

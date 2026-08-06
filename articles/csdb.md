@@ -3,11 +3,11 @@
 ## What csdb is for
 
 `csdb` puts a large surveillance dataset into a database and takes it
-out again, without you writing SQL. You describe a table once — its
-columns and their types, its primary key, its indexes — and then insert,
-upsert, delete and read rows through R methods. Before it writes, it can
-check that your data matches an agreed column format, so a table cannot
-quietly change shape between runs.
+out again, without you writing SQL. You describe a table once: its
+columns and their types, its primary key, and its indexes. You then
+insert, upsert, delete and read rows through R methods. Before it
+writes, it can check that your data matches an agreed column format, so
+a table cannot quietly change shape between runs.
 
 ### Two classes, and the split between them
 
@@ -71,12 +71,12 @@ surveillance formats, `csfmt_rts_data_v1` and `csfmt_rts_data_v2`. A
 validator runs inside `$insert_data()` and `$upsert_data()`.
 
 **There is no `csfmt_rts_data_v3` validator.** That is a current
-limitation, and it bites now. `cstidy` marks v1 and v2 deprecated and
-points new work at `set_csfmt_rts_data_v3()`, and `csalert`’s pipeline
-ends in `ens_collapse(heal = TRUE)`, which returns a
-`csfmt_rts_data_v3`. So today’s analysis output has no validator here
-that matches it. You can still store it: pass the `_blank` pair, or a
-function of your own. `csdb` then checks nothing about the columns.
+limitation, and it matters now. `cstidy` marks v1 and v2 deprecated, and
+points new work at `set_csfmt_rts_data_v3()`. `csalert`’s pipeline ends
+in `ens_collapse(heal = TRUE)`, which returns a `csfmt_rts_data_v3`. So
+today’s analysis output has no validator here that matches it. You can
+still store it: pass the `_blank` pair, or a function of your own.
+`csdb` then checks nothing about the columns.
 
 ### The three backends
 
@@ -96,7 +96,7 @@ and lists what differs between them.
 
 `csdb` is the storage layer under the csverse surveillance stack. It
 imports `csutil`. Its validators are written against `cstidy`’s data
-formats, by column name and type: no `csdb` code calls `cstidy` or
+formats, by column name and type. No `csdb` code calls `cstidy` or
 `csalert`, and neither is a dependency.
 
 ``` r
@@ -111,34 +111,36 @@ Surveillance (csverse) ecosystem. The package exposes two R6 classes:
 
 - **`DBConnection_v9`** — wraps a single database connection and manages
   its lifecycle (connect, disconnect, reconnect).
-- **`DBTable_v9`** — represents one database table and provides methods
-  for inserting, upserting, and deleting rows, as well as managing
-  indexes and validating field types and contents.
+- **`DBTable_v9`** — represents one database table. It inserts, upserts
+  and deletes rows, manages indexes, and validates field types and
+  contents.
 
-Three backends are supported. Microsoft SQL Server and PostgreSQL
-connect over ODBC and read their credentials from environment variables,
-which keeps the credentials out of scripts and version control. SQLite
-connects through `RSQLite`, where `db` is a file path and no server,
-port, user or password is read at all.
+csdb supports three backends. Microsoft SQL Server and PostgreSQL
+connect over ODBC. Pass their server, port, user and password as
+arguments to `DBConnection_v9$new()`. csdb never reads an environment
+variable itself. To keep credentials out of scripts and version control,
+read the variable yourself and pass the result in. SQLite connects
+through `RSQLite`, where `db` is a file path. csdb reads no server,
+port, user or password for SQLite.
 
 This vignette runs on SQLite, in a file created by
 [`tempfile()`](https://rdrr.io/r/base/tempfile.html). Every chunk below
 therefore executes on a machine with no database server. For what
-changes when the same code is pointed at PostgreSQL instead, see
+changes when you point the same code at PostgreSQL instead, see
 [`vignette("backends", package = "csdb")`](https://niphr.github.io/csdb/articles/backends.md).
 
 ## `DBConnection_v9`
 
 `DBConnection_v9$new()` stores connection parameters but does not open a
-connection immediately. Calling `$connect()` opens the connection;
+connection immediately. `$connect()` opens the connection;
 `$disconnect()` closes it. The `$autoconnection` field returns an active
-connection, reconnecting automatically if needed.
+connection, and reconnects automatically when needed.
 
 The example below creates a connection object, connects, inspects the
-connection fields, then disconnects. After disconnecting, `$connection`
+connection fields, then disconnects. After you disconnect, `$connection`
 reports `DISCONNECTED`, while
 [`class()`](https://rdrr.io/r/base/class.html) still reports the driver
-type, and reading `$autoconnection` opens the file again.
+type, and a read of `$autoconnection` opens the file again.
 
 ## `DBTable_v9`
 
@@ -149,10 +151,10 @@ Validators can enforce field-type and field-content constraints;
 `validator_field_types_blank` and `validator_field_contents_blank` skip
 validation entirely.
 
-The example below creates a table object backed by the same SQLite file,
-clears any existing rows, inserts the bundled
-`nor_covid19_cases_by_time_location` dataset, connects, and then returns
-a lazy `tbl()` reference via dbplyr. The file is new, so
+The example below creates a table object backed by the same SQLite file.
+It clears any existing rows and inserts the bundled
+`nor_covid19_cases_by_time_location` dataset. It then connects and
+returns a lazy `tbl()` reference via dbplyr. The file is new, so
 `$drop_all_rows()` creates the table and its index first and then
 reports that it removed 0 rows.
 

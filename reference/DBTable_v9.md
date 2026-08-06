@@ -1,44 +1,42 @@
-# R6 Class representing a database table with advanced data management capabilities
+# R6 Class representing a database table
 
-A comprehensive database table management class that provides high-level
-operations for data manipulation, schema validation, and table
-administration. This class combines database connectivity with data
-validation and efficient bulk operations.
+A database table management class that provides operations for data
+manipulation, schema validation, and table administration. This class
+combines database connectivity with data validation and bulk operations.
 
 ## Details
 
-The DBTable_v9 class is a sophisticated database table abstraction that
-provides:
+The DBTable_v9 class is a database table abstraction that provides:
 
 **Core functionality:**
 
-- Table creation and schema management
+- Table creation and schema management.
 
-- Data insertion with bulk loading capabilities
+- Data insertion with bulk loading capabilities.
 
-- Upsert operations (insert or update)
+- Upsert operations (insert or update).
 
-- Index management (creation, deletion)
+- Index management (creation, deletion).
 
-- Data validation through customizable validators
+- Data validation through customizable validators.
 
-- Integration with dplyr for data queries
+- Integration with dplyr for data queries.
 
 **Advanced features:**
 
-- Automatic table creation based on field specifications
+- Automatic table creation based on field specifications.
 
-- Schema validation with custom validator functions
+- Schema validation with custom validator functions.
 
-- Efficient bulk data loading using database-specific methods
+- Efficient bulk data loading using database-specific methods.
 
-- Index optimization for query performance
+- Index optimization for query performance.
 
-- Cross-database compatibility (SQL Server, PostgreSQL)
+- Cross-database compatibility (SQL Server, PostgreSQL).
 
 **Data validation:** The class supports custom validation functions for
-both field types and data contents, ensuring data integrity and schema
-compliance.
+both field types and data contents, which ensure data integrity and
+schema compliance.
 
 ## See also
 
@@ -247,13 +245,13 @@ Class-specific print function.
 
 - `...`:
 
-  Not in use.
+  Not used.
 
 ------------------------------------------------------------------------
 
 ### `DBTable_v9$connect()`
 
-Connect from the database
+Connect to the database.
 
 #### Usage
 
@@ -263,7 +261,7 @@ Connect from the database
 
 ### `DBTable_v9$disconnect()`
 
-Disconnect from the database
+Disconnect from the database.
 
 #### Usage
 
@@ -273,7 +271,7 @@ Disconnect from the database
 
 ### `DBTable_v9$table_exists()`
 
-Does the table exist
+Does the table exist?
 
 #### Usage
 
@@ -283,7 +281,7 @@ Does the table exist
 
 ### `DBTable_v9$create_table()`
 
-Create the database table
+Create the database table.
 
 #### Usage
 
@@ -293,7 +291,7 @@ Create the database table
 
 ### `DBTable_v9$remove_table()`
 
-Drop the database table
+Drop the database table.
 
 #### Usage
 
@@ -303,7 +301,7 @@ Drop the database table
 
 ### `DBTable_v9$insert_data()`
 
-Inserts data
+Inserts data into the database table.
 
 #### Usage
 
@@ -321,18 +319,18 @@ Inserts data
 
 - `confirm_insert_via_nrow`:
 
-  Checks nrow() before insert and after insert. If nrow() has not
-  increased sufficiently, then attempt an upsert.
+  Checks nrow() before the insert and after the insert. If nrow() did
+  not increase enough, the method attempts an upsert.
 
 - `verbose`:
 
-  Boolean. Inserts data into the database table
+  Boolean.
 
 ------------------------------------------------------------------------
 
 ### `DBTable_v9$upsert_data()`
 
-Upserts data into the database table
+Upserts data into the database table.
 
 #### Usage
 
@@ -350,8 +348,8 @@ Upserts data into the database table
 
 - `drop_indexes`:
 
-  A vector containing the indexes to be dropped before upserting (can
-  increase performance).
+  A vector of the indexes to drop before the upsert (can increase
+  performance).
 
 - `verbose`:
 
@@ -361,7 +359,7 @@ Upserts data into the database table
 
 ### `DBTable_v9$drop_all_rows()`
 
-Drops all rows in the database table
+Drops all rows in the database table.
 
 #### Usage
 
@@ -421,8 +419,8 @@ Drops all rows in the database table and then upserts data.
 
 - `drop_indexes`:
 
-  A vector containing the indexes to be dropped before upserting (can
-  increase performance).
+  A vector of the indexes to drop before the upsert (can increase
+  performance).
 
 - `verbose`:
 
@@ -450,8 +448,8 @@ Drops all rows in the database table and then inserts data.
 
 - `confirm_insert_via_nrow`:
 
-  Checks nrow() before insert and after insert. If nrow() has not
-  increased sufficiently, then attempt an upsert.
+  Checks nrow() before the insert and after the insert. If nrow() did
+  not increase enough, the method attempts an upsert.
 
 - `verbose`:
 
@@ -471,8 +469,8 @@ Provides access to the database table via dplyr::tbl.
 
 ### `DBTable_v9$print_dplyr_select()`
 
-Prints a template dplyr::select call that you can easily copy/paste for
-all your variables.
+Prints a template dplyr::select call that you can copy and paste for all
+your variables.
 
 #### Usage
 
@@ -482,7 +480,7 @@ all your variables.
 
 ### `DBTable_v9$add_indexes()`
 
-Adds indexes to the database table from \`self\$indexes\`
+Adds indexes to the database table from \`self\$indexes\`.
 
 #### Usage
 
@@ -492,7 +490,7 @@ Adds indexes to the database table from \`self\$indexes\`
 
 ### `DBTable_v9$drop_indexes()`
 
-Drops all indees from the database table
+Drops all indexes from the database table.
 
 #### Usage
 
@@ -503,7 +501,7 @@ Drops all indees from the database table
 ### `DBTable_v9$confirm_indexes()`
 
 Confirms that the names and number of indexes in the database are the
-same as in the R code. Does not confirm the contents of the indexes!
+same as in the R code. Does not confirm the contents of the indexes.
 
 #### Usage
 
@@ -513,7 +511,7 @@ same as in the R code. Does not confirm the contents of the indexes!
 
 ### `DBTable_v9$nrow()`
 
-Gets the number of rows in the database table
+Gets the number of rows in the database table.
 
 #### Usage
 
@@ -523,14 +521,14 @@ Gets the number of rows in the database table
 
 - `use_count`:
 
-  If true, then uses the count command, which is slow but accurate. If
-  false, then uses summary statistics, which is fast but inaccurate.
+  If TRUE, then uses the count command, which is slow but accurate. If
+  FALSE, then uses summary statistics, which is fast but inaccurate.
 
 ------------------------------------------------------------------------
 
 ### `DBTable_v9$info()`
 
-Gets the information about the database table
+Gets the information about the database table.
 
 #### Usage
 

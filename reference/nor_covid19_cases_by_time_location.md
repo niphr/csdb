@@ -11,7 +11,7 @@ nor_covid19_cases_by_time_location
 
 ## Format
 
-A csfmt_rts_data_v1 with 11028 rows and 18 variables:
+A data.table with 11028 rows and 18 variables:
 
 - granularity_time:
 
@@ -34,6 +34,10 @@ A csfmt_rts_data_v1 with 11028 rows and 18 variables:
   2020
 
 - age:
+
+  total
+
+- sex:
 
   total
 

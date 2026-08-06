@@ -23,7 +23,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.6</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.7</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -92,7 +92,7 @@ White</h4>
 </h2>
 <p><code>csdb</code> puts a large surveillance dataset into a database
 and takes it out again, without you writing SQL. You describe a table
-once — its columns and their types, its primary key, its indexes — and
+once: its columns and their types, its primary key, and its indexes. You
 then insert, upsert, delete and read rows through R methods. Before it
 writes, it can check that your data matches an agreed column format, so
 a table cannot quietly change shape between runs.</p>
@@ -156,10 +156,10 @@ runs once, inside <code>$new()</code>. A <code>_field_contents</code>
 validator runs inside <code>$insert_data()</code> and
 <code>$upsert_data()</code>.</p>
 <p><strong>There is no <code>csfmt_rts_data_v3</code>
-validator.</strong> That is a current limitation, and it bites now.
-<code>cstidy</code> marks v1 and v2 deprecated and points new work at
-<code>set_csfmt_rts_data_v3()</code>, and <code>csalert</code>’s
-pipeline ends in <code>ens_collapse(heal = TRUE)</code>, which returns a
+validator.</strong> That is a current limitation, and it matters now.
+<code>cstidy</code> marks v1 and v2 deprecated, and points new work at
+<code>set_csfmt_rts_data_v3()</code>. <code>csalert</code>’s pipeline
+ends in <code>ens_collapse(heal = TRUE)</code>, which returns a
 <code>csfmt_rts_data_v3</code>. So today’s analysis output has no
 validator here that matches it. You can still store it: pass the
 <code>_blank</code> pair, or a function of your own. <code>csdb</code>
@@ -213,7 +213,7 @@ and lists what differs between them.</p>
 </h3>
 <p><code>csdb</code> is the storage layer under the csverse surveillance
 stack. It imports <code>csutil</code>. Its validators are written
-against <code>cstidy</code>’s data formats, by column name and type: no
+against <code>cstidy</code>’s data formats, by column name and type. No
 <code>csdb</code> code calls <code>cstidy</code> or
 <code>csalert</code>, and neither is a dependency.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
@@ -234,19 +234,20 @@ database connection and manages its lifecycle (connect, disconnect,
 reconnect).</li>
 <li>
 <strong><code>DBTable_v9</code></strong> — represents one database
-table and provides methods for inserting, upserting, and deleting rows,
-as well as managing indexes and validating field types and
-contents.</li>
+table. It inserts, upserts and deletes rows, manages indexes, and
+validates field types and contents.</li>
 </ul>
-<p>Three backends are supported. Microsoft SQL Server and PostgreSQL
-connect over ODBC and read their credentials from environment variables,
-which keeps the credentials out of scripts and version control. SQLite
-connects through <code>RSQLite</code>, where <code>db</code> is a file
-path and no server, port, user or password is read at all.</p>
+<p>csdb supports three backends. Microsoft SQL Server and PostgreSQL
+connect over ODBC. Pass their server, port, user and password as
+arguments to <code>DBConnection_v9$new()</code>. csdb never reads an
+environment variable itself. To keep credentials out of scripts and
+version control, read the variable yourself and pass the result in.
+SQLite connects through <code>RSQLite</code>, where <code>db</code> is a
+file path. csdb reads no server, port, user or password for SQLite.</p>
 <p>This vignette runs on SQLite, in a file created by
 <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile()</a></code>. Every chunk below therefore executes on a
-machine with no database server. For what changes when the same code is
-pointed at PostgreSQL instead, see
+machine with no database server. For what changes when you point the
+same code at PostgreSQL instead, see
 <code><a href="../articles/backends.html">vignette("backends", package = "csdb")</a></code>.</p>
 </div>
 <div class="section level2">
@@ -254,14 +255,14 @@ pointed at PostgreSQL instead, see
 <code>DBConnection_v9</code><a class="anchor" aria-label="anchor" href="#dbconnection_v9"></a>
 </h2>
 <p><code>DBConnection_v9$new()</code> stores connection parameters but
-does not open a connection immediately. Calling <code>$connect()</code>
-opens the connection; <code>$disconnect()</code> closes it. The
-<code>$autoconnection</code> field returns an active connection,
-reconnecting automatically if needed.</p>
+does not open a connection immediately. <code>$connect()</code> opens
+the connection; <code>$disconnect()</code> closes it. The
+<code>$autoconnection</code> field returns an active connection, and
+reconnects automatically when needed.</p>
 <p>The example below creates a connection object, connects, inspects the
-connection fields, then disconnects. After disconnecting,
+connection fields, then disconnects. After you disconnect,
 <code>$connection</code> reports <code>DISCONNECTED</code>, while
-<code><a href="https://rdrr.io/r/base/class.html" class="external-link">class()</a></code> still reports the driver type, and reading
+<code><a href="https://rdrr.io/r/base/class.html" class="external-link">class()</a></code> still reports the driver type, and a read of
 <code>$autoconnection</code> opens the file again.</p>
 </div>
 <div class="section level2">
@@ -277,11 +278,11 @@ field-content constraints; <code>validator_field_types_blank</code> and
 <code>validator_field_contents_blank</code> skip validation
 entirely.</p>
 <p>The example below creates a table object backed by the same SQLite
-file, clears any existing rows, inserts the bundled
-<code>nor_covid19_cases_by_time_location</code> dataset, connects, and
-then returns a lazy <code>tbl()</code> reference via dbplyr. The file is
-new, so <code>$drop_all_rows()</code> creates the table and its index
-first and then reports that it removed 0 rows.</p>
+file. It clears any existing rows and inserts the bundled
+<code>nor_covid19_cases_by_time_location</code> dataset. It then
+connects and returns a lazy <code>tbl()</code> reference via dbplyr. The
+file is new, so <code>$drop_all_rows()</code> creates the table and its
+index first and then reports that it removed 0 rows.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">db_file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".sqlite"</span><span class="op">)</span></span>
 <span></span>

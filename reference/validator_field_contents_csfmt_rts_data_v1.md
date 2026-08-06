@@ -1,9 +1,9 @@
 # Field contents validator for csfmt_rts_data_v1 schema
 
-Validates that data contents conform to the csfmt_rts_data_v1 schema
-specification. This validator checks that granularity_time,
-granularity_geo, border, sex, and date fields contain valid values
-according to the surveillance data format requirements.
+Checks that data contents conform to the csfmt_rts_data_v1 schema
+specification. The validator checks the granularity_time,
+granularity_geo, border, sex, and date fields against the values that
+schema allows.
 
 ## Usage
 
@@ -15,12 +15,12 @@ validator_field_contents_csfmt_rts_data_v1(data)
 
 - data:
 
-  A data.frame or data.table containing the data to validate
+  A data.frame or data.table containing the data to validate.
 
 ## Value
 
 TRUE if data is valid for csfmt_rts_data_v1, FALSE otherwise (with error
-attribute)
+attribute).
 
 ## See also
 
