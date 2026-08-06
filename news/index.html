@@ -53,6 +53,15 @@
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="2026.8.6" id="version-202686">Version 2026.8.6<a class="anchor" aria-label="anchor" href="#version-202686"></a></h2>
 <div class="section level3">
+<h3 id="licensing-2026-8-6">Licensing<a class="anchor" aria-label="anchor" href="#licensing-2026-8-6"></a></h3>
+<ul><li>The copyright holder is now <strong>Folkehelseinstituttet</strong>. It read “Core Surveillance”, which names the package family rather than a legal entity.</li>
+<li>
+<code>DESCRIPTION</code> <code>Authors@R</code> now declares that holder with <code>role = "cph"</code>. It declared no copyright holder at all, and neither did any other package in the fleet. Nothing in <code>R CMD check</code> reports that.</li>
+<li>The copyright year is now 2026. It read 2023.</li>
+<li>
+<code>CLAUDE.md</code> now carries a Licensing section, so the year gets checked rather than silently ageing.</li>
+</ul></div>
+<div class="section level3">
 <h3 id="documentation-2026-8-6">Documentation<a class="anchor" aria-label="anchor" href="#documentation-2026-8-6"></a></h3>
 <ul><li><p>Repository prose now follows ASD-STE100 (Simplified Technical English). The sweep covered the roxygen2 blocks in <code>R/</code>, both vignettes, and <code>README.md</code>. It changed no claim and no executable code. <code>index.md</code> needed no change.</p></li>
 <li><p>No roxygen sentence runs over 25 words. Counted per authored unit, which is one <code>@description</code>, <code>@param</code>, <code>@return</code>, <code>@seealso</code>, paragraph or Rd <code>\item</code>, the count fell from 6 to 0. The longest sentence fell from 36 words to 24.</p></li>

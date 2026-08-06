@@ -9,6 +9,8 @@ This package is proudly brought to you by:
 
 - **August Sørli Mathisen**. Author.
 
+- **Folkehelseinstituttet**. Copyright holder.
+
 See the [changelog](https://niphr.github.io/csdb/news/index.md) for
 other contributors. 🙏
 
