@@ -1,4 +1,4 @@
-# Version 2026.8.7
+# Version 2026.8.6
 
 ## Documentation
 * Repository prose now follows ASD-STE100 (Simplified Technical English). The sweep covered the roxygen2 blocks in `R/`, both vignettes, and `README.md`. It changed no claim and no executable code. `index.md` needed no change.
@@ -9,6 +9,12 @@
 * The v3 statement in the introduction vignette keeps its size. `csdb` CAN store a `csfmt_rts_data_v3`, with the `_blank` pair or with a validator of your own. What is missing is a validator that knows the v3 shape.
 * Ornamental adjectives are gone from the reference pages: "robust" from `DBConnection_v9`, "sophisticated" and "comprehensive" from `DBTable_v9`, and "comprehensive" from `get_table_names_and_info()`. The `DBTable_v9` title is now "R6 Class representing a database table", parallel with `DBConnection_v9`.
 
+* The introduction vignette opens with prose instead of with code output. pkgdown promotes `vignettes/csdb.Rmd` to "Get started", and the first thing on that page was the `data.table` attach message: `Attaching package: 'data.table'` and the `%notin%` masking line. A new "What csdb is for" section now comes first. It says what the package does, splits `DBConnection_v9` (the connection) from `DBTable_v9` (one table), tabulates the three backends, names the missing v3 validator, and says where `csdb` sits in the stack. Its two chunks run without a database server.
+* The `library(data.table)` and `library(magrittr)` chunk is now `message = FALSE`. No chunk in the vignette uses `%>%` or bare `data.table` syntax, so the two attach messages announced masking that nothing below them relied on. The `library()` calls themselves are unchanged.
+* The overview states a current limitation plainly. `csdb` exports field-type and field-contents validators for `csfmt_rts_data_v1` and `csfmt_rts_data_v2` and none for `csfmt_rts_data_v3`; `grep("v3", getNamespaceExports("csdb"))` returns `character(0)`. That matters now rather than later, because `cstidy` marks v1 and v2 deprecated in favour of `set_csfmt_rts_data_v3()`, and `csalert`'s pipeline ends in `ens_collapse(heal = TRUE)`, which returns a `csfmt_rts_data_v3`. A v3 result can still be written, with the blank validators or with a function of the user's own, but nothing then checks its columns.
+* The overview shows `is_connected()` returning `FALSE` immediately after `DBConnection_v9$new()` and again after `DBTable_v9$new()`. The second call uses a PostgreSQL configuration naming a server that is not running, which is the strongest form of the claim: neither constructor opens a connection.
+* `vignettes/csdb.Rmd` was regenerated from `vignettes/csdb.Rmd.orig` by `vignettes/_PRECOMPILER.R`. Apart from the new section and the two suppressed attach messages, the only change in it is the `tempfile()` path, which differs on every run.
+
 ## Bug Fixes
 * `DBTable_v9$connect()` was documented as "Connect from the database". It connects to the database, which is what `DBConnection_v9$connect()` already said.
 * `DBTable_v9$drop_indexes()` was documented as "Drops all indees from the database table". The word is "indexes".
@@ -16,16 +22,7 @@
 
 ## Development
 * `man/` was regenerated with roxygen2 8.0.0, the version `DESCRIPTION` declares. `NAMESPACE` is unchanged.
-* Release notes for 2026.8.6 and earlier are left as they shipped. A changelog is a record, and rewording a released entry changes that record.
-
-# Version 2026.8.6
-
-## Documentation
-* The introduction vignette opens with prose instead of with code output. pkgdown promotes `vignettes/csdb.Rmd` to "Get started", and the first thing on that page was the `data.table` attach message: `Attaching package: 'data.table'` and the `%notin%` masking line. A new "What csdb is for" section now comes first. It says what the package does, splits `DBConnection_v9` (the connection) from `DBTable_v9` (one table), tabulates the three backends, names the missing v3 validator, and says where `csdb` sits in the stack. Its two chunks run without a database server.
-* The `library(data.table)` and `library(magrittr)` chunk is now `message = FALSE`. No chunk in the vignette uses `%>%` or bare `data.table` syntax, so the two attach messages announced masking that nothing below them relied on. The `library()` calls themselves are unchanged.
-* The overview states a current limitation plainly. `csdb` exports field-type and field-contents validators for `csfmt_rts_data_v1` and `csfmt_rts_data_v2` and none for `csfmt_rts_data_v3`; `grep("v3", getNamespaceExports("csdb"))` returns `character(0)`. That matters now rather than later, because `cstidy` marks v1 and v2 deprecated in favour of `set_csfmt_rts_data_v3()`, and `csalert`'s pipeline ends in `ens_collapse(heal = TRUE)`, which returns a `csfmt_rts_data_v3`. A v3 result can still be written, with the blank validators or with a function of the user's own, but nothing then checks its columns.
-* The overview shows `is_connected()` returning `FALSE` immediately after `DBConnection_v9$new()` and again after `DBTable_v9$new()`. The second call uses a PostgreSQL configuration naming a server that is not running, which is the strongest form of the claim: neither constructor opens a connection.
-* `vignettes/csdb.Rmd` was regenerated from `vignettes/csdb.Rmd.orig` by `vignettes/_PRECOMPILER.R`. Apart from the new section and the two suppressed attach messages, the only change in it is the `tempfile()` path, which differs on every run.
+* Release notes for 2026.8.5 and earlier are left as they shipped. A changelog is a record, and rewording a released entry changes that record.
 
 # Version 2026.8.5
 
