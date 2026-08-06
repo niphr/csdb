@@ -1,12 +1,106 @@
 # Introduction to csdb
 
+## What csdb is for
+
+`csdb` puts a large surveillance dataset into a database and takes it
+out again, without you writing SQL. You describe a table once — its
+columns and their types, its primary key, its indexes — and then insert,
+upsert, delete and read rows through R methods. Before it writes, it can
+check that your data matches an agreed column format, so a table cannot
+quietly change shape between runs.
+
+### Two classes, and the split between them
+
+`DBConnection_v9` is the connection: the settings, plus `$connect()`,
+`$disconnect()` and `$autoconnection`. `DBTable_v9` is one table: its
+field types, its keys, its indexes, and every read and write method.
+
+You do not have to build the connection first. `DBTable_v9$new()` takes
+the same settings as a `dbconfig` list, builds its own
+`DBConnection_v9`, and keeps it at `$dbconnection`. Build a
+`DBConnection_v9` yourself when you want a connection without a table.
+
+Neither constructor touches the database. Both return an object that is
+not connected:
+
+``` r
+con <- csdb::DBConnection_v9$new(driver = "SQLite", db = tempfile(fileext = ".sqlite"))
+con$is_connected()
+#> [1] FALSE
+
+tab <- csdb::DBTable_v9$new(
+  dbconfig = list(
+    driver = "PostgreSQL Unicode",
+    server = "localhost",
+    port = 5432,
+    db = "mydb",
+    schema = "public",
+    user = "u",
+    password = "p"
+  ),
+  table_name = "cases",
+  field_types = c("location_code" = "TEXT", "date" = "DATE", "cases_n" = "INTEGER"),
+  keys = c("location_code", "date")
+)
+tab$dbconnection$is_connected()
+#> [1] FALSE
+```
+
+The second block names a PostgreSQL server that is not running, and
+still returns an object. The first method that reaches the database is
+what connects.
+
+### The validators, and one gap
+
+A validator is a function you hand to `DBTable_v9$new()`. `csdb` exports
+six:
+
+``` r
+sort(grep("^validator_", getNamespaceExports("csdb"), value = TRUE))
+#> [1] "validator_field_contents_blank"            
+#> [2] "validator_field_contents_csfmt_rts_data_v1"
+#> [3] "validator_field_contents_csfmt_rts_data_v2"
+#> [4] "validator_field_types_blank"               
+#> [5] "validator_field_types_csfmt_rts_data_v1"   
+#> [6] "validator_field_types_csfmt_rts_data_v2"
+```
+
+The `_blank` pair accepts anything. The other four check two csverse
+surveillance formats, `csfmt_rts_data_v1` and `csfmt_rts_data_v2`. A
+`_field_types` validator runs once, inside `$new()`. A `_field_contents`
+validator runs inside `$insert_data()` and `$upsert_data()`.
+
+**There is no `csfmt_rts_data_v3` validator.** That is a current
+limitation, and it bites now. `cstidy` marks v1 and v2 deprecated and
+points new work at `set_csfmt_rts_data_v3()`, and `csalert`’s pipeline
+ends in `ens_collapse(heal = TRUE)`, which returns a
+`csfmt_rts_data_v3`. So today’s analysis output has no validator here
+that matches it. You can still store it: pass the `_blank` pair, or a
+function of your own. `csdb` then checks nothing about the columns.
+
+### The three backends
+
+| Backend              | Connects through                                 | Needs a server |
+|----------------------|--------------------------------------------------|----------------|
+| PostgreSQL           | `odbc`, driver `"PostgreSQL Unicode"`            | Yes            |
+| Microsoft SQL Server | `odbc`, driver `"ODBC Driver 17 for SQL Server"` | Yes            |
+| SQLite               | `RSQLite`, where `db` is a file path             | No             |
+
+One `dbconfig` list picks the backend, and nothing else in your code
+changes.
+[`vignette("backends", package = "csdb")`](https://niphr.github.io/csdb/articles/backends.md)
+puts a PostgreSQL configuration and a SQLite configuration side by side,
+and lists what differs between them.
+
+### Where csdb sits
+
+`csdb` is the storage layer under the csverse surveillance stack. It
+imports `csutil`. Its validators are written against `cstidy`’s data
+formats, by column name and type: no `csdb` code calls `cstidy` or
+`csalert`, and neither is a dependency.
+
 ``` r
 library(data.table)
-#> 
-#> Attaching package: 'data.table'
-#> The following object is masked from 'package:base':
-#> 
-#>     %notin%
 library(magrittr)
 ```
 
@@ -73,22 +167,22 @@ dbconnection
 #> (disconnected)
 #> 
 #> Driver:              SQLite 
-#> File:                /tmp/RtmpDYbQNe/file35c6615fad2a3a.sqlite
+#> File:                /tmp/Rtmp3tTfJa/file3a0c741e4a2129.sqlite
 dbconnection$connect()
 
 dbconnection$connection
 #> <SQLiteConnection>
-#>   Path: /tmp/RtmpDYbQNe/file35c6615fad2a3a.sqlite
+#>   Path: /tmp/Rtmp3tTfJa/file3a0c741e4a2129.sqlite
 #>   Extensions: TRUE
 dbconnection$autoconnection
 #> <SQLiteConnection>
-#>   Path: /tmp/RtmpDYbQNe/file35c6615fad2a3a.sqlite
+#>   Path: /tmp/Rtmp3tTfJa/file3a0c741e4a2129.sqlite
 #>   Extensions: TRUE
 dbconnection
 #> (connected)
 #> 
 #> Driver:              SQLite 
-#> File:                /tmp/RtmpDYbQNe/file35c6615fad2a3a.sqlite
+#> File:                /tmp/Rtmp3tTfJa/file3a0c741e4a2129.sqlite
 
 dbconnection$disconnect()
 dbconnection$connection
@@ -152,7 +246,7 @@ dbtable$dbconnection$is_connected()
 #> [1] TRUE
 dbtable$tbl()
 #> # Source:   table<`anon_test`> [?? x 18]
-#> # Database: sqlite 3.51.2 [/tmp/RtmpDYbQNe/file35c6615fad2a3a.sqlite]
+#> # Database: sqlite 3.51.2 [/tmp/Rtmp3tTfJa/file3a0c741e4a2129.sqlite]
 #>    granularity_time granularity_geo country_iso3 location_code border age  
 #>    <chr>            <chr>           <chr>        <chr>          <int> <chr>
 #>  1 day              county          nor          county_nor03    2020 total

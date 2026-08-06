@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.5</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.6</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -50,6 +50,18 @@
       <small>Source: <a href="https://github.com/niphr/csdb/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="2026.8.6" id="version-202686">Version 2026.8.6<a class="anchor" aria-label="anchor" href="#version-202686"></a></h2>
+<div class="section level3">
+<h3 id="documentation-2026-8-6">Documentation<a class="anchor" aria-label="anchor" href="#documentation-2026-8-6"></a></h3>
+<ul><li>The introduction vignette opens with prose instead of with code output. pkgdown promotes <code>vignettes/csdb.Rmd</code> to “Get started”, and the first thing on that page was the <code>data.table</code> attach message: <code>Attaching package: 'data.table'</code> and the <code>%notin%</code> masking line. A new “What csdb is for” section now comes first. It says what the package does, splits <code>DBConnection_v9</code> (the connection) from <code>DBTable_v9</code> (one table), tabulates the three backends, names the missing v3 validator, and says where <code>csdb</code> sits in the stack. Its two chunks run without a database server.</li>
+<li>The <code><a href="https://r-datatable.com" class="external-link">library(data.table)</a></code> and <code><a href="https://magrittr.tidyverse.org" class="external-link">library(magrittr)</a></code> chunk is now <code>message = FALSE</code>. No chunk in the vignette uses <code>%&gt;%</code> or bare <code>data.table</code> syntax, so the two attach messages announced masking that nothing below them relied on. The <code><a href="https://rdrr.io/r/base/library.html" class="external-link">library()</a></code> calls themselves are unchanged.</li>
+<li>The overview states a current limitation plainly. <code>csdb</code> exports field-type and field-contents validators for <code>csfmt_rts_data_v1</code> and <code>csfmt_rts_data_v2</code> and none for <code>csfmt_rts_data_v3</code>; <code>grep("v3", getNamespaceExports("csdb"))</code> returns <code>character(0)</code>. That matters now rather than later, because <code>cstidy</code> marks v1 and v2 deprecated in favour of <code>set_csfmt_rts_data_v3()</code>, and <code>csalert</code>’s pipeline ends in <code>ens_collapse(heal = TRUE)</code>, which returns a <code>csfmt_rts_data_v3</code>. A v3 result can still be written, with the blank validators or with a function of the user’s own, but nothing then checks its columns.</li>
+<li>The overview shows <code>is_connected()</code> returning <code>FALSE</code> immediately after <code>DBConnection_v9$new()</code> and again after <code>DBTable_v9$new()</code>. The second call uses a PostgreSQL configuration naming a server that is not running, which is the strongest form of the claim: neither constructor opens a connection.</li>
+<li>
+<code>vignettes/csdb.Rmd</code> was regenerated from <code>vignettes/csdb.Rmd.orig</code> by <code>vignettes/_PRECOMPILER.R</code>. Apart from the new section and the two suppressed attach messages, the only change in it is the <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile()</a></code> path, which differs on every run.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="2026.8.5" id="version-202685">Version 2026.8.5<a class="anchor" aria-label="anchor" href="#version-202685"></a></h2>
 <div class="section level3">
