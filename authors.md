@@ -18,13 +18,13 @@ Source:
 [`DESCRIPTION`](https://github.com/niphr/csdb/blob/main/DESCRIPTION)
 
 White RA, Mathisen AS (2026). *csdb: An Abstracted System for Easily
-Working with Databases with Large Datasets*. R package version 2026.8.7,
+Working with Databases with Large Datasets*. R package version 2026.8.6,
 <https://niphr.github.io/csdb/>.
 
     @Manual{,
       title = {csdb: An Abstracted System for Easily Working with Databases with Large Datasets},
       author = {Richard Aubrey White and August Sørli Mathisen},
       year = {2026},
-      note = {R package version 2026.8.7},
+      note = {R package version 2026.8.6},
       url = {https://niphr.github.io/csdb/},
     }

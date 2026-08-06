@@ -1,6 +1,6 @@
 # Changelog
 
-## Version 2026.8.7
+## Version 2026.8.6
 
 ### Documentation
 
@@ -8,32 +8,79 @@
   English). The sweep covered the roxygen2 blocks in `R/`, both
   vignettes, and `README.md`. It changed no claim and no executable
   code. `index.md` needed no change.
+
 - No roxygen sentence runs over 25 words. Counted per authored unit,
   which is one `@description`, `@param`, `@return`, `@seealso`,
   paragraph or Rd `\item`, the count fell from 6 to 0. The longest
   sentence fell from 36 words to 24.
+
 - Roxygen fields and `\itemize` items now end in a full stop. Without
   one, a sentence splitter runs straight through the field boundary and
   reports a merge as one sentence. That is where the 74-word to 97-word
   readings came from, in blocks whose longest authored sentence was
   under 25 words.
+
 - `vignettes/csdb.Rmd`, `vignettes/backends.Rmd` and `README.md` are
   also at zero sentences over 25 words. The counts before were 3, 1 and
   2.
+
 - `vignettes/csdb.Rmd` and `vignettes/csdb.Rmd.orig` carry identical
   prose edits, so the generated file and its source stay in sync.
   `vignettes/_PRECOMPILER.R` was not re-run, and no chunk output
   changed.
+
 - The v3 statement in the introduction vignette keeps its size. `csdb`
   CAN store a `csfmt_rts_data_v3`, with the `_blank` pair or with a
   validator of your own. What is missing is a validator that knows the
   v3 shape.
+
 - Ornamental adjectives are gone from the reference pages: “robust” from
   `DBConnection_v9`, “sophisticated” and “comprehensive” from
   `DBTable_v9`, and “comprehensive” from
   [`get_table_names_and_info()`](https://niphr.github.io/csdb/reference/get_table_names_and_info.md).
   The `DBTable_v9` title is now “R6 Class representing a database
   table”, parallel with `DBConnection_v9`.
+
+- The introduction vignette opens with prose instead of with code
+  output. pkgdown promotes `vignettes/csdb.Rmd` to “Get started”, and
+  the first thing on that page was the `data.table` attach message:
+  `Attaching package: 'data.table'` and the `%notin%` masking line. A
+  new “What csdb is for” section now comes first. It says what the
+  package does, splits `DBConnection_v9` (the connection) from
+  `DBTable_v9` (one table), tabulates the three backends, names the
+  missing v3 validator, and says where `csdb` sits in the stack. Its two
+  chunks run without a database server.
+
+- The [`library(data.table)`](https://r-datatable.com) and
+  [`library(magrittr)`](https://magrittr.tidyverse.org) chunk is now
+  `message = FALSE`. No chunk in the vignette uses `%>%` or bare
+  `data.table` syntax, so the two attach messages announced masking that
+  nothing below them relied on. The
+  [`library()`](https://rdrr.io/r/base/library.html) calls themselves
+  are unchanged.
+
+- The overview states a current limitation plainly. `csdb` exports
+  field-type and field-contents validators for `csfmt_rts_data_v1` and
+  `csfmt_rts_data_v2` and none for `csfmt_rts_data_v3`;
+  `grep("v3", getNamespaceExports("csdb"))` returns `character(0)`. That
+  matters now rather than later, because `cstidy` marks v1 and v2
+  deprecated in favour of `set_csfmt_rts_data_v3()`, and `csalert`’s
+  pipeline ends in `ens_collapse(heal = TRUE)`, which returns a
+  `csfmt_rts_data_v3`. A v3 result can still be written, with the blank
+  validators or with a function of the user’s own, but nothing then
+  checks its columns.
+
+- The overview shows `is_connected()` returning `FALSE` immediately
+  after `DBConnection_v9$new()` and again after `DBTable_v9$new()`. The
+  second call uses a PostgreSQL configuration naming a server that is
+  not running, which is the strongest form of the claim: neither
+  constructor opens a connection.
+
+- `vignettes/csdb.Rmd` was regenerated from `vignettes/csdb.Rmd.orig` by
+  `vignettes/_PRECOMPILER.R`. Apart from the new section and the two
+  suppressed attach messages, the only change in it is the
+  [`tempfile()`](https://rdrr.io/r/base/tempfile.html) path, which
+  differs on every run.
 
 ### Bug Fixes
 
@@ -51,50 +98,9 @@
 
 - `man/` was regenerated with roxygen2 8.0.0, the version `DESCRIPTION`
   declares. `NAMESPACE` is unchanged.
-- Release notes for 2026.8.6 and earlier are left as they shipped. A
+- Release notes for 2026.8.5 and earlier are left as they shipped. A
   changelog is a record, and rewording a released entry changes that
   record.
-
-## Version 2026.8.6
-
-### Documentation
-
-- The introduction vignette opens with prose instead of with code
-  output. pkgdown promotes `vignettes/csdb.Rmd` to “Get started”, and
-  the first thing on that page was the `data.table` attach message:
-  `Attaching package: 'data.table'` and the `%notin%` masking line. A
-  new “What csdb is for” section now comes first. It says what the
-  package does, splits `DBConnection_v9` (the connection) from
-  `DBTable_v9` (one table), tabulates the three backends, names the
-  missing v3 validator, and says where `csdb` sits in the stack. Its two
-  chunks run without a database server.
-- The [`library(data.table)`](https://r-datatable.com) and
-  [`library(magrittr)`](https://magrittr.tidyverse.org) chunk is now
-  `message = FALSE`. No chunk in the vignette uses `%>%` or bare
-  `data.table` syntax, so the two attach messages announced masking that
-  nothing below them relied on. The
-  [`library()`](https://rdrr.io/r/base/library.html) calls themselves
-  are unchanged.
-- The overview states a current limitation plainly. `csdb` exports
-  field-type and field-contents validators for `csfmt_rts_data_v1` and
-  `csfmt_rts_data_v2` and none for `csfmt_rts_data_v3`;
-  `grep("v3", getNamespaceExports("csdb"))` returns `character(0)`. That
-  matters now rather than later, because `cstidy` marks v1 and v2
-  deprecated in favour of `set_csfmt_rts_data_v3()`, and `csalert`’s
-  pipeline ends in `ens_collapse(heal = TRUE)`, which returns a
-  `csfmt_rts_data_v3`. A v3 result can still be written, with the blank
-  validators or with a function of the user’s own, but nothing then
-  checks its columns.
-- The overview shows `is_connected()` returning `FALSE` immediately
-  after `DBConnection_v9$new()` and again after `DBTable_v9$new()`. The
-  second call uses a PostgreSQL configuration naming a server that is
-  not running, which is the strongest form of the claim: neither
-  constructor opens a connection.
-- `vignettes/csdb.Rmd` was regenerated from `vignettes/csdb.Rmd.orig` by
-  `vignettes/_PRECOMPILER.R`. Apart from the new section and the two
-  suppressed attach messages, the only change in it is the
-  [`tempfile()`](https://rdrr.io/r/base/tempfile.html) path, which
-  differs on every run.
 
 ## Version 2026.8.5
 
