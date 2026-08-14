@@ -21,8 +21,29 @@ Key features:
   \item Secure credential handling.
   \item Connection status monitoring.
   \item Graceful error handling and recovery.
+  \item A connection is never shared with another process.
 }
 }
+\section{Fork safety}{
+
+A connection belongs to the process that opened it. After a fork, the child
+holds a copy of this object and a copy of the parent's connection. Both
+processes then use one socket. PostgreSQL returns wrong results and reports
+no error. \code{DBI::dbIsValid()} reports TRUE on such a handle, so nothing
+else detects it.
+
+This class records the process that opens each connection. It drops any
+connection whose recorded process is not the current one.
+\code{is_connected()} then returns FALSE, \code{connection} returns NULL,
+and \code{autoconnection} opens a new connection for the current process.
+\code{disconnect()} closes nothing, because the handle belongs to the other
+process.
+
+The object never closes an inherited handle, and it keeps a reference to it.
+Both parts are needed. A close, by \code{DBI::dbDisconnect()} or by the
+garbage collector, would close the other process's socket.
+}
+
 \examples{
 # Creating the object stores the settings. It opens no connection,
 # so this runs without a database server.
@@ -97,9 +118,11 @@ Other database classes:
 \section{Active bindings}{
   \if{html}{\out{<div class="r6-active-bindings">}}
   \describe{
-    \item{\code{connection}}{Database connection.}
+    \item{\code{connection}}{Database connection. NULL when another process opened
+it.}
 
-    \item{\code{autoconnection}}{Database connection that automatically connects if possible.}
+    \item{\code{autoconnection}}{Database connection that automatically connects if
+possible. After a fork it opens a connection for the current process.}
   }
   \if{html}{\out{</div>}}
 }
@@ -161,6 +184,9 @@ Other database classes:
 \if{latex}{\out{\hypertarget{method-DBConnection_v9-is_connected}{}}}
 \subsection{\code{DBConnection_v9$is_connected()}}{
   Is the DB schema connected?
+
+A connection that another process opened does not count. The method
+drops that connection first, and then reports FALSE.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBConnection_v9$is_connected()}
@@ -195,6 +221,9 @@ Other database classes:
 \if{latex}{\out{\hypertarget{method-DBConnection_v9-connect}{}}}
 \subsection{\code{DBConnection_v9$connect()}}{
   Connect to the database.
+
+The method drops a connection that another process opened, and then
+opens a connection for the current process.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBConnection_v9$connect(attempts = 2)}
@@ -214,6 +243,9 @@ Other database classes:
 \if{latex}{\out{\hypertarget{method-DBConnection_v9-disconnect}{}}}
 \subsection{\code{DBConnection_v9$disconnect()}}{
   Disconnect from the database.
+
+The method closes only a connection that this process opened. A
+connection that another process opened stays open.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBConnection_v9$disconnect()}

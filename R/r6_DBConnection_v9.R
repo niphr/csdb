@@ -90,7 +90,26 @@ csdb_get_auth_hook <- function() {
 #'   \item Secure credential handling.
 #'   \item Connection status monitoring.
 #'   \item Graceful error handling and recovery.
+#'   \item A connection is never shared with another process.
 #' }
+#'
+#' @section Fork safety:
+#' A connection belongs to the process that opened it. After a fork, the child
+#' holds a copy of this object and a copy of the parent's connection. Both
+#' processes then use one socket. PostgreSQL returns wrong results and reports
+#' no error. \code{DBI::dbIsValid()} reports TRUE on such a handle, so nothing
+#' else detects it.
+#'
+#' This class records the process that opens each connection. It drops any
+#' connection whose recorded process is not the current one.
+#' \code{is_connected()} then returns FALSE, \code{connection} returns NULL,
+#' and \code{autoconnection} opens a new connection for the current process.
+#' \code{disconnect()} closes nothing, because the handle belongs to the other
+#' process.
+#'
+#' The object never closes an inherited handle, and it keeps a reference to it.
+#' Both parts are needed. A close, by \code{DBI::dbDisconnect()} or by the
+#' garbage collector, would close the other process's socket.
 #'
 #' @import data.table
 #' @import R6
@@ -224,8 +243,12 @@ DBConnection_v9 <- R6::R6Class(
 
     #' @description
     #' Is the DB schema connected?
+    #'
+    #' A connection that another process opened does not count. The method
+    #' drops that connection first, and then reports FALSE.
     #' @return TRUE/FALSE.
     is_connected = function() {
+      private$discard_inherited_connection()
       retval <- FALSE
       if (is.null(private$pconnection)) {
         retval <- FALSE
@@ -293,8 +316,12 @@ DBConnection_v9 <- R6::R6Class(
 
     #' @description
     #' Connect to the database.
+    #'
+    #' The method drops a connection that another process opened, and then
+    #' opens a connection for the current process.
     #' @param attempts Number of attempts to connect.
     connect = function(attempts = 2) {
+      private$discard_inherited_connection()
       success <- FALSE
       auth_hook_called <- FALSE
 
@@ -340,7 +367,11 @@ DBConnection_v9 <- R6::R6Class(
 
     #' @description
     #' Disconnect from the database.
+    #'
+    #' The method closes only a connection that this process opened. A
+    #' connection that another process opened stays open.
     disconnect = function() {
+      private$discard_inherited_connection()
       if (self$is_connected()) {
         suppressWarnings(DBI::dbDisconnect(private$pconnection))
       }
@@ -349,12 +380,16 @@ DBConnection_v9 <- R6::R6Class(
 
   # active ----
   active = list(
-    #' @field connection Database connection.
+    #' @field connection Database connection. NULL when another process opened
+    #'   it.
     connection = function() {
+      private$discard_inherited_connection()
       private$pconnection
     },
-    #' @field autoconnection Database connection that automatically connects if possible.
+    #' @field autoconnection Database connection that automatically connects if
+    #'   possible. After a fork it opens a connection for the current process.
     autoconnection = function() {
+      private$discard_inherited_connection()
       self$connect()
       return(private$pconnection)
     }
@@ -363,6 +398,40 @@ DBConnection_v9 <- R6::R6Class(
   # private ----
   private = list(
     pconnection = NULL,
+    # The process that opened `pconnection`, as Sys.getpid() reported it.
+    # `connect_once()` sets it. It is NULL whenever `pconnection` is NULL.
+    pconnection_pid = NULL,
+    # Handles that another process opened. `discard_inherited_connection()`
+    # moves a handle here rather than closing it.
+    pconnections_inherited = list(),
+    # Drop a connection that another process opened.
+    #
+    # A fork copies this object, so the child holds the parent's handle and
+    # both processes use one socket. PostgreSQL then returns wrong results and
+    # reports no error. DBI::dbIsValid() reports TRUE on such a handle, and the
+    # dbListTables() probe in is_connected() also succeeds, so nothing else
+    # detects it.
+    #
+    # Two details are load-bearing. This method MUST NOT call
+    # DBI::dbDisconnect(): that closes the other process's socket, which is the
+    # corruption the method prevents. It MUST also keep the handle reachable,
+    # or the garbage collector runs odbc's finalizer and closes that socket
+    # anyway. Both details come from measurements against the norsyss-postgres
+    # server on 2026-08-14.
+    discard_inherited_connection = function() {
+      if (is.null(private$pconnection)) {
+        return(invisible(NULL))
+      }
+      if (identical(private$pconnection_pid, Sys.getpid())) {
+        return(invisible(NULL))
+      }
+      private$pconnections_inherited[[
+        length(private$pconnections_inherited) + 1L
+      ]] <- private$pconnection
+      private$pconnection <- NULL
+      private$pconnection_pid <- NULL
+      invisible(NULL)
+    },
     connect_once = function() {
       if (self$is_connected()) {
         return()
@@ -449,6 +518,12 @@ DBConnection_v9 <- R6::R6Class(
               encoding = "utf8"
             )
           }
+          # Record the owning process here, and not inside each branch. All six
+          # DBI::dbConnect() calls above run in this process, so one record
+          # covers every one of them, and it also covers a branch added later.
+          # A failed connection never reaches this line, because the error
+          # handler below calls stop().
+          private$pconnection_pid <- Sys.getpid()
         },
         error = function(cond) {
           stop(
