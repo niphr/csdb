@@ -187,7 +187,8 @@ Create a new DBTable_v9 object.
       keys,
       indexes = NULL,
       validator_field_types = validator_field_types_blank,
-      validator_field_contents = validator_field_contents_blank
+      validator_field_contents = validator_field_contents_blank,
+      dbconnection = NULL
     )
 
 #### Arguments
@@ -227,6 +228,15 @@ Create a new DBTable_v9 object.
   A function that validates the data before it is inserted into the
   database.
 
+- `dbconnection`:
+
+  An existing `DBConnection_v9` to use, or NULL. The object borrows a
+  supplied connection and does not own it. `disconnect()` then does
+  nothing, so the caller decides when the connection closes. The object
+  creates and owns a connection when this argument is NULL. It is the
+  last argument, because a subclass can forward the earlier seven
+  positionally.
+
 #### Returns
 
 A new \`DBTable_v9\` object.
@@ -261,7 +271,9 @@ Connect to the database.
 
 ### `DBTable_v9$disconnect()`
 
-Disconnect from the database.
+Disconnect from the database. This does nothing when the connection came
+from the `dbconnection` argument, because the caller owns that
+connection.
 
 #### Usage
 

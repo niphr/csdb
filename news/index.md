@@ -1,5 +1,29 @@
 # Changelog
 
+## Version 2026.8.14
+
+### New Features
+
+- `DBTable_v9$new()` takes a `dbconnection` argument. Pass an existing
+  `DBConnection_v9` and the table uses it instead of building its own.
+  The argument is last, so a subclass can still forward the earlier
+  seven positionally.
+- `DBTable_v9$disconnect()` closes only a connection the object built
+  itself. A connection passed as `dbconnection` is borrowed. The method
+  leaves it open, and the caller decides when it closes.
+- One `DBConnection_v9` can now serve many tables. The motivating case
+  is `cs9`, which builds one `DBTable_v9` for every partition of a
+  partitioned table. A table with 106 partitions therefore opened 106
+  connections at once, against 97 usable slots on the `norsyss-postgres`
+  server. This release only makes the sharing possible. `cs9` MUST pass
+  the shared connection itself.
+
+### Development
+
+- `tests/testthat/test-shared-connection.R` covers the new argument. It
+  asserts injection, the unchanged default, the borrowed no-op, the
+  owned close, and a repeated `disconnect()`.
+
 ## Version 2026.8.6
 
 ### Licensing

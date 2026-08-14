@@ -11,7 +11,7 @@ combines database connectivity with data validation and bulk operations."><meta 
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.6</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.14</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -193,7 +193,8 @@ contents, which ensure data integrity and schema compliance.</p>
 <span>  <span class="va">keys</span>,</span>
 <span>  indexes <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  validator_field_types <span class="op">=</span> <span class="va">validator_field_types_blank</span>,</span>
-<span>  validator_field_contents <span class="op">=</span> <span class="va">validator_field_contents_blank</span></span>
+<span>  validator_field_contents <span class="op">=</span> <span class="va">validator_field_contents_blank</span>,</span>
+<span>  dbconnection <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
 <h4 id="arguments">Arguments<a class="anchor" aria-label="anchor" href="#arguments"></a></h4>
@@ -217,6 +218,14 @@ contents, which ensure data integrity and schema compliance.</p>
 
       <dt><code>validator_field_contents</code></dt>
 <dd><p>A function that validates the data before it is inserted into the database.</p></dd>
+
+      <dt><code>dbconnection</code></dt>
+<dd><p>An existing <code>DBConnection_v9</code> to use, or NULL.
+The object borrows a supplied connection and does not own it.
+<code>disconnect()</code> then does nothing, so the caller decides when the
+connection closes. The object creates and owns a connection when this
+argument is NULL. It is the last argument, because a subclass can
+forward the earlier seven positionally.</p></dd>
 
 
 </dl><p></p></div>
@@ -254,7 +263,9 @@ contents, which ensure data integrity and schema compliance.</p>
 
 <p></p><hr><a id="method-DBTable_v9-disconnect"></a><div class="section">
 <h3 id="dbtable-v-disconnect-"><code>DBTable_v9$disconnect()</code><a class="anchor" aria-label="anchor" href="#dbtable-v-disconnect-"></a></h3>
-<p>Disconnect from the database.</p><div class="section">
+<p>Disconnect from the database. This does nothing when the connection came
+from the <code>dbconnection</code> argument, because the caller owns that
+connection.</p><div class="section">
 <h4 id="usage-3">Usage<a class="anchor" aria-label="anchor" href="#usage-3"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">disconnect</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
