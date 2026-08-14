@@ -1,5 +1,53 @@
 # Changelog
 
+## Version 2026.8.15
+
+### Bug Fixes
+
+- `DBConnection_v9` no longer hands out a connection that another
+  process opened. A fork copies the object and the open handle, so the
+  child and the parent then use one socket. PostgreSQL answers with
+  wrong results and reports no error.
+  [`DBI::dbIsValid()`](https://dbi.r-dbi.org/reference/dbIsValid.html)
+  reports TRUE on such a handle, so nothing detected it before.
+- The class records the process that opens each connection, and compares
+  that process against the current one. `is_connected()` reports FALSE
+  after a fork, `connection` returns NULL, and `autoconnection` opens a
+  connection for the child.
+- `disconnect()` never closes a connection that another process opened.
+  Closing it would close the parent’s socket, which is the corruption
+  this release prevents.
+- The object keeps a reference to an inherited handle. Without that
+  reference, the garbage collector runs odbc’s finalizer and closes the
+  parent’s socket anyway.
+- This matters more from 2026.8.14 on, because one `DBConnection_v9` now
+  serves many tables. `cs9::Task$run_parallel_plans()` forks with
+  `pbmcapply::pbmclapply` and passes table objects into the workers.
+- Measured against the `norsyss-postgres` server on 2026-08-14: four
+  forked children each got their own backend process ID and their own
+  correct result. With the guard disabled, two of those four children
+  returned the parent’s backend process ID, and two failed with a type
+  error.
+- Same-process behaviour is unchanged. The 162 checks in the csdb suite
+  and the 298 checks in the cs9 suite pass without an edit.
+
+### Development
+
+- `tests/testthat/test-fork-safety.R` covers the fork guarantee. Layer 1
+  changes the recorded process ID on a SQLite connection, and runs
+  everywhere. Layer 2 forks with
+  [`parallel::mcparallel`](https://rdrr.io/r/parallel/mcparallel.html),
+  and skips on Windows, which has no fork.
+- The csdb suite now holds 206 passes, up from 162.
+- This release carries a version one day ahead of the calendar, on
+  purpose. `2026.8.14` is already published from an earlier tree that
+  lacks the fork guard, so a second tree under that number would leave
+  two different sources sharing one version. `cs9` requires
+  `csdb (>= 2026.8.15)` for the same reason: that floor names the guard.
+- The `norsyss-postgres` server now allows 300 connections, measured
+  2026-08-14. The 97-usable figure below described the server on
+  2026-08-13, when the import failed.
+
 ## Version 2026.8.14
 
 ### New Features

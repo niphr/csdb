@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.14</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.15</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -50,6 +50,29 @@
       <small>Source: <a href="https://github.com/niphr/csdb/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="2026.8.15" id="version-2026815">Version 2026.8.15<a class="anchor" aria-label="anchor" href="#version-2026815"></a></h2>
+<div class="section level3">
+<h3 id="bug-fixes-2026-8-15">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-2026-8-15"></a></h3>
+<ul><li>
+<code>DBConnection_v9</code> no longer hands out a connection that another process opened. A fork copies the object and the open handle, so the child and the parent then use one socket. PostgreSQL answers with wrong results and reports no error. <code><a href="https://dbi.r-dbi.org/reference/dbIsValid.html" class="external-link">DBI::dbIsValid()</a></code> reports TRUE on such a handle, so nothing detected it before.</li>
+<li>The class records the process that opens each connection, and compares that process against the current one. <code>is_connected()</code> reports FALSE after a fork, <code>connection</code> returns NULL, and <code>autoconnection</code> opens a connection for the child.</li>
+<li>
+<code>disconnect()</code> never closes a connection that another process opened. Closing it would close the parent’s socket, which is the corruption this release prevents.</li>
+<li>The object keeps a reference to an inherited handle. Without that reference, the garbage collector runs odbc’s finalizer and closes the parent’s socket anyway.</li>
+<li>This matters more from 2026.8.14 on, because one <code>DBConnection_v9</code> now serves many tables. <code>cs9::Task$run_parallel_plans()</code> forks with <code>pbmcapply::pbmclapply</code> and passes table objects into the workers.</li>
+<li>Measured against the <code>norsyss-postgres</code> server on 2026-08-14: four forked children each got their own backend process ID and their own correct result. With the guard disabled, two of those four children returned the parent’s backend process ID, and two failed with a type error.</li>
+<li>Same-process behaviour is unchanged. The 162 checks in the csdb suite and the 298 checks in the cs9 suite pass without an edit.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="development-2026-8-15">Development<a class="anchor" aria-label="anchor" href="#development-2026-8-15"></a></h3>
+<ul><li>
+<code>tests/testthat/test-fork-safety.R</code> covers the fork guarantee. Layer 1 changes the recorded process ID on a SQLite connection, and runs everywhere. Layer 2 forks with <code><a href="https://rdrr.io/r/parallel/mcparallel.html" class="external-link">parallel::mcparallel</a></code>, and skips on Windows, which has no fork.</li>
+<li>The csdb suite now holds 206 passes, up from 162.</li>
+<li>This release carries a version one day ahead of the calendar, on purpose. <code>2026.8.14</code> is already published from an earlier tree that lacks the fork guard, so a second tree under that number would leave two different sources sharing one version. <code>cs9</code> requires <code>csdb (&gt;= 2026.8.15)</code> for the same reason: that floor names the guard.</li>
+<li>The <code>norsyss-postgres</code> server now allows 300 connections, measured 2026-08-14. The 97-usable figure below described the server on 2026-08-13, when the import failed.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="2026.8.14" id="version-2026814">Version 2026.8.14<a class="anchor" aria-label="anchor" href="#version-2026814"></a></h2>
 <div class="section level3">
