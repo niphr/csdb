@@ -646,6 +646,12 @@ DBTable_v9 <- R6::R6Class(
     #' @param indexes A named list of vectors (generally "ind1", "ind2", etc.) that improves the speed of data retrieval operations on a database table.
     #' @param validator_field_types A function that validates the \code{field_types} before the DB schema is created.
     #' @param validator_field_contents A function that validates the data before it is inserted into the database.
+    #' @param dbconnection An existing \code{DBConnection_v9} to use, or NULL.
+    #'   The object borrows a supplied connection and does not own it.
+    #'   \code{disconnect()} then does nothing, so the caller decides when the
+    #'   connection closes. The object creates and owns a connection when this
+    #'   argument is NULL. It is the last argument, because a subclass can
+    #'   forward the earlier seven positionally.
     #' @return A new `DBTable_v9` object.
     initialize = function(
       dbconfig,
@@ -654,7 +660,8 @@ DBTable_v9 <- R6::R6Class(
       keys,
       indexes = NULL,
       validator_field_types = validator_field_types_blank,
-      validator_field_contents = validator_field_contents_blank
+      validator_field_contents = validator_field_contents_blank,
+      dbconnection = NULL
     ) {
       force(dbconfig)
       self$dbconfig <- list()
@@ -669,18 +676,27 @@ DBTable_v9 <- R6::R6Class(
       self$dbconfig$sslmode <- dbconfig$sslmode
       self$dbconfig$role_create_table <- dbconfig$role_create_table
 
-      self$dbconnection <- DBConnection_v9$new(
-        driver = self$dbconfig$driver,
-        server = self$dbconfig$server,
-        port = self$dbconfig$port,
-        db = self$dbconfig$db,
-        schema = self$dbconfig$schema,
-        user = self$dbconfig$user,
-        password = self$dbconfig$password,
-        trusted_connection = self$dbconfig$trusted_connection,
-        sslmode = self$dbconfig$sslmode,
-        role_create_table = self$dbconfig$role_create_table
-      )
+      force(dbconnection)
+      if (is.null(dbconnection)) {
+        self$dbconnection <- DBConnection_v9$new(
+          driver = self$dbconfig$driver,
+          server = self$dbconfig$server,
+          port = self$dbconfig$port,
+          db = self$dbconfig$db,
+          schema = self$dbconfig$schema,
+          user = self$dbconfig$user,
+          password = self$dbconfig$password,
+          trusted_connection = self$dbconfig$trusted_connection,
+          sslmode = self$dbconfig$sslmode,
+          role_create_table = self$dbconfig$role_create_table
+        )
+        private$owns_dbconnection <- TRUE
+      } else {
+        # A supplied connection is borrowed. The caller keeps ownership, and
+        # disconnect() below leaves it open.
+        self$dbconnection <- dbconnection
+        private$owns_dbconnection <- FALSE
+      }
 
       force(table_name)
       self$table_name <- table_name
@@ -844,9 +860,13 @@ DBTable_v9 <- R6::R6Class(
     },
 
     #' @description
-    #' Disconnect from the database.
+    #' Disconnect from the database. This does nothing when the connection came
+    #' from the \code{dbconnection} argument, because the caller owns that
+    #' connection.
     disconnect = function() {
-      self$dbconnection$disconnect()
+      if (private$owns_dbconnection) {
+        self$dbconnection$disconnect()
+      }
     },
 
     #' @description
@@ -1197,6 +1217,11 @@ DBTable_v9 <- R6::R6Class(
 
   # private ----
   private = list(
+    # TRUE only when initialize() built the DBConnection_v9 itself. The
+    # default matches the behaviour before the dbconnection argument existed,
+    # so a subclass that skips super$initialize() still disconnects.
+    owns_dbconnection = TRUE,
+
     # Lazyload the creation of the table
     lazy_created_table = FALSE,
     lazy_creation_of_table = function() {
