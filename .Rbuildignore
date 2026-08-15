@@ -12,8 +12,6 @@ dev
 ^\.claude$
 ^\.github$
 ^CLAUDE\.md$
-vignettes/_PRECOMPILER.R
-vignettes/.*\.Rmd\.orig$
 ^CRAN-SUBMISSION$
 ^index\.md$
 ^pkgdown$

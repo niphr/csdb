@@ -518,14 +518,52 @@ validator_field_contents_csfmt_rts_data_v2 <- function(data) {
 #' The class supports custom validation functions for both field types and data
 #' contents, which ensure data integrity and schema compliance.
 #'
+#' @section What the object creates in the database:
+#' One object creates three kinds of thing, and each carries its own name rule.
+#'
+#' \describe{
+#'   \item{The table}{Named \code{table_name}, in the schema that
+#'     \code{dbconfig} names.}
+#'   \item{The primary key constraint}{Named \code{PK_} plus the fully
+#'     specified table name, with every \code{.}, \code{[} and \code{]}
+#'     deleted. Schema \code{anon} with table \code{anon_data} therefore gives
+#'     \code{PK_anonanon_data}. Two different tables can reach one name,
+#'     because the rule deletes the separator. Schema \code{a} with table
+#'     \code{bc} and schema \code{ab} with table \code{c} both give
+#'     \code{PK_abc}.}
+#'   \item{One index per entry in \code{indexes}}{The names you write in
+#'     \code{indexes} are logical names. Each index reaches the database under
+#'     a physical name of the form \code{ix_<slug>_<16 hexadecimal
+#'     characters>}, at most 63 characters. The name carries the table
+#'     identity, so two tables in one schema that both declare \code{ind1} get
+#'     two indexes. \code{csdb:::index_physical_name()} returns the name for
+#'     one table and one logical name.}
+#' }
+#'
+#' @section The case of a constraint name on PostgreSQL:
+#' The source writes \code{PK_}, in upper case. PostgreSQL folds an unquoted
+#' identifier to lower case, so the catalogue stores \code{pk_}. Measured on
+#' the \code{norsyss_data1} database on 2026-08-15: 92 lower case \code{pk_}
+#' constraint names, and 0 upper case.
+#'
+#' A \code{DROP CONSTRAINT} that quotes the source spelling therefore fails on
+#' PostgreSQL. Write the name unquoted, or write it in lower case.
+#'
+#' SQLite does not fold at all. It keeps \code{PK_MixedCase} exactly as the
+#' source writes it, so the two backends disagree on one identifier.
+#'
+#' The physical index name has no such trap. It is lower case already, so it
+#' reads the same in the source and in both catalogues.
+#'
 #' @import data.table
 #' @import R6
 #' @export DBTable_v9
 #' @family database classes
 #' @seealso The introduction vignette,
-#'   \code{vignette("csdb", package = "csdb")}, which creates one of these
-#'   against a PostgreSQL database and inserts the bundled
-#'   \code{nor_covid19_cases_by_time_location} dataset.
+#'   \code{vignette("csdb", package = "csdb")}. It builds one of these on
+#'   SQLite and inserts the bundled
+#'   \code{nor_covid19_cases_by_time_location} dataset. It also shows two
+#'   tables that declare one logical index name.
 #'   \code{\link{DBConnection_v9}} takes the same arguments as the
 #'   \code{dbconfig} list, and one is created here to hold the connection.
 #' @examples
@@ -540,65 +578,57 @@ validator_field_contents_csfmt_rts_data_v2 <- function(data) {
 #'   validator_field_types = validator_field_types_csfmt_rts_data_v1
 #' ))
 #'
-#' \dontrun{
-#' # Create database connection
-#' db_config <- list(
-#'   driver = "ODBC Driver 17 for SQL Server",
-#'   server = "localhost",
-#'   db = "mydb",
-#'   schema = "dbo",
-#'   user = "myuser",
-#'   password = "mypass"
-#' )
+#' \donttest{
+#' # A full cycle on SQLite, in a file that tempfile() names. SQLite needs
+#' # no server, so this block runs anywhere. Name a driver of
+#' # "ODBC Driver 17 for SQL Server" or "PostgreSQL Unicode" instead, and
+#' # nothing else in the block changes.
+#' db_config <- list(driver = "SQLite", db = tempfile(fileext = ".sqlite"))
 #'
-#' # Define table schema
-#' field_types <- c(
-#'   "id" = "INTEGER",
-#'   "name" = "TEXT",
-#'   "value" = "DOUBLE",
-#'   "date_created" = "DATE"
-#' )
-#'
-#' # Create table object. Indexes are named here, because add_indexes()
-#' # takes no arguments and reads them from the object.
+#' # Indexes are named here, because add_indexes() takes no arguments and
+#' # reads them from the object.
 #' my_table <- DBTable_v9$new(
 #'   dbconfig = db_config,
 #'   table_name = "my_data_table",
-#'   field_types = field_types,
-#'   keys = c("id"),
+#'   field_types = c(
+#'     "id" = "INTEGER",
+#'     "name" = "TEXT",
+#'     "value" = "DOUBLE",
+#'     "date_created" = "DATE"
+#'   ),
+#'   keys = "id",
 #'   indexes = list("ind1" = c("name", "date_created")),
 #'   validator_field_types = validator_field_types_blank,
 #'   validator_field_contents = validator_field_contents_blank
 #' )
 #'
-#' # Create table in database
 #' my_table$create_table()
 #'
-#' # Insert data. insert_data() and upsert_data() need a data.table.
-#' sample_data <- data.table::data.table(
+#' # insert_data() and upsert_data() need a data.table.
+#' my_table$insert_data(data.table::data.table(
 #'   id = 1:3,
 #'   name = c("Alice", "Bob", "Charlie"),
 #'   value = c(10.5, 20.3, 15.7),
 #'   date_created = as.Date("2023-01-01")
-#' )
-#' my_table$insert_data(sample_data)
+#' ))
 #'
-#' # Query data using dplyr. tbl() needs dbplyr installed.
-#' result <- my_table$tbl() |>
+#' # tbl() returns a lazy dbplyr reference.
+#' my_table$tbl() |>
 #'   dplyr::filter(value > 15) |>
 #'   dplyr::collect()
 #'
-#' # Add the indexes that were named above
+#' # Add the indexes that were named above.
 #' my_table$add_indexes()
 #'
-#' # Upsert (insert or update) data
-#' new_data <- data.table::data.table(
+#' my_table$upsert_data(data.table::data.table(
 #'   id = 2:4,
 #'   name = c("Bob_Updated", "Charlie", "David"),
 #'   value = c(25.0, 15.7, 30.2),
 #'   date_created = as.Date("2023-01-02")
-#' )
-#' my_table$upsert_data(new_data)
+#' ))
+#' my_table$nrow()
+#'
+#' my_table$disconnect()
 #' }
 DBTable_v9 <- R6::R6Class(
   "DBTable_v9",
@@ -1093,8 +1123,21 @@ DBTable_v9 <- R6::R6Class(
       drop_indexes = names(self$indexes),
       verbose = TRUE
     ) {
+      # The row count comes from the guard, which read it before the drop.
+      # Never call nrow() here: a broken dim() method would then raise with
+      # the table already empty.
+      newdata_n <- private$check_newdata_before_drop_all_rows(
+        newdata = newdata,
+        method = "drop_all_rows_and_then_upsert_data"
+      )
       private$lazy_creation_of_table()
       self$drop_all_rows()
+      # A zero-row data.frame that passes the validator empties the table, and
+      # raises nothing. cs9::DBPartitionedTableExtended_v9 clears every
+      # partition this way.
+      if (newdata_n == 0) {
+        return(invisible(NULL))
+      }
       self$upsert_data(
         newdata = newdata,
         drop_indexes = drop_indexes,
@@ -1112,8 +1155,18 @@ DBTable_v9 <- R6::R6Class(
       confirm_insert_via_nrow = FALSE,
       verbose = TRUE
     ) {
+      newdata_n <- private$check_newdata_before_drop_all_rows(
+        newdata = newdata,
+        method = "drop_all_rows_and_then_insert_data"
+      )
       private$lazy_creation_of_table()
       self$drop_all_rows()
+      # See drop_all_rows_and_then_upsert_data() above for why the zero-row
+      # branch returns rather than raises. The same comment says why the count
+      # comes from the guard rather than from a second nrow() call.
+      if (newdata_n == 0) {
+        return(invisible(NULL))
+      }
       self$insert_data(
         newdata = newdata,
         confirm_insert_via_nrow = confirm_insert_via_nrow,
@@ -1145,48 +1198,99 @@ DBTable_v9 <- R6::R6Class(
     },
 
     #' @description
-    #' Adds indexes to the database table from `self$indexes`.
+    #' Adds indexes to the database table from `self$indexes`. Creates each
+    #' index in `self$indexes` exactly once, even when the table does not
+    #' exist yet and this call is what creates it.
+    #'
+    #' The names in `self$indexes` are logical names. Each index reaches the
+    #' database under a physical name. That name carries the table identity.
+    #' Two tables in one schema that declare the same logical name therefore
+    #' ask for different index names.
+    #'
+    #' After each create, the method reads the catalogue. It raises when the
+    #' index is absent from this table, and when the index covers columns
+    #' other than the declared ones.
+    #'
+    #' That check is defined for SQLite and for PostgreSQL, and for no other
+    #' backend. On any other backend the method creates each index and does
+    #' NOT verify it.
     add_indexes = function() {
+      # The guard is load-bearing, not defensive. lazy_creation_of_table()
+      # below calls create_table(), and create_table() ends by calling this
+      # same method. On a table that does not exist yet the inner call added
+      # every index, then the outer call resumed and added every index again.
+      # Two declared indexes produced four attempts.
+      #
+      # `CREATE INDEX IF NOT EXISTS` made the second round a silent no-op on
+      # PostgreSQL and on SQLite. On the default backend the try() inside
+      # add_index() swallowed the duplicate-name error. That try() is gone
+      # from 2026.8.16, so the second round is now a real failure.
+      #
+      # The guard lets the OUTER call do the work. The inner call returns at
+      # once, and the outer call adds the indexes after create_table() has
+      # returned, so the table is present.
+      if (private$adding_indexes) {
+        return(invisible(NULL))
+      }
+      private$adding_indexes <- TRUE
+      # on.exit, not a plain assignment at the end. add_index() can now raise,
+      # and a flag left TRUE would make every later call a silent no-op.
+      on.exit(private$adding_indexes <- FALSE, add = TRUE)
+
       private$lazy_creation_of_table()
       for (i in names(self$indexes)) {
-        message(glue::glue("Adding index {i}"))
-
-        add_index(
-          connection = self$dbconnection$autoconnection,
-          table = self$table_name_short_for_mssql_fully_specified_for_postgres_text,
-          index = i,
-          keys = self$indexes[[i]]
-        )
+        private$add_declared_index(i)
       }
+      invisible(NULL)
     },
 
     #' @description
     #' Drops all indexes from the database table.
+    #'
+    #' The method drops the physical name that `add_indexes()` created, for
+    #' every logical name in `self$indexes`. An index that a legacy release
+    #' created under the logical name is not dropped here.
     drop_indexes = function() {
       private$lazy_creation_of_table()
       for (i in names(self$indexes)) {
         message(glue::glue("Dropping index {i}"))
+        # The DBI::Id field, not the _text field beside it. drop_index() reads
+        # the schema out of this argument, and the text form cannot carry the
+        # boundary between the schema and the table name. See
+        # index_table_identity() in util_database.R.
         drop_index(
           connection = self$dbconnection$autoconnection,
-          table = self$table_name_short_for_mssql_fully_specified_for_postgres_text,
-          index = i
+          table = self$table_name_short_for_mssql_fully_specified_for_postgres,
+          index = private$physical_index_name(i)
         )
       }
+      invisible(NULL)
     },
 
     #' @description
-    #' Confirms that the names and number of indexes in the database are the same as in the R code.
-    #' Does not confirm the contents of the indexes.
+    #' Confirms that the database holds every index declared in
+    #' `self$indexes`, on this table, with the declared columns in the
+    #' declared order.
+    #'
+    #' The method never drops an index to reconcile. It takes one of four
+    #' actions per declared index:
+    #'
+    #' \itemize{
+    #'   \item present with the declared columns: nothing.
+    #'   \item absent: add it.
+    #'   \item present with other columns: raise.
+    #'   \item any index csdb did not name: ignore it.
+    #' }
+    #'
+    #' The method reads an index definition on SQLite and on PostgreSQL only.
+    #' On any other backend it checks the name alone, so it cannot see a
+    #' change of columns.
     confirm_indexes = function() {
-      indexes_db <- get_indexes(
-        connection = self$dbconnection$autoconnection,
-        table = self$table_name_short_for_mssql_fully_specified_for_postgres_text
-      )
-      indexes_self <- names(self$indexes)
-      if (!identical(indexes_db, indexes_self)) {
-        self$drop_indexes()
-        self$add_indexes()
+      private$lazy_creation_of_table()
+      for (i in names(self$indexes)) {
+        private$confirm_declared_index(i)
       }
+      invisible(NULL)
     },
 
     #' @description
@@ -1224,6 +1328,242 @@ DBTable_v9 <- R6::R6Class(
 
     # Lazyload the creation of the table
     lazy_created_table = FALSE,
+
+    # TRUE while add_indexes() runs. create_table() calls add_indexes(), and
+    # add_indexes() reaches create_table() through lazy_creation_of_table(),
+    # so the method can re-enter itself. See add_indexes() for the full path.
+    adding_indexes = FALSE,
+
+    # The name one declared index carries in the database. One helper keeps
+    # the four naming sites together. They are add_indexes(), drop_indexes(),
+    # confirm_indexes(), and the drop inside the default upsert method in
+    # util_database.R.
+    #
+    # The identity is table_name_short_for_mssql_fully_specified_for_postgres
+    # and NOT the _text field beside it. The fourth site receives that same
+    # object, because upsert_data() passes it. It is a DBI::Id on PostgreSQL
+    # and on the default backend, and an Id keeps the boundary between the
+    # schema and the table name. The text form joins them with a dot and loses
+    # that boundary. A schema or a table name that holds a dot then reads as
+    # two components rather than one.
+    physical_index_name = function(i) {
+      index_physical_name(
+        table = self$table_name_short_for_mssql_fully_specified_for_postgres,
+        index = i
+      )
+    },
+
+    # The columns one physical index covers, in index order. NULL means the
+    # backend has no catalogue reader. See the get_index_columns methods in
+    # util_database.R.
+    #
+    # The DBI::Id field, and not the _text field beside it. Every
+    # get_index_columns method reads the table name out of this argument as an
+    # IDENTITY, never as SQL. It needs the boundary that only the Id keeps.
+    # With the text form a table named `an.on.tab` read as three components,
+    # the last of them `tab`. The method then reported that the index it had
+    # just created was on no table.
+    read_index_columns = function(physical) {
+      get_index_columns(
+        connection = self$dbconnection$autoconnection,
+        table = self$table_name_short_for_mssql_fully_specified_for_postgres,
+        index = physical
+      )
+    },
+
+    # Compare the catalogue against the declaration.
+    #
+    # The comparison is case-insensitive because PostgreSQL folds an unquoted
+    # column name to lowercase and SQLite keeps the case it was given. A
+    # column list that differs only in case is the same list on both.
+    index_columns_match = function(columns, i) {
+      identical(tolower(columns), tolower(unname(self$indexes[[i]])))
+    },
+
+    # Create one declared index, then read the catalogue back.
+    #
+    # `CREATE INDEX IF NOT EXISTS` returning without an error says nothing
+    # about which table now holds the name. It says nothing about the columns
+    # either. Read the catalogue instead.
+    add_declared_index = function(i) {
+      physical <- private$physical_index_name(i)
+      message(glue::glue("Adding index {i}"))
+
+      # The DBI::Id field, and not the _text field beside it. Every add_index
+      # method quotes this argument itself from 2026.8.16, and quoting needs
+      # the boundary between the schema and the table name. Pre-quoted text
+      # would be quoted a second time.
+      add_index(
+        connection = self$dbconnection$autoconnection,
+        table = self$table_name_short_for_mssql_fully_specified_for_postgres,
+        index = physical,
+        keys = self$indexes[[i]]
+      )
+
+      columns <- private$read_index_columns(physical)
+      if (is.null(columns)) {
+        # Column verification is defined for SQLite and for PostgreSQL, and
+        # for no other backend. NULL says this backend has no catalogue
+        # reader, so nothing was measured. The index is created and is NOT
+        # verified. Raising here instead would break every create on SQL
+        # Server and on MySQL, which no test in this package covers.
+        return(invisible(NULL))
+      }
+      if (length(columns) == 0L) {
+        stop(glue::glue(
+          "Index {i} is not on table {self$table_name} after creating it. ",
+          "Its name there is {physical}. The statement raised nothing and ",
+          "the catalogue holds no such index on this table."
+        ))
+      }
+      if (!private$index_columns_match(columns, i)) {
+        stop(glue::glue(
+          "Index {i} on table {self$table_name} covers ",
+          "{paste0(columns, collapse = ', ')}. ",
+          "The code declares {paste0(self$indexes[[i]], collapse = ', ')}. ",
+          "Its name there is {physical}."
+        ))
+      }
+      invisible(NULL)
+    },
+
+    # Reconcile one declared index without dropping anything.
+    confirm_declared_index = function(i) {
+      physical <- private$physical_index_name(i)
+      columns <- private$read_index_columns(physical)
+
+      if (is.null(columns)) {
+        # This backend has no catalogue reader, so fall back to existence by
+        # name. Every backend answers that, and no backend answers the
+        # columns unless it is SQLite or PostgreSQL.
+        present <- physical %in%
+          get_indexes(
+            connection = self$dbconnection$autoconnection,
+            table = self$table_name_short_for_mssql_fully_specified_for_postgres_text
+          )
+        if (!present) {
+          private$add_declared_index(i)
+        }
+        return(invisible(NULL))
+      }
+
+      if (length(columns) == 0L) {
+        private$add_declared_index(i)
+        return(invisible(NULL))
+      }
+
+      if (!private$index_columns_match(columns, i)) {
+        stop(glue::glue(
+          "Index {i} on table {self$table_name} covers ",
+          "{paste0(columns, collapse = ', ')}. ",
+          "The code declares {paste0(self$indexes[[i]], collapse = ', ')}. ",
+          "Its name there is {physical}. ",
+          "Drop that index and call add_indexes(), or change the ",
+          "declaration to match. confirm_indexes() does not drop an index."
+        ))
+      }
+      invisible(NULL)
+    },
+
+    # The two drop_all_rows_and_then_* methods empty the table before they
+    # write. This method rejects four kinds of newdata before the first row is
+    # dropped. They are a NULL, an object that is not a data.frame, a row
+    # count that is unusable or unstable, and data that the validator refuses.
+    #
+    # That list is the whole claim. It is not "the table is unchanged unless
+    # the write completes". upsert_data() and insert_data() read newdata again
+    # after the drop, so a dim() method that answers differently on a later
+    # call still empties the table and then raises. Closing that needs a copy
+    # of newdata or a transaction, and this release has neither. See NEWS.md.
+    #
+    # This check cannot live inside upsert_data() or insert_data(). Both of
+    # those return early on a NULL and on a zero-row frame. Both return before
+    # they reach the validator. A NULL is therefore not invalid data: the
+    # validator never sees it. Measured on 2026-08-15, before this release: 2
+    # rows before the call, 0 rows after it, and no error at all.
+    #
+    # The validator is self$validator_field_contents, the one that
+    # upsert_data() and insert_data() already call. There is no second
+    # validation rule here.
+    #
+    # The method returns the row count. The caller MUST use that returned
+    # value and MUST NOT call nrow() again after the drop. See the row count
+    # block below for what happens when it does.
+    check_newdata_before_drop_all_rows = function(newdata, method) {
+      if (!is.data.frame(newdata)) {
+        if (is.null(newdata)) {
+          stop(glue::glue(
+            "newdata is NULL. {method}() on table {self$table_name} would ",
+            "empty the table and write nothing back. Pass a zero-row ",
+            "data.frame to empty the table on purpose."
+          ))
+        }
+        stop(glue::glue(
+          "newdata is not a data.frame. {method}() on table ",
+          "{self$table_name} received an object of class ",
+          "{paste0(class(newdata), collapse = ', ')}."
+        ))
+      }
+
+      # nrow() runs here, before the drop, and the caller reuses this value.
+      # nrow() reads dim(), and a data.frame subclass can carry a dim() method
+      # that returns NA, NULL, Inf, or a different answer on each call.
+      # is.data.frame() is TRUE on such an object, and a permissive validator
+      # accepts it. Reading the count after the drop then raises on
+      # `if (n == 0)`, with the table already empty.
+      #
+      # The two reads detect a count that changes between them. They do NOT
+      # prove that a later read agrees.
+      #
+      # The check adds two dim() calls, and it does not copy newdata. Their
+      # cost depends on the dispatched methods. dim() is a generic. An
+      # arbitrary method can allocate, and it can be slow.
+      as_text <- function(x) {
+        out <- paste0(format(x), collapse = ", ")
+        if (nzchar(out)) out else "a zero-length value"
+      }
+      n <- nrow(newdata)
+      n_again <- nrow(newdata)
+      if (
+        !is.numeric(n) ||
+          length(n) != 1L ||
+          !is.finite(n) ||
+          n < 0 ||
+          n != trunc(n)
+      ) {
+        stop(glue::glue(
+          "newdata has no usable row count. {method}() on table ",
+          "{self$table_name} read nrow(newdata) as {as_text(n)}. A row count ",
+          "MUST be one finite number, and MUST NOT be negative. Nothing was ",
+          "dropped."
+        ))
+      }
+      if (!isTRUE(n == n_again)) {
+        stop(glue::glue(
+          "newdata has an unstable row count. {method}() on table ",
+          "{self$table_name} read nrow(newdata) as {as_text(n)}, and then as ",
+          "{as_text(n_again)}. Nothing was dropped."
+        ))
+      }
+
+      validated <- self$validator_field_contents(newdata)
+      if (!isTRUE(validated)) {
+        var <- attr(validated, "var")
+        if (is.null(var)) {
+          # glue() on a NULL returns character(0), and stop() would then carry
+          # no message at all.
+          var <- "not named by the validator"
+        }
+        stop(glue::glue(
+          "newdata failed validator_field_contents. {method}() on table ",
+          "{self$table_name} rejected it before dropping any row. ",
+          "Field: {var}."
+        ))
+      }
+
+      n
+    },
+
     lazy_creation_of_table = function() {
       if (!private$lazy_created_table) {
         self$create_table()

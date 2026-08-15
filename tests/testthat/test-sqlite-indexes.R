@@ -3,6 +3,25 @@
 # The blocks are driven through DBTable_v9 wherever DBTable_v9 has a method
 # for the thing under test, so what runs is what add_indexes(),
 # confirm_indexes() and info() actually call.
+#
+# `self$indexes` holds LOGICAL names. The database holds PHYSICAL names, one
+# per table, from index_physical_name(). No block writes a physical name as a
+# string literal, so the layout of that name stays free to change.
+
+# The physical names of every index a table declares, in declaration order.
+expected_index_names <- function(tab) {
+  vapply(
+    names(tab$indexes),
+    function(i) {
+      index_physical_name(
+        table = tab$table_name_short_for_mssql_fully_specified_for_postgres,
+        index = i
+      )
+    },
+    character(1),
+    USE.NAMES = FALSE
+  )
+}
 
 test_that("confirm_indexes executes no DDL when the indexes already match", {
   cfg <- sqlite_dbconfig()
@@ -15,13 +34,11 @@ test_that("confirm_indexes executes no DDL when the indexes already match", {
   )
   suppressMessages(tab$connect())
   con <- tab$dbconnection$autoconnection
+  expected <- expected_index_names(tab)
 
-  # The names must already agree, or confirm_indexes() is entitled to emit
-  # DDL and the block would be testing nothing.
-  expect_identical(
-    get_indexes(connection = con, table = "tab"),
-    c("ind1", "ind2")
-  )
+  # The database must already hold what the code declares, or
+  # confirm_indexes() is entitled to emit DDL and the block tests nothing.
+  expect_identical(get_indexes(connection = con, table = "tab"), expected)
 
   # PRAGMA schema_version, not the index names. Comparing names cannot tell a
   # no-op apart from a drop-and-recreate: the names are identical either way.
@@ -40,7 +57,7 @@ test_that("confirm_indexes executes no DDL when the indexes already match", {
   # The counter is live rather than frozen: dropping one index moves it.
   # Without this the assertion above would also pass on a PRAGMA that always
   # returned the same number.
-  drop_index(connection = con, table = "tab", index = "ind2")
+  drop_index(connection = con, table = "tab", index = expected[2])
   expect_true(schema_version() > before)
 
   tab$disconnect()
@@ -67,20 +84,21 @@ test_that("get_indexes excludes the primary key autoindex", {
   )$name
   expect_true("sqlite_autoindex_tab_1" %in% all_indexes)
 
-  expect_identical(get_indexes(connection = con, table = "tab"), "ind1")
+  expected <- expected_index_names(tab)
+  expect_identical(get_indexes(connection = con, table = "tab"), expected)
 
   # A plain character vector, not a data.frame column and not carrying
-  # attributes. confirm_indexes() compares with identical(), which is strict
-  # about both.
+  # attributes. A caller comparing the whole vector uses identical(), which is
+  # strict about both.
   retval <- get_indexes(connection = con, table = "tab")
   expect_type(retval, "character")
   expect_null(attributes(retval))
-  expect_identical(retval, names(tab$indexes))
+  expect_length(retval, length(tab$indexes))
 
   # A second table's indexes do not leak in: tbl_name restricts the query.
   DBI::dbExecute(con, "CREATE TABLE other (z TEXT)")
   DBI::dbExecute(con, "CREATE INDEX ind_other ON other (z)")
-  expect_identical(get_indexes(connection = con, table = "tab"), "ind1")
+  expect_identical(get_indexes(connection = con, table = "tab"), expected)
 
   tab$disconnect()
 })
@@ -137,10 +155,10 @@ test_that("a user index or table named sqlite... is not hidden by the autoindex 
   #
   # The names below deliberately have a non-underscore character after
   # "sqlite": sqliteFoo, sqliteBar. Under the unescaped filter both vanish,
-  # and the consequences are the two this phase exists to prevent. A hidden
-  # index named sqliteBar is dropped and re-added by confirm_indexes() on
-  # every call; a hidden table named sqliteFoo returns nothing from
-  # DBTable_v9$nrow(use_count = FALSE) and DBTable_v9$info().
+  # and the consequences are the two this block exists to prevent. A hidden
+  # index named sqliteBar reads as missing to every caller; a hidden table
+  # named sqliteFoo returns nothing from DBTable_v9$nrow(use_count = FALSE)
+  # and DBTable_v9$info().
   cfg <- sqlite_dbconfig()
   tab <- DBTable_v9$new(
     dbconfig = cfg,
@@ -158,7 +176,7 @@ test_that("a user index or table named sqlite... is not hidden by the autoindex 
 
   # The index is visible, in creation order, and the autoindex is still gone.
   retval <- get_indexes(connection = con, table = "tab")
-  expect_identical(retval, c("ind1", "sqliteBar"))
+  expect_identical(retval, c(expected_index_names(tab), "sqliteBar"))
   expect_false("sqlite_autoindex_tab_1" %in% retval)
 
   # The table is visible, with its exact row count, and SQLite's own objects

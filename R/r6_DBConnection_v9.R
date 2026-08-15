@@ -24,14 +24,17 @@
 #' csdb_set_auth_hook(previous)
 #' csdb_get_auth_hook()
 #'
-#' \dontrun{
-#' # A real hook refreshes credentials, e.g. a Kerberos ticket
-#' csdb_set_auth_hook(function() {
+#' \donttest{
+#' # A real hook refreshes a credential, for example a Kerberos ticket.
+#' # Registering the hook does not call it, so this block runs on a
+#' # machine that has no such script.
+#' previous <- csdb_set_auth_hook(function() {
 #'   system2("/bin/authenticate.sh", stdout = NULL)
 #' })
+#' is.function(csdb_get_auth_hook())
 #'
-#' # Clear the hook
-#' csdb_set_auth_hook(NULL)
+#' # Put back whatever was registered before.
+#' csdb_set_auth_hook(previous)
 #' }
 csdb_set_auth_hook <- function(hook) {
   if (!is.null(hook) && !is.function(hook)) {
@@ -59,11 +62,15 @@ csdb_set_auth_hook <- function(hook) {
 #' # Returns NULL when no hook has been set
 #' csdb_get_auth_hook()
 #'
-#' \dontrun{
-#' # Register a hook and then retrieve it
-#' csdb_set_auth_hook(function() system2("/bin/kinit", stdout = NULL))
+#' \donttest{
+#' # Register a hook and then read it back. Registering does not call it.
+#' previous <- csdb_set_auth_hook(function() {
+#'   system2("/bin/kinit", stdout = NULL)
+#' })
 #' hook <- csdb_get_auth_hook()
 #' is.function(hook)
+#'
+#' csdb_set_auth_hook(previous)
 #' }
 csdb_get_auth_hook <- function() {
   getOption("csdb.auth_hook")
@@ -96,9 +103,11 @@ csdb_get_auth_hook <- function() {
 #' @section Fork safety:
 #' A connection belongs to the process that opened it. After a fork, the child
 #' holds a copy of this object and a copy of the parent's connection. Both
-#' processes then use one socket. PostgreSQL returns wrong results and reports
-#' no error. \code{DBI::dbIsValid()} reports TRUE on such a handle, so nothing
-#' else detects it.
+#' processes then use one socket. PostgreSQL can return wrong results and
+#' report no error. Measured against the NorSySS server on 2026-08-14. A child
+#' asked for \code{select 4} and read 3. The parent asked for
+#' \code{select 999} and read 2. \code{DBI::dbIsValid()} reports TRUE on such a
+#' handle, so nothing else detects it.
 #'
 #' This class records the process that opens each connection. It drops any
 #' connection whose recorded process is not the current one.
@@ -134,43 +143,27 @@ csdb_get_auth_hook <- function() {
 #' db$is_connected()
 #' db
 #'
-#' \dontrun{
-#' # Create a SQL Server connection
-#' db_config <- DBConnection_v9$new(
-#'   driver = "ODBC Driver 17 for SQL Server",
-#'   server = "localhost",
-#'   port = 1433,
-#'   db = "mydb",
-#'   user = "myuser",
-#'   password = "mypass"
+#' \donttest{
+#' # The full cycle, on SQLite. SQLite needs no server, so this block runs
+#' # anywhere. Only the driver and the db argument change for a server.
+#' # vignette("backends", package = "csdb") puts the two configurations
+#' # side by side.
+#' sqlite_db <- DBConnection_v9$new(
+#'   driver = "SQLite",
+#'   db = tempfile(fileext = ".sqlite")
 #' )
 #'
-#' # Connect to the database
-#' db_config$connect()
+#' sqlite_db$connect()
+#' sqlite_db$is_connected()
+#' DBI::dbListTables(sqlite_db$connection)
 #'
-#' # Check connection status
-#' db_config$is_connected()
+#' sqlite_db$disconnect()
+#' sqlite_db$is_connected()
 #'
-#' # Use the connection
-#' tables <- DBI::dbListTables(db_config$connection)
-#'
-#' # Disconnect when done
-#' db_config$disconnect()
-#'
-#' # PostgreSQL example. Only "PostgreSQL Unicode" reaches the
-#' # PostgreSQL branch of the connection code.
-#' pg_config <- DBConnection_v9$new(
-#'   driver = "PostgreSQL Unicode",
-#'   server = "localhost",
-#'   port = 5432,
-#'   db = "mydb",
-#'   user = "myuser",
-#'   password = "mypass"
-#' )
-#'
-#' pg_config$connect()
-#' # ... use connection ...
-#' pg_config$disconnect()
+#' # $autoconnection opens the file again, so a read after a disconnect
+#' # still works.
+#' DBI::dbListTables(sqlite_db$autoconnection)
+#' sqlite_db$disconnect()
 #' }
 DBConnection_v9 <- R6::R6Class(
   "DBConnection_v9",
@@ -407,9 +400,9 @@ DBConnection_v9 <- R6::R6Class(
     # Drop a connection that another process opened.
     #
     # A fork copies this object, so the child holds the parent's handle and
-    # both processes use one socket. PostgreSQL then returns wrong results and
-    # reports no error. DBI::dbIsValid() reports TRUE on such a handle, and the
-    # dbListTables() probe in is_connected() also succeeds, so nothing else
+    # both processes use one socket. PostgreSQL can then return wrong results
+    # and report no error. DBI::dbIsValid() reports TRUE on such a handle, and
+    # the dbListTables() probe in is_connected() also succeeds, so nothing else
     # detects it.
     #
     # Two details are load-bearing. This method MUST NOT call

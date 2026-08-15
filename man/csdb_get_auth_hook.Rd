@@ -17,11 +17,15 @@ Returns the currently registered authentication hook function.
 # Returns NULL when no hook has been set
 csdb_get_auth_hook()
 
-\dontrun{
-# Register a hook and then retrieve it
-csdb_set_auth_hook(function() system2("/bin/kinit", stdout = NULL))
+\donttest{
+# Register a hook and then read it back. Registering does not call it.
+previous <- csdb_set_auth_hook(function() {
+  system2("/bin/kinit", stdout = NULL)
+})
 hook <- csdb_get_auth_hook()
 is.function(hook)
+
+csdb_set_auth_hook(previous)
 }
 }
 \seealso{
