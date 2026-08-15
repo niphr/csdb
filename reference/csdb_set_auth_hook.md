@@ -44,13 +44,17 @@ csdb_set_auth_hook(previous)
 csdb_get_auth_hook()
 #> NULL
 
-if (FALSE) { # \dontrun{
-# A real hook refreshes credentials, e.g. a Kerberos ticket
-csdb_set_auth_hook(function() {
+# \donttest{
+# A real hook refreshes a credential, for example a Kerberos ticket.
+# Registering the hook does not call it, so this block runs on a
+# machine that has no such script.
+previous <- csdb_set_auth_hook(function() {
   system2("/bin/authenticate.sh", stdout = NULL)
 })
+is.function(csdb_get_auth_hook())
+#> [1] TRUE
 
-# Clear the hook
-csdb_set_auth_hook(NULL)
-} # }
+# Put back whatever was registered before.
+csdb_set_auth_hook(previous)
+# }
 ```

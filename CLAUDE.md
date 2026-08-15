@@ -33,8 +33,9 @@ devtools::load_all()
 # Generate documentation using roxygen2
 devtools::document()
 
-# Build vignettes
-knitr::knit("vignettes/csdb.Rmd.orig", "vignettes/csdb.Rmd")
+# Build vignettes. csdb.Rmd is a normal vignette and R CMD check runs its
+# chunks, so there is nothing to precompile.
+devtools::build_vignettes()
 ```
 
 ### Testing
@@ -113,8 +114,14 @@ schema formats (e.g., `csfmt_rts_data_v1`, `csfmt_rts_data_v2`)
 
 - `R/`: Main source code
 - `man/`: Generated documentation files
-- `vignettes/`: Package vignettes (use `_PRECOMPILER.R` to build from
-  `.Rmd.orig`)
+- `vignettes/`: Package vignettes. `csdb.Rmd` runs on SQLite, so
+  `R CMD check` executes every chunk. A chunk with `error = FALSE` turns
+  the check red if it raises unexpectedly. A chunk with `error = TRUE`
+  passes whether it raises or not, and no printed value is compared
+  against anything. The vignette therefore guards against new unexpected
+  errors, and the test suites assert the values. `backends.Rmd` is
+  `eval = FALSE` throughout, because it shows a PostgreSQL configuration
+  that cannot connect during a check.
 - `data/`: Package data (includes `nor_covid19_cases_by_time_location`)
 - `data-raw/`: Raw data and processing scripts
 

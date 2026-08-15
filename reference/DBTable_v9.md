@@ -38,12 +38,55 @@ The DBTable_v9 class is a database table abstraction that provides:
 both field types and data contents, which ensure data integrity and
 schema compliance.
 
+## What the object creates in the database
+
+One object creates three kinds of thing, and each carries its own name
+rule.
+
+- The table:
+
+  Named `table_name`, in the schema that `dbconfig` names.
+
+- The primary key constraint:
+
+  Named `PK_` plus the fully specified table name, with every `.`, `[`
+  and `]` deleted. Schema `anon` with table `anon_data` therefore gives
+  `PK_anonanon_data`. Two different tables can reach one name, because
+  the rule deletes the separator. Schema `a` with table `bc` and schema
+  `ab` with table `c` both give `PK_abc`.
+
+- One index per entry in `indexes`:
+
+  The names you write in `indexes` are logical names. Each index reaches
+  the database under a physical name of the form
+  `ix_<slug>_<16 hexadecimal characters>`, at most 63 characters. The
+  name carries the table identity, so two tables in one schema that both
+  declare `ind1` get two indexes. `csdb:::index_physical_name()` returns
+  the name for one table and one logical name.
+
+## The case of a constraint name on PostgreSQL
+
+The source writes `PK_`, in upper case. PostgreSQL folds an unquoted
+identifier to lower case, so the catalogue stores `pk_`. Measured on the
+`norsyss_data1` database on 2026-08-15: 92 lower case `pk_` constraint
+names, and 0 upper case.
+
+A `DROP CONSTRAINT` that quotes the source spelling therefore fails on
+PostgreSQL. Write the name unquoted, or write it in lower case.
+
+SQLite does not fold at all. It keeps `PK_MixedCase` exactly as the
+source writes it, so the two backends disagree on one identifier.
+
+The physical index name has no such trap. It is lower case already, so
+it reads the same in the source and in both catalogues.
+
 ## See also
 
 The introduction vignette,
-[`vignette("csdb", package = "csdb")`](https://niphr.github.io/csdb/articles/csdb.md),
-which creates one of these against a PostgreSQL database and inserts the
-bundled `nor_covid19_cases_by_time_location` dataset.
+[`vignette("csdb", package = "csdb")`](https://niphr.github.io/csdb/articles/csdb.md).
+It builds one of these on SQLite and inserts the bundled
+`nor_covid19_cases_by_time_location` dataset. It also shows two tables
+that declare one logical index name.
 [`DBConnection_v9`](https://niphr.github.io/csdb/reference/DBConnection_v9.md)
 takes the same arguments as the `dbconfig` list, and one is created here
 to hold the connection.
@@ -492,7 +535,22 @@ your variables.
 
 ### `DBTable_v9$add_indexes()`
 
-Adds indexes to the database table from \`self\$indexes\`.
+Adds indexes to the database table from \`self\$indexes\`. Creates each
+index in \`self\$indexes\` exactly once, even when the table does not
+exist yet and this call is what creates it.
+
+The names in \`self\$indexes\` are logical names. Each index reaches the
+database under a physical name. That name carries the table identity.
+Two tables in one schema that declare the same logical name therefore
+ask for different index names.
+
+After each create, the method reads the catalogue. It raises when the
+index is absent from this table, and when the index covers columns other
+than the declared ones.
+
+That check is defined for SQLite and for PostgreSQL, and for no other
+backend. On any other backend the method creates each index and does NOT
+verify it.
 
 #### Usage
 
@@ -504,6 +562,10 @@ Adds indexes to the database table from \`self\$indexes\`.
 
 Drops all indexes from the database table.
 
+The method drops the physical name that \`add_indexes()\` created, for
+every logical name in \`self\$indexes\`. An index that a legacy release
+created under the logical name is not dropped here.
+
 #### Usage
 
     DBTable_v9$drop_indexes()
@@ -512,8 +574,24 @@ Drops all indexes from the database table.
 
 ### `DBTable_v9$confirm_indexes()`
 
-Confirms that the names and number of indexes in the database are the
-same as in the R code. Does not confirm the contents of the indexes.
+Confirms that the database holds every index declared in
+\`self\$indexes\`, on this table, with the declared columns in the
+declared order.
+
+The method never drops an index to reconcile. It takes one of four
+actions per declared index:
+
+- present with the declared columns: nothing.
+
+- absent: add it.
+
+- present with other columns: raise.
+
+- any index csdb did not name: ignore it.
+
+The method reads an index definition on SQLite and on PostgreSQL only.
+On any other backend it checks the name alone, so it cannot see a change
+of columns.
 
 #### Usage
 
@@ -577,64 +655,65 @@ try(DBTable_v9$new(
 ))
 #> Error in initialize(...) : field_types not validated in my_data_table
 
-if (FALSE) { # \dontrun{
-# Create database connection
-db_config <- list(
-  driver = "ODBC Driver 17 for SQL Server",
-  server = "localhost",
-  db = "mydb",
-  schema = "dbo",
-  user = "myuser",
-  password = "mypass"
-)
+# \donttest{
+# A full cycle on SQLite, in a file that tempfile() names. SQLite needs
+# no server, so this block runs anywhere. Name a driver of
+# "ODBC Driver 17 for SQL Server" or "PostgreSQL Unicode" instead, and
+# nothing else in the block changes.
+db_config <- list(driver = "SQLite", db = tempfile(fileext = ".sqlite"))
 
-# Define table schema
-field_types <- c(
-  "id" = "INTEGER",
-  "name" = "TEXT",
-  "value" = "DOUBLE",
-  "date_created" = "DATE"
-)
-
-# Create table object. Indexes are named here, because add_indexes()
-# takes no arguments and reads them from the object.
+# Indexes are named here, because add_indexes() takes no arguments and
+# reads them from the object.
 my_table <- DBTable_v9$new(
   dbconfig = db_config,
   table_name = "my_data_table",
-  field_types = field_types,
-  keys = c("id"),
+  field_types = c(
+    "id" = "INTEGER",
+    "name" = "TEXT",
+    "value" = "DOUBLE",
+    "date_created" = "DATE"
+  ),
+  keys = "id",
   indexes = list("ind1" = c("name", "date_created")),
   validator_field_types = validator_field_types_blank,
   validator_field_contents = validator_field_contents_blank
 )
 
-# Create table in database
 my_table$create_table()
+#> Creating table my_data_table
+#> Adding index ind1
 
-# Insert data. insert_data() and upsert_data() need a data.table.
-sample_data <- data.table::data.table(
+# insert_data() and upsert_data() need a data.table.
+my_table$insert_data(data.table::data.table(
   id = 1:3,
   name = c("Alice", "Bob", "Charlie"),
   value = c(10.5, 20.3, 15.7),
   date_created = as.Date("2023-01-01")
-)
-my_table$insert_data(sample_data)
+))
 
-# Query data using dplyr. tbl() needs dbplyr installed.
-result <- my_table$tbl() |>
+# tbl() returns a lazy dbplyr reference.
+my_table$tbl() |>
   dplyr::filter(value > 15) |>
   dplyr::collect()
+#> # A tibble: 2 × 4
+#>      id name    value date_created
+#>   <int> <chr>   <dbl> <date>      
+#> 1     2 Bob      20.3 2023-01-01  
+#> 2     3 Charlie  15.7 2023-01-01  
 
-# Add the indexes that were named above
+# Add the indexes that were named above.
 my_table$add_indexes()
+#> Adding index ind1
 
-# Upsert (insert or update) data
-new_data <- data.table::data.table(
+my_table$upsert_data(data.table::data.table(
   id = 2:4,
   name = c("Bob_Updated", "Charlie", "David"),
   value = c(25.0, 15.7, 30.2),
   date_created = as.Date("2023-01-02")
-)
-my_table$upsert_data(new_data)
-} # }
+))
+my_table$nrow()
+#> [1] 4
+
+my_table$disconnect()
+# }
 ```

@@ -62,19 +62,25 @@ does not mention this function.
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
-# Microsoft SQL Server example
-con <- DBI::dbConnect(odbc::odbc(),
-  driver = "ODBC Driver 17 for SQL Server",
-  server = "localhost",
-  database = "mydb"
-)
-table_info <- get_table_names_and_info(con)
-print(table_info)
-DBI::dbDisconnect(con)
+# \donttest{
+# SQLite needs no server, so this block runs anywhere. The three size
+# columns are NA_real_ here, and carry a number on the other two
+# backends.
+con <- DBI::dbConnect(RSQLite::SQLite(), tempfile(fileext = ".sqlite"))
+DBI::dbWriteTable(con, "cases", data.frame(id = 1:3, n = c(7, 8, 9)))
 
-# PostgreSQL example. Methods exist for the "PostgreSQL" and
-# "Microsoft SQL Server" connection classes that odbc creates.
+get_table_names_and_info(con)
+#>    table_name  nrow size_total_gb size_data_gb size_index_gb
+#>        <char> <num>         <num>        <num>         <num>
+#> 1:      cases     3            NA           NA            NA
+
+DBI::dbDisconnect(con)
+# }
+
+if (FALSE) { # \dontrun{
+# A server backend needs a running server, so this block cannot run
+# here. Methods exist for the "PostgreSQL" and "Microsoft SQL Server"
+# connection classes that odbc creates.
 con <- DBI::dbConnect(odbc::odbc(),
   driver = "PostgreSQL Unicode",
   server = "localhost",
@@ -83,8 +89,7 @@ con <- DBI::dbConnect(odbc::odbc(),
   uid = "user",
   password = "pass"
 )
-table_info <- get_table_names_and_info(con)
-print(table_info)
+get_table_names_and_info(con)
 DBI::dbDisconnect(con)
 } # }
 ```

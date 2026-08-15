@@ -23,7 +23,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.15</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.16</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -79,7 +79,6 @@
                         <h4 data-toc-skip class="author">Richard Aubrey
 White</h4>
             
-            <h4 data-toc-skip class="date">2025-07-18</h4>
       
       <small class="dont-index">Source: <a href="https://github.com/niphr/csdb/blob/main/vignettes/csdb.Rmd" class="external-link"><code>vignettes/csdb.Rmd</code></a></small>
       <div class="d-none name"><code>csdb.Rmd</code></div>
@@ -96,6 +95,22 @@ once: its columns and their types, its primary key, and its indexes. You
 then insert, upsert, delete and read rows through R methods. Before it
 writes, it can check that your data matches an agreed column format, so
 a table cannot quietly change shape between runs.</p>
+<p>No chunk in this vignette needs a database server. Every chunk that
+reaches a database uses SQLite, in a file that <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile()</a></code>
+names. <code><a href="../articles/backends.html">vignette("backends", package = "csdb")</a></code> puts a
+PostgreSQL configuration and a SQLite configuration side by side.</p>
+<div class="section level3">
+<h3 id="what-this-vignette-does-and-does-not-prove">What this vignette does and does not prove<a class="anchor" aria-label="anchor" href="#what-this-vignette-does-and-does-not-prove"></a>
+</h3>
+<p><code>R CMD check</code> re-runs every chunk. A chunk with
+<code>error = FALSE</code> turns the check red if it raises
+unexpectedly. A chunk with <code>error = TRUE</code> passes whether it
+raises or not.</p>
+<p>This vignette therefore guards against new unexpected errors. The
+expected errors and every printed value are demonstrations, and the test
+suites assert them. See <code>tests/testthat/</code> in the package
+source.</p>
+</div>
 <div class="section level3">
 <h3 id="two-classes-and-the-split-between-them">Two classes, and the split between them<a class="anchor" aria-label="anchor" href="#two-classes-and-the-split-between-them"></a>
 </h3>
@@ -204,9 +219,9 @@ then checks nothing about the columns.</p>
 </tbody>
 </table>
 <p>One <code>dbconfig</code> list picks the backend, and nothing else in
-your code changes. <code><a href="../articles/backends.html">vignette("backends", package = "csdb")</a></code>
-puts a PostgreSQL configuration and a SQLite configuration side by side,
-and lists what differs between them.</p>
+your code changes. <code>csdb</code> reads no environment variable
+itself. To keep a password out of a script, read the variable yourself
+and pass the result to <code>DBTable_v9$new()</code>.</p>
 </div>
 <div class="section level3">
 <h3 id="where-csdb-sits">Where csdb sits<a class="anchor" aria-label="anchor" href="#where-csdb-sits"></a>
@@ -216,110 +231,42 @@ stack. It imports <code>csutil</code>. Its validators are written
 against <code>cstidy</code>’s data formats, by column name and type. No
 <code>csdb</code> code calls <code>cstidy</code> or
 <code>csalert</code>, and neither is a dependency.</p>
+</div>
+</div>
+<div class="section level2">
+<h2 id="a-worked-example">A worked example<a class="anchor" aria-label="anchor" href="#a-worked-example"></a>
+</h2>
+<p>The block below creates a table object, clears it, and inserts the
+bundled <code>nor_covid19_cases_by_time_location</code> dataset. The
+file is new, so <code>$drop_all_rows()</code> creates the table and its
+index first, and then reports that it removed 0 rows.
+<code>$tbl()</code> returns a lazy dbplyr reference.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://r-datatable.com" class="external-link">data.table</a></span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://magrittr.tidyverse.org" class="external-link">magrittr</a></span><span class="op">)</span></span></code></pre></div>
-</div>
-</div>
-<div class="section level2">
-<h2 id="overview">Overview<a class="anchor" aria-label="anchor" href="#overview"></a>
-</h2>
-<p><code>csdb</code> provides an abstracted database-access layer for
-the Core Surveillance (csverse) ecosystem. The package exposes two R6
-classes:</p>
-<ul>
-<li>
-<strong><code>DBConnection_v9</code></strong> — wraps a single
-database connection and manages its lifecycle (connect, disconnect,
-reconnect).</li>
-<li>
-<strong><code>DBTable_v9</code></strong> — represents one database
-table. It inserts, upserts and deletes rows, manages indexes, and
-validates field types and contents.</li>
-</ul>
-<p>csdb supports three backends. Microsoft SQL Server and PostgreSQL
-connect over ODBC. Pass their server, port, user and password as
-arguments to <code>DBConnection_v9$new()</code>. csdb never reads an
-environment variable itself. To keep credentials out of scripts and
-version control, read the variable yourself and pass the result in.
-SQLite connects through <code>RSQLite</code>, where <code>db</code> is a
-file path. csdb reads no server, port, user or password for SQLite.</p>
-<p>This vignette runs on SQLite, in a file created by
-<code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile()</a></code>. Every chunk below therefore executes on a
-machine with no database server. For what changes when you point the
-same code at PostgreSQL instead, see
-<code><a href="../articles/backends.html">vignette("backends", package = "csdb")</a></code>.</p>
-</div>
-<div class="section level2">
-<h2 id="dbconnection_v9">
-<code>DBConnection_v9</code><a class="anchor" aria-label="anchor" href="#dbconnection_v9"></a>
-</h2>
-<p><code>DBConnection_v9$new()</code> stores connection parameters but
-does not open a connection immediately. <code>$connect()</code> opens
-the connection; <code>$disconnect()</code> closes it. The
-<code>$autoconnection</code> field returns an active connection, and
-reconnects automatically when needed.</p>
-<p>The example below creates a connection object, connects, inspects the
-connection fields, then disconnects. After you disconnect,
-<code>$connection</code> reports <code>DISCONNECTED</code>, while
-<code><a href="https://rdrr.io/r/base/class.html" class="external-link">class()</a></code> still reports the driver type, and a read of
-<code>$autoconnection</code> opens the file again.</p>
-</div>
-<div class="section level2">
-<h2 id="dbtable_v9">
-<code>DBTable_v9</code><a class="anchor" aria-label="anchor" href="#dbtable_v9"></a>
-</h2>
-<p><code>DBTable_v9$new()</code> takes a <code>dbconfig</code> list (the
-same parameters as <code>DBConnection_v9</code>), plus
-<code>table_name</code>, <code>field_types</code>, <code>keys</code>,
-<code>indexes</code>, and validators. Keys define the primary key used
-for upsert operations. Validators can enforce field-type and
-field-content constraints; <code>validator_field_types_blank</code> and
-<code>validator_field_contents_blank</code> skip validation
-entirely.</p>
-<p>The example below creates a table object backed by the same SQLite
-file. It clears any existing rows and inserts the bundled
-<code>nor_covid19_cases_by_time_location</code> dataset. It then
-connects and returns a lazy <code>tbl()</code> reference via dbplyr. The
-file is new, so <code>$drop_all_rows()</code> creates the table and its
-index first and then reports that it removed 0 rows.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">db_file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".sqlite"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Attaching package: 'data.table'</span></span>
+<span><span class="co">#&gt; The following object is masked from 'package:base':</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;     %notin%</span></span>
+<span></span>
+<span><span class="va">db_file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".sqlite"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">dbconnection</span> <span class="op">&lt;-</span> <span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/DBConnection_v9.html">DBConnection_v9</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span>
 <span>  driver <span class="op">=</span> <span class="st">"SQLite"</span>,</span>
 <span>  db <span class="op">=</span> <span class="va">db_file</span></span>
 <span><span class="op">)</span></span>
 <span><span class="va">dbconnection</span></span>
-<span><span class="co">#&gt; (disconnected)</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Driver:              SQLite </span></span>
-<span><span class="co">#&gt; File:                /tmp/Rtmp3tTfJa/file3a0c741e4a2129.sqlite</span></span>
+<span><span class="co">#&gt; <span style="color: #BBBBBB; background-color: #BB0000;">(disconnected)</span></span></span>
+<span><span class="co"><span style="color: #BBBBBB; background-color: #BB0000;">#&gt; </span></span></span>
+<span><span class="co"><span style="color: #BBBBBB; background-color: #BB0000;">#&gt; </span>Driver:              SQLite </span></span>
+<span><span class="co">#&gt; File:                /tmp/RtmpMBguq9/file1ec12ba4bdbf.sqlite</span></span>
 <span><span class="va">dbconnection</span><span class="op">$</span><span class="fu">connect</span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
 <span><span class="va">dbconnection</span><span class="op">$</span><span class="va">connection</span></span>
 <span><span class="co">#&gt; &lt;SQLiteConnection&gt;</span></span>
-<span><span class="co">#&gt;   Path: /tmp/Rtmp3tTfJa/file3a0c741e4a2129.sqlite</span></span>
+<span><span class="co">#&gt;   Path: /tmp/RtmpMBguq9/file1ec12ba4bdbf.sqlite</span></span>
 <span><span class="co">#&gt;   Extensions: TRUE</span></span>
-<span><span class="va">dbconnection</span><span class="op">$</span><span class="va">autoconnection</span></span>
-<span><span class="co">#&gt; &lt;SQLiteConnection&gt;</span></span>
-<span><span class="co">#&gt;   Path: /tmp/Rtmp3tTfJa/file3a0c741e4a2129.sqlite</span></span>
-<span><span class="co">#&gt;   Extensions: TRUE</span></span>
-<span><span class="va">dbconnection</span></span>
-<span><span class="co">#&gt; (connected)</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Driver:              SQLite </span></span>
-<span><span class="co">#&gt; File:                /tmp/Rtmp3tTfJa/file3a0c741e4a2129.sqlite</span></span>
-<span></span>
 <span><span class="va">dbconnection</span><span class="op">$</span><span class="fu">disconnect</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">dbconnection</span><span class="op">$</span><span class="va">connection</span></span>
-<span><span class="co">#&gt; &lt;SQLiteConnection&gt;</span></span>
-<span><span class="co">#&gt;   DISCONNECTED</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">class</a></span><span class="op">(</span><span class="va">dbconnection</span><span class="op">$</span><span class="va">connection</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "SQLiteConnection"</span></span>
-<span><span class="co">#&gt; attr(,"package")</span></span>
-<span><span class="co">#&gt; [1] "RSQLite"</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">class</a></span><span class="op">(</span><span class="va">dbconnection</span><span class="op">$</span><span class="va">autoconnection</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "SQLiteConnection"</span></span>
 <span><span class="co">#&gt; attr(,"package")</span></span>
 <span><span class="co">#&gt; [1] "RSQLite"</span></span>
@@ -331,66 +278,382 @@ index first and then reports that it removed 0 rows.</p>
 <span>  <span class="op">)</span>,</span>
 <span>  table_name <span class="op">=</span> <span class="st">"anon_test"</span>,</span>
 <span>  field_types <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>      <span class="st">"granularity_time"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
-<span>      <span class="st">"granularity_geo"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
-<span>      <span class="st">"country_iso3"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
-<span>      <span class="st">"location_code"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
-<span>      <span class="st">"border"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span>
-<span>      <span class="st">"age"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
-<span>      <span class="st">"sex"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
-<span>      <span class="st">"isoyear"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span>
-<span>      <span class="st">"isoweek"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span>
-<span>      <span class="st">"isoyearweek"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
-<span>      <span class="st">"season"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
-<span>      <span class="st">"seasonweek"</span> <span class="op">=</span> <span class="st">"DOUBLE"</span>,</span>
-<span>      <span class="st">"calyear"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span>
-<span>      <span class="st">"calmonth"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span>
-<span>      <span class="st">"calyearmonth"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
-<span>      <span class="st">"date"</span> <span class="op">=</span> <span class="st">"DATE"</span>,</span>
-<span>      <span class="st">"covid19_cases_testdate_n"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span>
-<span>      <span class="st">"covid19_cases_testdate_pr100000"</span> <span class="op">=</span> <span class="st">"DOUBLE"</span></span>
-<span>    <span class="op">)</span>,</span>
-<span>    keys <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>      <span class="st">"granularity_time"</span>,</span>
-<span>      <span class="st">"location_code"</span>,</span>
-<span>      <span class="st">"date"</span>,</span>
-<span>      <span class="st">"age"</span>,</span>
-<span>      <span class="st">"sex"</span></span>
-<span>    <span class="op">)</span>,</span>
-<span>    indexes <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>      <span class="st">"ind1"</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"granularity_time"</span>, <span class="st">"granularity_geo"</span>, <span class="st">"country_iso3"</span>, <span class="st">"location_code"</span>, <span class="st">"border"</span>, <span class="st">"age"</span>, <span class="st">"sex"</span>, <span class="st">"date"</span>, <span class="st">"isoyear"</span>, <span class="st">"isoweek"</span>, <span class="st">"isoyearweek"</span><span class="op">)</span></span>
-<span>    <span class="op">)</span>,</span>
-<span>    validator_field_types <span class="op">=</span> <span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/validator_field_types_blank.html">validator_field_types_blank</a></span>,</span>
-<span>    validator_field_contents <span class="op">=</span> <span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/validator_field_contents_blank.html">validator_field_contents_blank</a></span></span>
+<span>    <span class="st">"granularity_time"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
+<span>    <span class="st">"granularity_geo"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
+<span>    <span class="st">"country_iso3"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
+<span>    <span class="st">"location_code"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
+<span>    <span class="st">"border"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span>
+<span>    <span class="st">"age"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
+<span>    <span class="st">"sex"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
+<span>    <span class="st">"isoyear"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span>
+<span>    <span class="st">"isoweek"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span>
+<span>    <span class="st">"isoyearweek"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
+<span>    <span class="st">"season"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
+<span>    <span class="st">"seasonweek"</span> <span class="op">=</span> <span class="st">"DOUBLE"</span>,</span>
+<span>    <span class="st">"calyear"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span>
+<span>    <span class="st">"calmonth"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span>
+<span>    <span class="st">"calyearmonth"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span>
+<span>    <span class="st">"date"</span> <span class="op">=</span> <span class="st">"DATE"</span>,</span>
+<span>    <span class="st">"covid19_cases_testdate_n"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span>
+<span>    <span class="st">"covid19_cases_testdate_pr100000"</span> <span class="op">=</span> <span class="st">"DOUBLE"</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  keys <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>    <span class="st">"granularity_time"</span>,</span>
+<span>    <span class="st">"location_code"</span>,</span>
+<span>    <span class="st">"date"</span>,</span>
+<span>    <span class="st">"age"</span>,</span>
+<span>    <span class="st">"sex"</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  indexes <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    <span class="st">"ind1"</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"granularity_time"</span>, <span class="st">"location_code"</span>, <span class="st">"date"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  validator_field_types <span class="op">=</span> <span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/validator_field_types_blank.html">validator_field_types_blank</a></span>,</span>
+<span>  validator_field_contents <span class="op">=</span> <span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/validator_field_contents_blank.html">validator_field_contents_blank</a></span></span>
 <span><span class="op">)</span></span>
 <span><span class="va">dbtable</span><span class="op">$</span><span class="fu">drop_all_rows</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Creating table anon_test</span></span>
 <span><span class="co">#&gt; Adding index ind1</span></span>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span><span class="va">dbtable</span><span class="op">$</span><span class="fu">insert_data</span><span class="op">(</span><span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/nor_covid19_cases_by_time_location.html">nor_covid19_cases_by_time_location</a></span><span class="op">)</span></span>
-<span><span class="va">dbtable</span><span class="op">$</span><span class="fu">connect</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">dbtable</span><span class="op">$</span><span class="va">dbconnection</span><span class="op">$</span><span class="fu">is_connected</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] TRUE</span></span>
 <span><span class="va">dbtable</span><span class="op">$</span><span class="fu">tbl</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; # Source:   table&lt;`anon_test`&gt; [?? x 18]</span></span>
-<span><span class="co">#&gt; # Database: sqlite 3.51.2 [/tmp/Rtmp3tTfJa/file3a0c741e4a2129.sqlite]</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A query:  ?? x 18</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># Database: sqlite 3.53.3 [/tmp/RtmpMBguq9/file1ec12ba4bdbf.sqlite]</span></span></span>
 <span><span class="co">#&gt;    granularity_time granularity_geo country_iso3 location_code border age  </span></span>
-<span><span class="co">#&gt;    &lt;chr&gt;            &lt;chr&gt;           &lt;chr&gt;        &lt;chr&gt;          &lt;int&gt; &lt;chr&gt;</span></span>
-<span><span class="co">#&gt;  1 day              county          nor          county_nor03    2020 total</span></span>
-<span><span class="co">#&gt;  2 day              county          nor          county_nor03    2020 total</span></span>
-<span><span class="co">#&gt;  3 day              county          nor          county_nor03    2020 total</span></span>
-<span><span class="co">#&gt;  4 day              county          nor          county_nor03    2020 total</span></span>
-<span><span class="co">#&gt;  5 day              county          nor          county_nor03    2020 total</span></span>
-<span><span class="co">#&gt;  6 day              county          nor          county_nor03    2020 total</span></span>
-<span><span class="co">#&gt;  7 day              county          nor          county_nor03    2020 total</span></span>
-<span><span class="co">#&gt;  8 day              county          nor          county_nor03    2020 total</span></span>
-<span><span class="co">#&gt;  9 day              county          nor          county_nor03    2020 total</span></span>
-<span><span class="co">#&gt; 10 day              county          nor          county_nor03    2020 total</span></span>
-<span><span class="co">#&gt; # ℹ more rows</span></span>
-<span><span class="co">#&gt; # ℹ 12 more variables: sex &lt;chr&gt;, isoyear &lt;int&gt;, isoweek &lt;int&gt;,</span></span>
-<span><span class="co">#&gt; #   isoyearweek &lt;chr&gt;, season &lt;chr&gt;, seasonweek &lt;dbl&gt;, calyear &lt;int&gt;,</span></span>
-<span><span class="co">#&gt; #   calmonth &lt;int&gt;, calyearmonth &lt;chr&gt;, date &lt;date&gt;,</span></span>
-<span><span class="co">#&gt; #   covid19_cases_testdate_n &lt;int&gt;, covid19_cases_testdate_pr100000 &lt;dbl&gt;</span></span></code></pre></div>
+<span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>           <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>        <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>          <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> day              county          nor          county_nor03    <span style="text-decoration: underline;">2</span>020 total</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span> day              county          nor          county_nor03    <span style="text-decoration: underline;">2</span>020 total</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span> day              county          nor          county_nor03    <span style="text-decoration: underline;">2</span>020 total</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span> day              county          nor          county_nor03    <span style="text-decoration: underline;">2</span>020 total</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span> day              county          nor          county_nor03    <span style="text-decoration: underline;">2</span>020 total</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span> day              county          nor          county_nor03    <span style="text-decoration: underline;">2</span>020 total</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span> day              county          nor          county_nor03    <span style="text-decoration: underline;">2</span>020 total</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span> day              county          nor          county_nor03    <span style="text-decoration: underline;">2</span>020 total</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span> day              county          nor          county_nor03    <span style="text-decoration: underline;">2</span>020 total</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span> day              county          nor          county_nor03    <span style="text-decoration: underline;">2</span>020 total</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># ℹ more rows</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 12 more variables: sex &lt;chr&gt;, isoyear &lt;int&gt;, isoweek &lt;int&gt;,</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;">#   isoyearweek &lt;chr&gt;, season &lt;chr&gt;, seasonweek &lt;dbl&gt;, calyear &lt;int&gt;,</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;">#   calmonth &lt;int&gt;, calyearmonth &lt;chr&gt;, date &lt;date&gt;,</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;">#   covid19_cases_testdate_n &lt;int&gt;, covid19_cases_testdate_pr100000 &lt;dbl&gt;</span></span></span>
+<span><span class="va">dbtable</span><span class="op">$</span><span class="fu">disconnect</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="who-owns-the-connection">Who owns the connection<a class="anchor" aria-label="anchor" href="#who-owns-the-connection"></a>
+</h2>
+<p><code>DBTable_v9$new()</code> takes an optional
+<code>dbconnection</code> argument. That argument decides who closes the
+connection.</p>
+<p>Pass nothing and the table builds its own
+<code>DBConnection_v9</code>. The table owns it, and
+<code>$disconnect()</code> closes it. Pass one in and the table borrows
+it. The caller keeps ownership, and the borrower’s
+<code>$disconnect()</code> closes nothing.</p>
+<p>Ownership exists because one connection can serve many tables. A
+caller that builds many tables against one database then holds one
+connection, and not one connection per table.</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># A table that builds its own connection owns it.</span></span>
+<span><span class="va">owner</span> <span class="op">&lt;-</span> <span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/DBTable_v9.html">DBTable_v9</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span>
+<span>  dbconfig <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>driver <span class="op">=</span> <span class="st">"SQLite"</span>, db <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".sqlite"</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  table_name <span class="op">=</span> <span class="st">"anon_own"</span>,</span>
+<span>  field_types <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"x"</span> <span class="op">=</span> <span class="st">"TEXT"</span><span class="op">)</span>,</span>
+<span>  keys <span class="op">=</span> <span class="st">"x"</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">owner</span><span class="op">$</span><span class="fu">connect</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Creating table anon_own</span></span>
+<span><span class="va">owner</span><span class="op">$</span><span class="va">dbconnection</span><span class="op">$</span><span class="fu">is_connected</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span>
+<span></span>
+<span><span class="co"># The owner closes its own connection.</span></span>
+<span><span class="va">owner</span><span class="op">$</span><span class="fu">disconnect</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">owner</span><span class="op">$</span><span class="va">dbconnection</span><span class="op">$</span><span class="fu">is_connected</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] FALSE</span></span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">shared_file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".sqlite"</span><span class="op">)</span></span>
+<span><span class="va">shared</span> <span class="op">&lt;-</span> <span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/DBConnection_v9.html">DBConnection_v9</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span>driver <span class="op">=</span> <span class="st">"SQLite"</span>, db <span class="op">=</span> <span class="va">shared_file</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">borrower</span> <span class="op">&lt;-</span> <span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/DBTable_v9.html">DBTable_v9</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span>
+<span>  dbconfig <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>driver <span class="op">=</span> <span class="st">"SQLite"</span>, db <span class="op">=</span> <span class="va">shared_file</span><span class="op">)</span>,</span>
+<span>  table_name <span class="op">=</span> <span class="st">"anon_borrow"</span>,</span>
+<span>  field_types <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"x"</span> <span class="op">=</span> <span class="st">"TEXT"</span><span class="op">)</span>,</span>
+<span>  keys <span class="op">=</span> <span class="st">"x"</span>,</span>
+<span>  dbconnection <span class="op">=</span> <span class="va">shared</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">borrower</span><span class="op">$</span><span class="fu">connect</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Creating table anon_borrow</span></span>
+<span><span class="va">shared</span><span class="op">$</span><span class="fu">is_connected</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span>
+<span></span>
+<span><span class="co"># The borrower does not own the connection, so this closes nothing.</span></span>
+<span><span class="va">borrower</span><span class="op">$</span><span class="fu">disconnect</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">shared</span><span class="op">$</span><span class="fu">is_connected</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span>
+<span></span>
+<span><span class="co"># The owner closes it.</span></span>
+<span><span class="va">shared</span><span class="op">$</span><span class="fu">disconnect</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">shared</span><span class="op">$</span><span class="fu">is_connected</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] FALSE</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="a-connection-does-not-survive-a-fork">A connection does not survive a fork<a class="anchor" aria-label="anchor" href="#a-connection-does-not-survive-a-fork"></a>
+</h2>
+<p>A connection belongs to the process that opened it. After a fork, the
+parent and the child both hold one socket. An inherited PostgreSQL
+connection can then return wrong rows, and report no error. Measured
+against the NorSySS server on 2026-08-14. A child asked for
+<code>select 4</code> and read 3. The parent asked for
+<code>select 999</code> and read 2.</p>
+<p><code><a href="https://dbi.r-dbi.org/reference/dbIsValid.html" class="external-link">DBI::dbIsValid()</a></code> cannot see this. It reports TRUE on an
+inherited handle, so a reconnect that tests validity never fires.</p>
+<p><code>DBConnection_v9</code> records the process that opened each
+connection instead. It drops any connection whose recorded process is
+not the current one. The block below changes that recorded process
+rather than forking, because <code><a href="https://rdrr.io/r/parallel/mcparallel.html" class="external-link">parallel::mcparallel()</a></code> does
+not exist on Windows.</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">db</span> <span class="op">&lt;-</span> <span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/DBConnection_v9.html">DBConnection_v9</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span>driver <span class="op">=</span> <span class="st">"SQLite"</span>, db <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".sqlite"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">db</span><span class="op">$</span><span class="fu">connect</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">handle</span> <span class="op">&lt;-</span> <span class="va">db</span><span class="op">$</span><span class="va">connection</span></span>
+<span></span>
+<span><span class="co"># What DBI sees, before and after the connection becomes another process's.</span></span>
+<span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbIsValid.html" class="external-link">dbIsValid</a></span><span class="op">(</span><span class="va">handle</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span>
+<span><span class="va">db</span><span class="op">$</span><span class="va">.__enclos_env__</span><span class="op">$</span><span class="va">private</span><span class="op">$</span><span class="va">pconnection_pid</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getpid.html" class="external-link">Sys.getpid</a></span><span class="op">(</span><span class="op">)</span> <span class="op">+</span> <span class="fl">1L</span></span>
+<span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbIsValid.html" class="external-link">dbIsValid</a></span><span class="op">(</span><span class="va">handle</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span>
+<span></span>
+<span><span class="co"># What csdb sees.</span></span>
+<span><span class="va">db</span><span class="op">$</span><span class="fu">is_connected</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] FALSE</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">db</span><span class="op">$</span><span class="va">connection</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span>
+<span></span>
+<span><span class="co"># $autoconnection opens a handle for this process.</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">db</span><span class="op">$</span><span class="va">autoconnection</span>, <span class="va">handle</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] FALSE</span></span>
+<span></span>
+<span><span class="co"># The inherited handle stays open. Closing it would close the other</span></span>
+<span><span class="co"># process's socket.</span></span>
+<span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbIsValid.html" class="external-link">dbIsValid</a></span><span class="op">(</span><span class="va">handle</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span>
+<span><span class="va">db</span><span class="op">$</span><span class="fu">disconnect</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<p>The example reaches into <code>$.__enclos_env__$private</code>, which
+your own code MUST NOT do.</p>
+<p>A fork writes nothing into that field. The child inherits the
+recorded opener process ID unchanged, and it is the child’s own process
+ID that differs. The example holds the current process ID fixed and
+moves the recorded one, which produces the same mismatch from the other
+side.</p>
+</div>
+<div class="section level2">
+<h2 id="two-tables-that-declare-one-index-name">Two tables that declare one index name<a class="anchor" aria-label="anchor" href="#two-tables-that-declare-one-index-name"></a>
+</h2>
+<p>An index name is unique per schema on PostgreSQL, and unique per file
+on SQLite. Two tables that both declare <code>ind1</code> therefore ask
+for one name. <code>CREATE INDEX IF NOT EXISTS</code> answers a name
+that is already taken with a notice, and not with an error. The first
+table won the name, and every later table silently got no index.</p>
+<p>The names in <code>indexes = list("ind1" = ...)</code> are logical
+names. Each one reaches the database under a physical name that carries
+the table identity. Two tables can now declare <code>ind1</code> and
+both get an index.</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">index_file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".sqlite"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">new_table</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">nm</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/DBTable_v9.html">DBTable_v9</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span>
+<span>    dbconfig <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>driver <span class="op">=</span> <span class="st">"SQLite"</span>, db <span class="op">=</span> <span class="va">index_file</span><span class="op">)</span>,</span>
+<span>    table_name <span class="op">=</span> <span class="va">nm</span>,</span>
+<span>    field_types <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"x"</span> <span class="op">=</span> <span class="st">"TEXT"</span>, <span class="st">"n"</span> <span class="op">=</span> <span class="st">"INTEGER"</span><span class="op">)</span>,</span>
+<span>    keys <span class="op">=</span> <span class="st">"x"</span>,</span>
+<span>    indexes <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ind1"</span> <span class="op">=</span> <span class="st">"n"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="va">alpha</span> <span class="op">&lt;-</span> <span class="fu">new_table</span><span class="op">(</span><span class="st">"anon_alpha"</span><span class="op">)</span></span>
+<span><span class="va">beta</span> <span class="op">&lt;-</span> <span class="fu">new_table</span><span class="op">(</span><span class="st">"anon_beta"</span><span class="op">)</span></span>
+<span><span class="va">alpha</span><span class="op">$</span><span class="fu">add_indexes</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Creating table anon_alpha</span></span>
+<span><span class="co">#&gt; Adding index ind1</span></span>
+<span><span class="va">beta</span><span class="op">$</span><span class="fu">add_indexes</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Creating table anon_beta</span></span>
+<span><span class="co">#&gt; Adding index ind1</span></span>
+<span></span>
+<span><span class="co"># Two tables, one declared name, two indexes.</span></span>
+<span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span></span>
+<span>  <span class="va">alpha</span><span class="op">$</span><span class="va">dbconnection</span><span class="op">$</span><span class="va">autoconnection</span>,</span>
+<span>  <span class="st">"SELECT tbl_name, name FROM sqlite_master</span></span>
+<span><span class="st">    WHERE type = 'index' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'</span></span>
+<span><span class="st">    ORDER BY tbl_name"</span></span>
+<span><span class="op">)</span></span>
+<span><span class="co">#&gt;     tbl_name                                name</span></span>
+<span><span class="co">#&gt; 1 anon_alpha ix_anon_alpha_ind1_d62f09263d205768</span></span>
+<span><span class="co">#&gt; 2  anon_beta  ix_anon_beta_ind1_8daa70092ed55809</span></span></code></pre></div>
+<p><code>add_indexes()</code> reads the catalogue after each create. A
+statement that returns without an error proves nothing about which table
+holds the name. The method raises when the index is absent from this
+table, and when it covers columns other than the declared ones. That
+check is defined for SQLite and for PostgreSQL, and for no other
+backend.</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">alpha</span><span class="op">$</span><span class="fu">disconnect</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">beta</span><span class="op">$</span><span class="fu">disconnect</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="emptying-a-table-before-you-write-to-it">Emptying a table before you write to it<a class="anchor" aria-label="anchor" href="#emptying-a-table-before-you-write-to-it"></a>
+</h2>
+<p><code>$drop_all_rows_and_then_insert_data()</code> and
+<code>$drop_all_rows_and_then_upsert_data()</code> empty the table and
+then write. Both check <code>newdata</code> before they drop a row, and
+both answer these four cases the same way.</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Every table below starts with the same three sentinel rows. A row that</span></span>
+<span><span class="co"># survives a rejected call proves the guard ran before the drop.</span></span>
+<span><span class="va">d</span> <span class="op">&lt;-</span> <span class="fu">data.table</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/data.table/man/data.table.html" class="external-link">data.table</a></span><span class="op">(</span>x <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span>, <span class="st">"c"</span><span class="op">)</span>, n <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">3</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">seeded_table</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">nm</span>, <span class="va">validator</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">tab</span> <span class="op">&lt;-</span> <span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/DBTable_v9.html">DBTable_v9</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span>
+<span>    dbconfig <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>driver <span class="op">=</span> <span class="st">"SQLite"</span>, db <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".sqlite"</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>    table_name <span class="op">=</span> <span class="va">nm</span>,</span>
+<span>    field_types <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"x"</span> <span class="op">=</span> <span class="st">"TEXT"</span>, <span class="st">"n"</span> <span class="op">=</span> <span class="st">"INTEGER"</span><span class="op">)</span>,</span>
+<span>    keys <span class="op">=</span> <span class="st">"x"</span>,</span>
+<span>    validator_field_contents <span class="op">=</span> <span class="va">validator</span></span>
+<span>  <span class="op">)</span></span>
+<span>  <span class="va">tab</span><span class="op">$</span><span class="fu">insert_data</span><span class="op">(</span><span class="va">d</span><span class="op">)</span></span>
+<span>  <span class="va">tab</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="co"># Refuses any frame holding a value of n that is not positive. A zero-row</span></span>
+<span><span class="co"># frame passes it, because all(integer(0) &gt; 0) is TRUE.</span></span>
+<span><span class="va">positive_only</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">data</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/all.html" class="external-link">all</a></span><span class="op">(</span><span class="va">data</span><span class="op">$</span><span class="va">n</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Refuses a zero-row frame, and accepts everything else.</span></span>
+<span><span class="va">nonempty_only</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">data</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0</span></span>
+<span></span>
+<span><span class="va">bad</span> <span class="op">&lt;-</span> <span class="fu">data.table</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/data.table/man/data.table.html" class="external-link">data.table</a></span><span class="op">(</span>x <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"d"</span>, <span class="st">"e"</span><span class="op">)</span>, n <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">5L</span>, <span class="op">-</span><span class="fl">1L</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<p><strong>1. A <code>NULL</code> raises, and the table keeps every
+row.</strong> <code>insert_data()</code> returns early on a
+<code>NULL</code>, so its validator never sees one. Without this check
+the table emptied and nothing raised.</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tab_null</span> <span class="op">&lt;-</span> <span class="fu">seeded_table</span><span class="op">(</span><span class="st">"anon_guard_null"</span>, <span class="va">positive_only</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Creating table anon_guard_null</span></span>
+<span><span class="va">tab_null</span><span class="op">$</span><span class="fu">nrow</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 3</span></span>
+<span></span>
+<span><span class="va">tab_null</span><span class="op">$</span><span class="fu">drop_all_rows_and_then_insert_data</span><span class="op">(</span><span class="cn">NULL</span><span class="op">)</span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00; font-weight: bold;">Error</span><span style="font-weight: bold;"> in `private$check_newdata_before_drop_all_rows()`:</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00;">!</span> newdata is NULL. drop_all_rows_and_then_insert_data() on table anon_guard_null would empty the table and write nothing back. Pass a zero-row data.frame to empty the table on purpose.</span></span>
+<span><span class="va">tab_null</span><span class="op">$</span><span class="fu">nrow</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 3</span></span></code></pre></div>
+<p><strong>2. A zero-row frame that the validator refuses raises, and
+the table keeps every row.</strong></p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tab_zero_bad</span> <span class="op">&lt;-</span> <span class="fu">seeded_table</span><span class="op">(</span><span class="st">"anon_guard_zero_bad"</span>, <span class="va">nonempty_only</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Creating table anon_guard_zero_bad</span></span>
+<span><span class="va">tab_zero_bad</span><span class="op">$</span><span class="fu">nrow</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 3</span></span>
+<span></span>
+<span><span class="va">tab_zero_bad</span><span class="op">$</span><span class="fu">drop_all_rows_and_then_insert_data</span><span class="op">(</span><span class="va">d</span><span class="op">[</span><span class="fl">0</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00; font-weight: bold;">Error</span><span style="font-weight: bold;"> in `private$check_newdata_before_drop_all_rows()`:</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00;">!</span> newdata failed validator_field_contents. drop_all_rows_and_then_insert_data() on table anon_guard_zero_bad rejected it before dropping any row. Field: not named by the validator.</span></span>
+<span><span class="va">tab_zero_bad</span><span class="op">$</span><span class="fu">nrow</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 3</span></span></code></pre></div>
+<p><strong>3. A zero-row frame that the validator accepts empties the
+table, and raises nothing.</strong> That is how
+<code>cs9::DBPartitionedTableExtended_v9</code> clears a partition.</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tab_zero_ok</span> <span class="op">&lt;-</span> <span class="fu">seeded_table</span><span class="op">(</span><span class="st">"anon_guard_zero_ok"</span>, <span class="va">positive_only</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Creating table anon_guard_zero_ok</span></span>
+<span><span class="va">tab_zero_ok</span><span class="op">$</span><span class="fu">nrow</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 3</span></span>
+<span></span>
+<span><span class="va">tab_zero_ok</span><span class="op">$</span><span class="fu">drop_all_rows_and_then_insert_data</span><span class="op">(</span><span class="va">d</span><span class="op">[</span><span class="fl">0</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="va">tab_zero_ok</span><span class="op">$</span><span class="fu">nrow</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span></code></pre></div>
+<p><strong>4. A frame with rows reaches the validator before the
+drop.</strong> A refused frame raises, and every sentinel row is still
+there afterwards.</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tab_rows</span> <span class="op">&lt;-</span> <span class="fu">seeded_table</span><span class="op">(</span><span class="st">"anon_guard_rows"</span>, <span class="va">positive_only</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Creating table anon_guard_rows</span></span>
+<span><span class="va">tab_rows</span><span class="op">$</span><span class="fu">nrow</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 3</span></span>
+<span></span>
+<span><span class="va">tab_rows</span><span class="op">$</span><span class="fu">drop_all_rows_and_then_insert_data</span><span class="op">(</span><span class="va">bad</span><span class="op">)</span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00; font-weight: bold;">Error</span><span style="font-weight: bold;"> in `private$check_newdata_before_drop_all_rows()`:</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00;">!</span> newdata failed validator_field_contents. drop_all_rows_and_then_insert_data() on table anon_guard_rows rejected it before dropping any row. Field: not named by the validator.</span></span>
+<span><span class="va">tab_rows</span><span class="op">$</span><span class="fu">tbl</span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/compute.html" class="external-link">collect</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 2</span></span></span>
+<span><span class="co">#&gt;   x         n</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> a         1</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> b         2</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> c         3</span></span></code></pre></div>
+<p>An accepted frame empties the table and takes the write.</p>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tab_rows</span><span class="op">$</span><span class="fu">drop_all_rows_and_then_insert_data</span><span class="op">(</span><span class="va">d</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="va">tab_rows</span><span class="op">$</span><span class="fu">nrow</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 2</span></span></code></pre></div>
+<div class="section level3">
+<h3 id="the-upsert-method-answers-the-same-four-cases">The upsert method answers the same four cases<a class="anchor" aria-label="anchor" href="#the-upsert-method-answers-the-same-four-cases"></a>
+</h3>
+<p><code>$drop_all_rows_and_then_upsert_data()</code> runs the same
+guard, in the same four cases and the same order.</p>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># 1. A NULL raises.</span></span>
+<span><span class="va">tab_up</span> <span class="op">&lt;-</span> <span class="fu">seeded_table</span><span class="op">(</span><span class="st">"anon_guard_upsert"</span>, <span class="va">positive_only</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Creating table anon_guard_upsert</span></span>
+<span><span class="va">tab_up</span><span class="op">$</span><span class="fu">drop_all_rows_and_then_upsert_data</span><span class="op">(</span><span class="cn">NULL</span><span class="op">)</span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00; font-weight: bold;">Error</span><span style="font-weight: bold;"> in `private$check_newdata_before_drop_all_rows()`:</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00;">!</span> newdata is NULL. drop_all_rows_and_then_upsert_data() on table anon_guard_upsert would empty the table and write nothing back. Pass a zero-row data.frame to empty the table on purpose.</span></span>
+<span><span class="va">tab_up</span><span class="op">$</span><span class="fu">nrow</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 3</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># 2. A zero-row frame the validator refuses raises, and every sentinel row</span></span>
+<span><span class="co">#    stays. This is the case that tells "returns early on zero rows" apart</span></span>
+<span><span class="co">#    from "validates zero rows too".</span></span>
+<span><span class="va">tab_up_zero</span> <span class="op">&lt;-</span> <span class="fu">seeded_table</span><span class="op">(</span><span class="st">"anon_guard_upsert_zero"</span>, <span class="va">nonempty_only</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Creating table anon_guard_upsert_zero</span></span>
+<span><span class="va">tab_up_zero</span><span class="op">$</span><span class="fu">drop_all_rows_and_then_upsert_data</span><span class="op">(</span><span class="va">d</span><span class="op">[</span><span class="fl">0</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00; font-weight: bold;">Error</span><span style="font-weight: bold;"> in `private$check_newdata_before_drop_all_rows()`:</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00;">!</span> newdata failed validator_field_contents. drop_all_rows_and_then_upsert_data() on table anon_guard_upsert_zero rejected it before dropping any row. Field: not named by the validator.</span></span>
+<span><span class="va">tab_up_zero</span><span class="op">$</span><span class="fu">tbl</span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/compute.html" class="external-link">collect</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 2</span></span></span>
+<span><span class="co">#&gt;   x         n</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> a         1</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> b         2</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> c         3</span></span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># 3. A zero-row frame the validator accepts empties the table.</span></span>
+<span><span class="va">tab_up</span><span class="op">$</span><span class="fu">drop_all_rows_and_then_upsert_data</span><span class="op">(</span><span class="va">d</span><span class="op">[</span><span class="fl">0</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="va">tab_up</span><span class="op">$</span><span class="fu">nrow</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0</span></span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># 4. A frame with rows reaches the validator before the drop. A refused frame</span></span>
+<span><span class="co">#    leaves every sentinel row in place.</span></span>
+<span><span class="va">tab_up_rows</span> <span class="op">&lt;-</span> <span class="fu">seeded_table</span><span class="op">(</span><span class="st">"anon_guard_upsert_rows"</span>, <span class="va">positive_only</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Creating table anon_guard_upsert_rows</span></span>
+<span><span class="va">tab_up_rows</span><span class="op">$</span><span class="fu">drop_all_rows_and_then_upsert_data</span><span class="op">(</span><span class="va">bad</span><span class="op">)</span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00; font-weight: bold;">Error</span><span style="font-weight: bold;"> in `private$check_newdata_before_drop_all_rows()`:</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00;">!</span> newdata failed validator_field_contents. drop_all_rows_and_then_upsert_data() on table anon_guard_upsert_rows rejected it before dropping any row. Field: not named by the validator.</span></span>
+<span><span class="va">tab_up_rows</span><span class="op">$</span><span class="fu">tbl</span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/compute.html" class="external-link">collect</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 2</span></span></span>
+<span><span class="co">#&gt;   x         n</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> a         1</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> b         2</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> c         3</span></span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># An accepted frame empties the table and takes the write.</span></span>
+<span><span class="va">tab_up_rows</span><span class="op">$</span><span class="fu">drop_all_rows_and_then_upsert_data</span><span class="op">(</span><span class="va">d</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="va">tab_up_rows</span><span class="op">$</span><span class="fu">nrow</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 2</span></span></code></pre></div>
+<p>The guard covers what <code>csdb</code> can see before the drop. It
+is not a transaction. A write that fails after the truncation still
+leaves the table empty.</p>
+</div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

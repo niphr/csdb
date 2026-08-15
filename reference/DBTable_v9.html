@@ -11,7 +11,7 @@ combines database connectivity with data validation and bulk operations."><meta 
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.15</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.16</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -81,11 +81,56 @@ The class supports custom validation functions for both field types and data
 contents, which ensure data integrity and schema compliance.</p>
     </div>
     <div class="section level2">
+    <h2 id="what-the-object-creates-in-the-database">What the object creates in the database<a class="anchor" aria-label="anchor" href="#what-the-object-creates-in-the-database"></a></h2>
+
+
+<p>One object creates three kinds of thing, and each carries its own name rule.</p>
+<dl><dt>The table</dt>
+<dd><p>Named <code>table_name</code>, in the schema that
+    <code>dbconfig</code> names.</p></dd>
+
+  <dt>The primary key constraint</dt>
+<dd><p>Named <code>PK_</code> plus the fully
+    specified table name, with every <code>.</code>, <code>[</code> and <code>]</code>
+    deleted. Schema <code>anon</code> with table <code>anon_data</code> therefore gives
+    <code>PK_anonanon_data</code>. Two different tables can reach one name,
+    because the rule deletes the separator. Schema <code>a</code> with table
+    <code>bc</code> and schema <code>ab</code> with table <code>c</code> both give
+    <code>PK_abc</code>.</p></dd>
+
+  <dt>One index per entry in <code>indexes</code></dt>
+<dd><p>The names you write in
+    <code>indexes</code> are logical names. Each index reaches the database under
+    a physical name of the form <code>ix_&lt;slug&gt;_&lt;16 hexadecimal
+    characters&gt;</code>, at most 63 characters. The name carries the table
+    identity, so two tables in one schema that both declare <code>ind1</code> get
+    two indexes. <code>csdb:::index_physical_name()</code> returns the name for
+    one table and one logical name.</p></dd>
+
+
+</dl></div>
+    <div class="section level2">
+    <h2 id="the-case-of-a-constraint-name-on-postgresql">The case of a constraint name on PostgreSQL<a class="anchor" aria-label="anchor" href="#the-case-of-a-constraint-name-on-postgresql"></a></h2>
+
+
+<p>The source writes <code>PK_</code>, in upper case. PostgreSQL folds an unquoted
+identifier to lower case, so the catalogue stores <code>pk_</code>. Measured on
+the <code>norsyss_data1</code> database on 2026-08-15: 92 lower case <code>pk_</code>
+constraint names, and 0 upper case.</p>
+<p>A <code>DROP CONSTRAINT</code> that quotes the source spelling therefore fails on
+PostgreSQL. Write the name unquoted, or write it in lower case.</p>
+<p>SQLite does not fold at all. It keeps <code>PK_MixedCase</code> exactly as the
+source writes it, so the two backends disagree on one identifier.</p>
+<p>The physical index name has no such trap. It is lower case already, so it
+reads the same in the source and in both catalogues.</p>
+    </div>
+    <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index"><p>The introduction vignette,
-  <code><a href="../articles/csdb.html">vignette("csdb", package = "csdb")</a></code>, which creates one of these
-  against a PostgreSQL database and inserts the bundled
-  <code>nor_covid19_cases_by_time_location</code> dataset.
+  <code><a href="../articles/csdb.html">vignette("csdb", package = "csdb")</a></code>. It builds one of these on
+  SQLite and inserts the bundled
+  <code>nor_covid19_cases_by_time_location</code> dataset. It also shows two
+  tables that declare one logical index name.
   <code><a href="DBConnection_v9.html">DBConnection_v9</a></code> takes the same arguments as the
   <code>dbconfig</code> list, and one is created here to hold the connection.</p>
 <p>Other database classes:
@@ -464,7 +509,19 @@ connection.</p><div class="section">
 
 <p></p><hr><a id="method-DBTable_v9-add_indexes"></a><div class="section">
 <h3 id="dbtable-v-add-indexes-"><code>DBTable_v9$add_indexes()</code><a class="anchor" aria-label="anchor" href="#dbtable-v-add-indexes-"></a></h3>
-<p>Adds indexes to the database table from `self$indexes`.</p><div class="section">
+<p>Adds indexes to the database table from `self$indexes`. Creates each
+index in `self$indexes` exactly once, even when the table does not
+exist yet and this call is what creates it.</p>
+<p>The names in `self$indexes` are logical names. Each index reaches the
+database under a physical name. That name carries the table identity.
+Two tables in one schema that declare the same logical name therefore
+ask for different index names.</p>
+<p>After each create, the method reads the catalogue. It raises when the
+index is absent from this table, and when the index covers columns
+other than the declared ones.</p>
+<p>That check is defined for SQLite and for PostgreSQL, and for no other
+backend. On any other backend the method creates each index and does
+NOT verify it.</p><div class="section">
 <h4 id="usage-16">Usage<a class="anchor" aria-label="anchor" href="#usage-16"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">add_indexes</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
@@ -473,7 +530,10 @@ connection.</p><div class="section">
 
 <p></p><hr><a id="method-DBTable_v9-drop_indexes"></a><div class="section">
 <h3 id="dbtable-v-drop-indexes-"><code>DBTable_v9$drop_indexes()</code><a class="anchor" aria-label="anchor" href="#dbtable-v-drop-indexes-"></a></h3>
-<p>Drops all indexes from the database table.</p><div class="section">
+<p>Drops all indexes from the database table.</p>
+<p>The method drops the physical name that `add_indexes()` created, for
+every logical name in `self$indexes`. An index that a legacy release
+created under the logical name is not dropped here.</p><div class="section">
 <h4 id="usage-17">Usage<a class="anchor" aria-label="anchor" href="#usage-17"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">drop_indexes</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
@@ -482,8 +542,18 @@ connection.</p><div class="section">
 
 <p></p><hr><a id="method-DBTable_v9-confirm_indexes"></a><div class="section">
 <h3 id="dbtable-v-confirm-indexes-"><code>DBTable_v9$confirm_indexes()</code><a class="anchor" aria-label="anchor" href="#dbtable-v-confirm-indexes-"></a></h3>
-<p>Confirms that the names and number of indexes in the database are the same as in the R code.
-Does not confirm the contents of the indexes.</p><div class="section">
+<p>Confirms that the database holds every index declared in
+`self$indexes`, on this table, with the declared columns in the
+declared order.</p>
+<p>The method never drops an index to reconcile. It takes one of four
+actions per declared index:</p>
+<ul><li><p>present with the declared columns: nothing.</p></li>
+<li><p>absent: add it.</p></li>
+<li><p>present with other columns: raise.</p></li>
+<li><p>any index csdb did not name: ignore it.</p></li>
+</ul><p>The method reads an index definition on SQLite and on PostgreSQL only.
+On any other backend it checks the name alone, so it cannot see a
+change of columns.</p><div class="section">
 <h4 id="usage-18">Usage<a class="anchor" aria-label="anchor" href="#usage-18"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">confirm_indexes</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
@@ -548,66 +618,67 @@ Does not confirm the contents of the indexes.</p><div class="section">
 <span class="r-in"><span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Error in initialize(...) : field_types not validated in my_data_table</span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
-<span class="r-in"><span><span class="co"># Create database connection</span></span></span>
-<span class="r-in"><span><span class="va">db_config</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span></span>
-<span class="r-in"><span>  driver <span class="op">=</span> <span class="st">"ODBC Driver 17 for SQL Server"</span>,</span></span>
-<span class="r-in"><span>  server <span class="op">=</span> <span class="st">"localhost"</span>,</span></span>
-<span class="r-in"><span>  db <span class="op">=</span> <span class="st">"mydb"</span>,</span></span>
-<span class="r-in"><span>  schema <span class="op">=</span> <span class="st">"dbo"</span>,</span></span>
-<span class="r-in"><span>  user <span class="op">=</span> <span class="st">"myuser"</span>,</span></span>
-<span class="r-in"><span>  password <span class="op">=</span> <span class="st">"mypass"</span></span></span>
-<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="co"># \donttest{</span></span></span>
+<span class="r-in"><span><span class="co"># A full cycle on SQLite, in a file that tempfile() names. SQLite needs</span></span></span>
+<span class="r-in"><span><span class="co"># no server, so this block runs anywhere. Name a driver of</span></span></span>
+<span class="r-in"><span><span class="co"># "ODBC Driver 17 for SQL Server" or "PostgreSQL Unicode" instead, and</span></span></span>
+<span class="r-in"><span><span class="co"># nothing else in the block changes.</span></span></span>
+<span class="r-in"><span><span class="va">db_config</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>driver <span class="op">=</span> <span class="st">"SQLite"</span>, db <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".sqlite"</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Define table schema</span></span></span>
-<span class="r-in"><span><span class="va">field_types</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span></span>
-<span class="r-in"><span>  <span class="st">"id"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span></span>
-<span class="r-in"><span>  <span class="st">"name"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span></span>
-<span class="r-in"><span>  <span class="st">"value"</span> <span class="op">=</span> <span class="st">"DOUBLE"</span>,</span></span>
-<span class="r-in"><span>  <span class="st">"date_created"</span> <span class="op">=</span> <span class="st">"DATE"</span></span></span>
-<span class="r-in"><span><span class="op">)</span></span></span>
-<span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Create table object. Indexes are named here, because add_indexes()</span></span></span>
-<span class="r-in"><span><span class="co"># takes no arguments and reads them from the object.</span></span></span>
+<span class="r-in"><span><span class="co"># Indexes are named here, because add_indexes() takes no arguments and</span></span></span>
+<span class="r-in"><span><span class="co"># reads them from the object.</span></span></span>
 <span class="r-in"><span><span class="va">my_table</span> <span class="op">&lt;-</span> <span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span></span>
 <span class="r-in"><span>  dbconfig <span class="op">=</span> <span class="va">db_config</span>,</span></span>
 <span class="r-in"><span>  table_name <span class="op">=</span> <span class="st">"my_data_table"</span>,</span></span>
-<span class="r-in"><span>  field_types <span class="op">=</span> <span class="va">field_types</span>,</span></span>
-<span class="r-in"><span>  keys <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"id"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  field_types <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>    <span class="st">"id"</span> <span class="op">=</span> <span class="st">"INTEGER"</span>,</span></span>
+<span class="r-in"><span>    <span class="st">"name"</span> <span class="op">=</span> <span class="st">"TEXT"</span>,</span></span>
+<span class="r-in"><span>    <span class="st">"value"</span> <span class="op">=</span> <span class="st">"DOUBLE"</span>,</span></span>
+<span class="r-in"><span>    <span class="st">"date_created"</span> <span class="op">=</span> <span class="st">"DATE"</span></span></span>
+<span class="r-in"><span>  <span class="op">)</span>,</span></span>
+<span class="r-in"><span>  keys <span class="op">=</span> <span class="st">"id"</span>,</span></span>
 <span class="r-in"><span>  indexes <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"ind1"</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"name"</span>, <span class="st">"date_created"</span><span class="op">)</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  validator_field_types <span class="op">=</span> <span class="va">validator_field_types_blank</span>,</span></span>
 <span class="r-in"><span>  validator_field_contents <span class="op">=</span> <span class="va">validator_field_contents_blank</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Create table in database</span></span></span>
 <span class="r-in"><span><span class="va">my_table</span><span class="op">$</span><span class="fu">create_table</span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Creating table my_data_table</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Adding index ind1</span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Insert data. insert_data() and upsert_data() need a data.table.</span></span></span>
-<span class="r-in"><span><span class="va">sample_data</span> <span class="op">&lt;-</span> <span class="fu">data.table</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/data.table/man/data.table.html" class="external-link">data.table</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span><span class="co"># insert_data() and upsert_data() need a data.table.</span></span></span>
+<span class="r-in"><span><span class="va">my_table</span><span class="op">$</span><span class="fu">insert_data</span><span class="op">(</span><span class="fu">data.table</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/data.table/man/data.table.html" class="external-link">data.table</a></span><span class="op">(</span></span></span>
 <span class="r-in"><span>  id <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">3</span>,</span></span>
 <span class="r-in"><span>  name <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Alice"</span>, <span class="st">"Bob"</span>, <span class="st">"Charlie"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  value <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">10.5</span>, <span class="fl">20.3</span>, <span class="fl">15.7</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  date_created <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/as.Date.html" class="external-link">as.Date</a></span><span class="op">(</span><span class="st">"2023-01-01"</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">my_table</span><span class="op">$</span><span class="fu">insert_data</span><span class="op">(</span><span class="va">sample_data</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Query data using dplyr. tbl() needs dbplyr installed.</span></span></span>
-<span class="r-in"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">my_table</span><span class="op">$</span><span class="fu">tbl</span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span></span>
+<span class="r-in"><span><span class="co"># tbl() returns a lazy dbplyr reference.</span></span></span>
+<span class="r-in"><span><span class="va">my_table</span><span class="op">$</span><span class="fu">tbl</span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span></span>
 <span class="r-in"><span>  <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">value</span> <span class="op">&gt;</span> <span class="fl">15</span><span class="op">)</span> <span class="op">|&gt;</span></span></span>
 <span class="r-in"><span>  <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/compute.html" class="external-link">collect</a></span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 2 × 4</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>      id name    value date_created</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;date&gt;</span>      </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>     2 Bob      20.3 2023-01-01  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>     3 Charlie  15.7 2023-01-01  </span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Add the indexes that were named above</span></span></span>
+<span class="r-in"><span><span class="co"># Add the indexes that were named above.</span></span></span>
 <span class="r-in"><span><span class="va">my_table</span><span class="op">$</span><span class="fu">add_indexes</span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Adding index ind1</span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Upsert (insert or update) data</span></span></span>
-<span class="r-in"><span><span class="va">new_data</span> <span class="op">&lt;-</span> <span class="fu">data.table</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/data.table/man/data.table.html" class="external-link">data.table</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span><span class="va">my_table</span><span class="op">$</span><span class="fu">upsert_data</span><span class="op">(</span><span class="fu">data.table</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/data.table/man/data.table.html" class="external-link">data.table</a></span><span class="op">(</span></span></span>
 <span class="r-in"><span>  id <span class="op">=</span> <span class="fl">2</span><span class="op">:</span><span class="fl">4</span>,</span></span>
 <span class="r-in"><span>  name <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Bob_Updated"</span>, <span class="st">"Charlie"</span>, <span class="st">"David"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  value <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">25.0</span>, <span class="fl">15.7</span>, <span class="fl">30.2</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  date_created <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/as.Date.html" class="external-link">as.Date</a></span><span class="op">(</span><span class="st">"2023-01-02"</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">my_table</span><span class="op">$</span><span class="fu">upsert_data</span><span class="op">(</span><span class="va">new_data</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+<span class="r-in"><span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">my_table</span><span class="op">$</span><span class="fu">nrow</span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 4</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">my_table</span><span class="op">$</span><span class="fu">disconnect</span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="co"># }</span></span></span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

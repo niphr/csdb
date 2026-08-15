@@ -11,7 +11,7 @@ connection management, authentication, and automatic reconnection."><meta proper
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.15</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.16</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -81,9 +81,11 @@ failures, and it reconnects automatically.</p>
 
 <p>A connection belongs to the process that opened it. After a fork, the child
 holds a copy of this object and a copy of the parent's connection. Both
-processes then use one socket. PostgreSQL returns wrong results and reports
-no error. <code><a href="https://dbi.r-dbi.org/reference/dbIsValid.html" class="external-link">DBI::dbIsValid()</a></code> reports TRUE on such a handle, so nothing
-else detects it.</p>
+processes then use one socket. PostgreSQL can return wrong results and
+report no error. Measured against the NorSySS server on 2026-08-14. A child
+asked for <code>select 4</code> and read 3. The parent asked for
+<code>select 999</code> and read 2. <code><a href="https://dbi.r-dbi.org/reference/dbIsValid.html" class="external-link">DBI::dbIsValid()</a></code> reports TRUE on such a
+handle, so nothing else detects it.</p>
 <p>This class records the process that opens each connection. It drops any
 connection whose recorded process is not the current one.
 <code>is_connected()</code> then returns FALSE, <code>connection</code> returns NULL,
@@ -298,44 +300,32 @@ connection that another process opened stays open.</p><div class="section">
 <span class="r-out co"><span class="r-pr">#&gt;</span> SSL mode:            x </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
-<span class="r-in"><span><span class="co"># Create a SQL Server connection</span></span></span>
-<span class="r-in"><span><span class="va">db_config</span> <span class="op">&lt;-</span> <span class="va">DBConnection_v9</span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span></span>
-<span class="r-in"><span>  driver <span class="op">=</span> <span class="st">"ODBC Driver 17 for SQL Server"</span>,</span></span>
-<span class="r-in"><span>  server <span class="op">=</span> <span class="st">"localhost"</span>,</span></span>
-<span class="r-in"><span>  port <span class="op">=</span> <span class="fl">1433</span>,</span></span>
-<span class="r-in"><span>  db <span class="op">=</span> <span class="st">"mydb"</span>,</span></span>
-<span class="r-in"><span>  user <span class="op">=</span> <span class="st">"myuser"</span>,</span></span>
-<span class="r-in"><span>  password <span class="op">=</span> <span class="st">"mypass"</span></span></span>
+<span class="r-in"><span><span class="co"># \donttest{</span></span></span>
+<span class="r-in"><span><span class="co"># The full cycle, on SQLite. SQLite needs no server, so this block runs</span></span></span>
+<span class="r-in"><span><span class="co"># anywhere. Only the driver and the db argument change for a server.</span></span></span>
+<span class="r-in"><span><span class="co"># vignette("backends", package = "csdb") puts the two configurations</span></span></span>
+<span class="r-in"><span><span class="co"># side by side.</span></span></span>
+<span class="r-in"><span><span class="va">sqlite_db</span> <span class="op">&lt;-</span> <span class="va">DBConnection_v9</span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span></span>
+<span class="r-in"><span>  driver <span class="op">=</span> <span class="st">"SQLite"</span>,</span></span>
+<span class="r-in"><span>  db <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".sqlite"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Connect to the database</span></span></span>
-<span class="r-in"><span><span class="va">db_config</span><span class="op">$</span><span class="fu">connect</span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">sqlite_db</span><span class="op">$</span><span class="fu">connect</span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">sqlite_db</span><span class="op">$</span><span class="fu">is_connected</span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] TRUE</span>
+<span class="r-in"><span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbListTables.html" class="external-link">dbListTables</a></span><span class="op">(</span><span class="va">sqlite_db</span><span class="op">$</span><span class="va">connection</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> character(0)</span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Check connection status</span></span></span>
-<span class="r-in"><span><span class="va">db_config</span><span class="op">$</span><span class="fu">is_connected</span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">sqlite_db</span><span class="op">$</span><span class="fu">disconnect</span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">sqlite_db</span><span class="op">$</span><span class="fu">is_connected</span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] FALSE</span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Use the connection</span></span></span>
-<span class="r-in"><span><span class="va">tables</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbListTables.html" class="external-link">dbListTables</a></span><span class="op">(</span><span class="va">db_config</span><span class="op">$</span><span class="va">connection</span><span class="op">)</span></span></span>
-<span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Disconnect when done</span></span></span>
-<span class="r-in"><span><span class="va">db_config</span><span class="op">$</span><span class="fu">disconnect</span><span class="op">(</span><span class="op">)</span></span></span>
-<span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># PostgreSQL example. Only "PostgreSQL Unicode" reaches the</span></span></span>
-<span class="r-in"><span><span class="co"># PostgreSQL branch of the connection code.</span></span></span>
-<span class="r-in"><span><span class="va">pg_config</span> <span class="op">&lt;-</span> <span class="va">DBConnection_v9</span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span></span>
-<span class="r-in"><span>  driver <span class="op">=</span> <span class="st">"PostgreSQL Unicode"</span>,</span></span>
-<span class="r-in"><span>  server <span class="op">=</span> <span class="st">"localhost"</span>,</span></span>
-<span class="r-in"><span>  port <span class="op">=</span> <span class="fl">5432</span>,</span></span>
-<span class="r-in"><span>  db <span class="op">=</span> <span class="st">"mydb"</span>,</span></span>
-<span class="r-in"><span>  user <span class="op">=</span> <span class="st">"myuser"</span>,</span></span>
-<span class="r-in"><span>  password <span class="op">=</span> <span class="st">"mypass"</span></span></span>
-<span class="r-in"><span><span class="op">)</span></span></span>
-<span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="va">pg_config</span><span class="op">$</span><span class="fu">connect</span><span class="op">(</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="co"># ... use connection ...</span></span></span>
-<span class="r-in"><span><span class="va">pg_config</span><span class="op">$</span><span class="fu">disconnect</span><span class="op">(</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+<span class="r-in"><span><span class="co"># $autoconnection opens the file again, so a read after a disconnect</span></span></span>
+<span class="r-in"><span><span class="co"># still works.</span></span></span>
+<span class="r-in"><span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbListTables.html" class="external-link">dbListTables</a></span><span class="op">(</span><span class="va">sqlite_db</span><span class="op">$</span><span class="va">autoconnection</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> character(0)</span>
+<span class="r-in"><span><span class="va">sqlite_db</span><span class="op">$</span><span class="fu">disconnect</span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="co"># }</span></span></span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

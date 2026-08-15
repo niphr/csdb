@@ -30,8 +30,10 @@ Key features:
 
 A connection belongs to the process that opened it. After a fork, the
 child holds a copy of this object and a copy of the parent's connection.
-Both processes then use one socket. PostgreSQL returns wrong results and
-reports no error.
+Both processes then use one socket. PostgreSQL can return wrong results
+and report no error. Measured against the NorSySS server on 2026-08-14.
+A child asked for `select 4` and read 3. The parent asked for
+`select 999` and read 2.
 [`DBI::dbIsValid()`](https://dbi.r-dbi.org/reference/dbIsValid.html)
 reports TRUE on such a handle, so nothing else detects it.
 
@@ -267,42 +269,30 @@ db
 #> SSL mode:            x 
 #> 
 
-if (FALSE) { # \dontrun{
-# Create a SQL Server connection
-db_config <- DBConnection_v9$new(
-  driver = "ODBC Driver 17 for SQL Server",
-  server = "localhost",
-  port = 1433,
-  db = "mydb",
-  user = "myuser",
-  password = "mypass"
+# \donttest{
+# The full cycle, on SQLite. SQLite needs no server, so this block runs
+# anywhere. Only the driver and the db argument change for a server.
+# vignette("backends", package = "csdb") puts the two configurations
+# side by side.
+sqlite_db <- DBConnection_v9$new(
+  driver = "SQLite",
+  db = tempfile(fileext = ".sqlite")
 )
 
-# Connect to the database
-db_config$connect()
+sqlite_db$connect()
+sqlite_db$is_connected()
+#> [1] TRUE
+DBI::dbListTables(sqlite_db$connection)
+#> character(0)
 
-# Check connection status
-db_config$is_connected()
+sqlite_db$disconnect()
+sqlite_db$is_connected()
+#> [1] FALSE
 
-# Use the connection
-tables <- DBI::dbListTables(db_config$connection)
-
-# Disconnect when done
-db_config$disconnect()
-
-# PostgreSQL example. Only "PostgreSQL Unicode" reaches the
-# PostgreSQL branch of the connection code.
-pg_config <- DBConnection_v9$new(
-  driver = "PostgreSQL Unicode",
-  server = "localhost",
-  port = 5432,
-  db = "mydb",
-  user = "myuser",
-  password = "mypass"
-)
-
-pg_config$connect()
-# ... use connection ...
-pg_config$disconnect()
-} # }
+# $autoconnection opens the file again, so a read after a disconnect
+# still works.
+DBI::dbListTables(sqlite_db$autoconnection)
+#> character(0)
+sqlite_db$disconnect()
+# }
 ```
