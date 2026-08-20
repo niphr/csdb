@@ -75,7 +75,7 @@ The `--as-cran` flag enables additional checks that CRAN uses, including:
 
 The package is built around two main R6 classes:
 
-1. **`DBConnection_v9`** (`R/r6_dbconnection_v9.R`): 
+1. **`DBConnection_v9`** (`R/r6_DBConnection_v9.R`):
    - Handles database connections
    - Supports multiple database drivers (SQL Server, PostgreSQL)
    - Manages connection configuration, authentication, and connection lifecycle
@@ -96,8 +96,21 @@ The package includes a comprehensive validation system with validators for:
 ### Database Utilities
 
 - **`get_table_names_and_info.R`**: Database-specific functions to retrieve table metadata (names, row counts, sizes)
-- **`util_database.R`**: Low-level database utilities for file operations and data loading
-- **`drop_rows_where.R`**: Functions for conditional row deletion
+- **`util_general.R`**: Helpers that touch no database
+
+`util_database.R` was one file of 1445 code lines. CI now fails any file over
+1000, so it is five, split by moving whole top-level expressions and changing
+none of them:
+
+- **`util_database.R`**: the S7 generics and the `db_*` class objects. **Every
+  other file here registers methods against these, and the left side of
+  `S7::method(generic, class) <-` evaluates while the namespace is built. So
+  this file MUST load first.** It does, because `.` sorts before `_`. A sibling
+  named to sort earlier fails at install.
+- **`util_database_index.R`**: index naming, `get_indexes`, `drop_index`, `add_index`
+- **`util_database_load.R`**: `load_data_infile` and `upsert_load_data_infile`
+- **`util_database_rows.R`**: `drop_all_rows`, `drop_rows_where`, `keep_rows_where`, `drop_table`
+- **`util_database_table.R`**: `create_table`, `sqlite_field_types`, constraints
 
 ### Package Structure
 
