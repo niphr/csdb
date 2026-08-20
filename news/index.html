@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.16</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.20</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -50,6 +50,15 @@
       <small>Source: <a href="https://github.com/niphr/csdb/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="2026.8.20" id="version-2026820">Version 2026.8.20<a class="anchor" aria-label="anchor" href="#version-2026820"></a></h2>
+<div class="section level3">
+<h3 id="development-2026-8-20">Development<a class="anchor" aria-label="anchor" href="#development-2026-8-20"></a></h3>
+<ul><li>
+<code>R/util_database.R</code> held 1445 code lines, and the shared CI workflow fails any <code>R/*.R</code> file over 1000. The S7 method assignments now live in four sibling files, one per group of generics: <code>util_database_load.R</code>, <code>util_database_table.R</code>, <code>util_database_index.R</code> and <code>util_database_rows.R</code>.</li>
+<li>The split moved whole top-level expressions and changed none of them. R sources <code>R/</code> in C collation order, and each new name sorts after <code>util_database.R</code>. Every generic and every class therefore exists before the method assignments run.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="2026.8.16" id="version-2026816">Version 2026.8.16<a class="anchor" aria-label="anchor" href="#version-2026816"></a></h2>
 <div class="section level3">
