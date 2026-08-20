@@ -12,5 +12,3 @@ jobs:
     permissions:
       contents: write
     uses: niphr/cstemplate/.github/workflows/r-package.yml@643ab0c6a9b11dd46b570891e3799096e653e7b9
-    with:
-      loc-allowlist: R/util_database.R

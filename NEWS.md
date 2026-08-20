@@ -1,3 +1,9 @@
+# Version 2026.8.20
+
+## Development
+* `R/util_database.R` held 1445 code lines, and the shared CI workflow fails any `R/*.R` file over 1000. The S7 method assignments now live in four sibling files, one per group of generics: `util_database_load.R`, `util_database_table.R`, `util_database_index.R` and `util_database_rows.R`.
+* The split moved whole top-level expressions and changed none of them. R sources `R/` in C collation order, and each new name sorts after `util_database.R`. Every generic and every class therefore exists before the method assignments run.
+
 # Version 2026.8.16
 
 ## Bug Fixes
