@@ -80,12 +80,12 @@ get_table_names_and_info <- function(connection) {
   index_size <- NULL
   rows <- NULL
   nrow <- NULL
-  # table_rows <- connection %>%
-  #   DBI::dbGetQuery("select o.name as table_name, i.rowcnt as n from sys.objects o join sys.sysindexes i on o.object_id = i.id where o.is_ms_shipped = 0 and i.rowcnt > 0 order by o.name") %>%
-  #   setDT() %>% unique()
+  # table_rows <- connection |>
+  #   DBI::dbGetQuery("select o.name as table_name, i.rowcnt as n from sys.objects o join sys.sysindexes i on o.object_id = i.id where o.is_ms_shipped = 0 and i.rowcnt > 0 order by o.name") |>
+  #   setDT() |> unique()
 
   # update stats
-  # connection %>% DBI::dbExecute("sp_updatestats")
+  # connection |> DBI::dbExecute("sp_updatestats")
   # get the stats
   table_rows <- connection |>
     DBI::dbGetQuery("sp_msforeachtable 'sp_spaceused [?]'") |>

@@ -1,6 +1,6 @@
 Package: csdb
 Title: An Abstracted System for Easily Working with Databases with Large Datasets
-Version: 2026.8.20
+Version: 2026.8.21
 Authors@R:
     c(
       person(
@@ -42,7 +42,7 @@ Imports: csutil,
     RSQLite,
     S7,
     stringr,
-    uuid (>= 1.1-0),
+    uuid (>= 1.1-0)
 Suggests: testthat,
     knitr,
     rmarkdown,
