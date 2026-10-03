@@ -953,7 +953,7 @@ DBTable_v9 <- R6::R6Class(
     #' @description
     #' Inserts data into the database table.
     #' @param newdata The data to insert.
-    #' @param confirm_insert_via_nrow Checks nrow() before the insert and after the insert. If nrow() did not increase enough, the method attempts an upsert.
+    #' @param confirm_insert_via_nrow If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key is upserted once instead. Otherwise the method counts the rows after the insert, and upserts when the table holds fewer rows than \code{newdata}. It stops when the table still holds fewer rows than \code{newdata} after the upsert.
     #' @param verbose Boolean.
     insert_data = function(
       newdata,
@@ -988,25 +988,56 @@ DBTable_v9 <- R6::R6Class(
           ""
         }
       )
-      load_data_infile(
-        connection = self$dbconnection$autoconnection,
-        dbconfig = self$dbconnection$config,
-        table = self$table_name_short_for_mssql_fully_specified_for_postgres,
-        dt = newdata,
-        file = infile
-      )
+      load <- function() {
+        load_data_infile(
+          connection = self$dbconnection$autoconnection,
+          dbconfig = self$dbconnection$config,
+          table = self$table_name_short_for_mssql_fully_specified_for_postgres,
+          dt = newdata,
+          file = infile
+        )
+        return(NULL)
+      }
+
+      # A duplicate key stops the PostgreSQL and the SQL Server load with an
+      # error of class csdb_load_duplicate_key. confirm_insert_via_nrow turns
+      # it into one upsert of the same rows. Before 2026.10.3 the failed load
+      # returned without an error, and only the row count below could start
+      # that upsert.
+      duplicate <- if (confirm_insert_via_nrow) {
+        tryCatch(load(), csdb_load_duplicate_key = function(e) e)
+      } else {
+        load()
+      }
 
       if (confirm_insert_via_nrow) {
-        nrow_after <- self$nrow(use_count = TRUE)
-        if (nrow_after < nrow(newdata)) {
+        if (is.null(duplicate)) {
+          nrow_after <- self$nrow(use_count = TRUE)
+          upsert <- nrow_after < nrow(newdata)
+          if (upsert) {
+            message(
+              "After insert have ",
+              nrow_after,
+              " rows. Tried to insert ",
+              nrow(newdata),
+              ". Now trying upsert."
+            )
+          }
+        } else {
+          upsert <- TRUE
           message(
-            "After insert have ",
-            nrow_after,
-            " rows. Tried to insert ",
+            "csdb: insert_data(confirm_insert_via_nrow = TRUE) on table ",
+            self$table_name,
+            ": ",
+            duplicate$tool,
+            " failed on attempt ",
+            duplicate$attempts,
+            " (duplicate key). It upserts the ",
             nrow(newdata),
-            ". Now trying upsert."
+            " rows once instead."
           )
-
+        }
+        if (upsert) {
           self$upsert_data(
             newdata = newdata,
             drop_indexes = NULL,
@@ -1148,7 +1179,7 @@ DBTable_v9 <- R6::R6Class(
     #' @description
     #' Drops all rows in the database table and then inserts data.
     #' @param newdata The data to insert.
-    #' @param confirm_insert_via_nrow Checks nrow() before the insert and after the insert. If nrow() did not increase enough, the method attempts an upsert.
+    #' @param confirm_insert_via_nrow If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key is upserted once instead. Otherwise the method counts the rows after the insert, and upserts when the table holds fewer rows than \code{newdata}. It stops when the table still holds fewer rows than \code{newdata} after the upsert.
     #' @param verbose Boolean.
     drop_all_rows_and_then_insert_data = function(
       newdata,

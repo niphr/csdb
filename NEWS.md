@@ -1,3 +1,84 @@
+# Version 2026.10.3
+
+## Bug Fixes
+* Loads into PostgreSQL and SQL Server now stop on failure. csdb ignored the
+  exit status of `psql` and `bcp`, so a load that the server refused lost its
+  rows and raised no error. Fixes #6.
+* csdb sorts a failed load into one of four classes, from the output of the
+  client: transient, ambiguous, duplicate key, or other. It runs no query to
+  do this, and it reads the output before it replaces the password.
+* A transient failure certainly stored nothing, so csdb runs the same load
+  again. That is at most 3 attempts, with a wait of 1 s and then 3 s.
+* An ambiguous failure broke the connection after the load started. The
+  server may or may not have committed the rows, so csdb stops at once.
+* The error then has class `csdb_load_ambiguous`, and it says to count the
+  rows in the table before the next load.
+* The phase decides the class. `psql` starts every error that it meets while
+  it connects with `psql: error:`. `bcp` prints `Starting copy...` when it
+  starts to send rows.
+
+  | Failure | Phase | Class |
+  |---|---|---|
+  | Refused, timed-out or reset connection, DNS failure, too many clients, server starting or stopping | connect | transient |
+  | `psql` SQLSTATE 40001, 40P01, 53300, 55P03 or 57P03 | transfer | transient |
+  | `psql` SQLSTATE 08xxx, 57P01 or 57P02, or a lost connection | transfer | ambiguous |
+  | `bcp` SQLState 08xxx, HYT00, HYT01 or S1T00 | connect | transient |
+  | `bcp` SQLState 08xxx, HYT00, HYT01 or S1T00, or NativeError 596 | transfer | ambiguous |
+  | `bcp` SQLState 40001, or NativeError 1205 or 1222 | any | transient |
+
+* `psql` runs with `-v VERBOSITY=verbose`, so it prints the SQLSTATE. A
+  failed connection prints no SQLSTATE, so csdb reads the libpq text. For too
+  many clients that is "sorry, too many clients already" or "remaining
+  connection slots are reserved".
+* A duplicate key stops at once. That is SQLSTATE 23505 for `psql` and
+  NativeError 2627 or 2601 for `bcp`. Every other failure also stops at once.
+* The error has class `csdb_load_transient`, `csdb_load_ambiguous`,
+  `csdb_load_duplicate_key` or `csdb_load_other`, and also
+  `csdb_load_error`. It names the table, the client, the exit status, the
+  class and the number of attempts.
+* The error holds the output of the client, with the password replaced by
+  `***`.
+* `insert_data(confirm_insert_via_nrow = TRUE)` catches a duplicate key and
+  upserts the same rows once. It stops when the table then holds fewer rows
+  than the new data.
+* Each failed attempt and each upsert fallback emits a `message()`. It names
+  the table, the client, the attempt and the class. A load that succeeds on a
+  later attempt emits one more `message()`.
+* These are messages and not warnings. A warning becomes an error under
+  `options(warn = 2)`, and that would fail a load that succeeded.
+* A load also stops, as class other, when `psql` or `bcp` reports a row count
+  that differs from the rows csdb sent. It stops when `bcp` prints an
+  `Error =` line and exits with status 0.
+* The SQL Server loader no longer passes `nul` to `bcp format`. On Linux `bcp`
+  created a file `./nul`. Where R could not write the working directory, every
+  SQL Server load stored 0 rows and raised no error.
+
+## Development
+* `tests/testthat/test-load-tools.R` puts a fake `psql` and a fake `bcp` first
+  on `PATH`, and those tests skip on Windows.
+* A retry is safe because a failed load stores no row. Verified on 2026-10-03:
+  50,000 rows with a duplicate key at row 40,000 stored 0 rows on PostgreSQL
+  16 and on SQL Server 2022.
+* csdb passes no `-b` to `bcp`, so `bcp` sends every row in one batch. A `-b`
+  would commit each batch, and a retry could then store a row twice.
+* Verified on 2026-10-03 for 3,000,000-row loads. `pg_terminate_backend()`
+  mid-COPY, a TCP cut mid-COPY and `KILL` mid-`bcp` each stopped after 1
+  attempt as ambiguous. In all three runs the table kept 0 of the rows.
+* `bcp` 17.11 did not always return after its connection broke. This
+  happened after a TCP cut, and after one of two `KILL` runs. `bcp` printed
+  nothing after `Starting copy...` and waited 9 to 11 minutes, until it was
+  stopped by hand. csdb sets no timeout on the client, so such a load waits
+  indefinitely.
+* `psql` and `bcp` print a row count with no digit grouping, such as
+  `COPY 1000000` and `1000000 rows copied.`, measured for 1,000,000 rows.
+* `bcp` waits for its login timeout of about 15 s on a refused connection.
+  Three failed attempts on SQL Server therefore took 49.4 s, and 4.35 s on
+  PostgreSQL.
+* A load that succeeds at once sends the same statements as before. Measured
+  on PostgreSQL 16: 4 statements for each `insert_data()`, with identical
+  texts.
+
+
 # Version 2026.8.21
 
 - The package drops `magrittr`. Every `%>%` is now the base pipe `|>`, and

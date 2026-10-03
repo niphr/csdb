@@ -102,6 +102,7 @@ tab_sqlite$insert_data(d)
 | `get_table_names_and_info()` row count | The `reltuples` estimate the planner holds. | An exact `COUNT(*)`. |
 | `get_table_names_and_info()` sizes | Real total, data and index sizes in GB. | `NA` in all three size columns. |
 | External client binary | `psql` must be on `PATH`. Bulk loads are staged to a CSV file and shelled out. | None: no `psql` and no `bcp`. Rows go straight through `DBI::dbAppendTable()`. |
+| A failed bulk load | csdb reads the SQLSTATE that `psql` prints. A failure that certainly stored nothing runs again, at most 3 attempts in total. That is a connection that never started, such as too many connections, or a deadlock, a serialization failure or a lock timeout. A connection that broke during `\copy` stops at once with class `csdb_load_ambiguous`, because the server may have committed the rows. A duplicate key stops with class `csdb_load_duplicate_key`, and `$insert_data(confirm_insert_via_nrow = TRUE)` then upserts the rows once. | `DBI::dbAppendTable()` raises at once, with no class and no retry. `confirm_insert_via_nrow = TRUE` does not upsert after a duplicate key. |
 | `$keep_rows_where()` | Copies the surviving rows to a new table, drops the old one, renames. | A single `DELETE`, which leaves the primary key and the indexes in place. |
 
 ### Why the field types are closed

@@ -357,7 +357,7 @@ connection.
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{newdata}}{The data to insert.}
-      \item{\code{confirm_insert_via_nrow}}{Checks nrow() before the insert and after the insert. If nrow() did not increase enough, the method attempts an upsert.}
+      \item{\code{confirm_insert_via_nrow}}{If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key is upserted once instead. Otherwise the method counts the rows after the insert, and upserts when the table holds fewer rows than \code{newdata}. It stops when the table still holds fewer rows than \code{newdata} after the upsert.}
       \item{\code{verbose}}{Boolean.}
     }
     \if{html}{\out{</div>}}
@@ -482,7 +482,7 @@ connection.
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{newdata}}{The data to insert.}
-      \item{\code{confirm_insert_via_nrow}}{Checks nrow() before the insert and after the insert. If nrow() did not increase enough, the method attempts an upsert.}
+      \item{\code{confirm_insert_via_nrow}}{If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key is upserted once instead. Otherwise the method counts the rows after the insert, and upserts when the table holds fewer rows than \code{newdata}. It stops when the table still holds fewer rows than \code{newdata} after the upsert.}
       \item{\code{verbose}}{Boolean.}
     }
     \if{html}{\out{</div>}}
