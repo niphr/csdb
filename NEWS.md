@@ -1,3 +1,30 @@
+# Version 2026.10.4
+
+## New Features
+* `DBTable_v9$replace_all_rows(newdata)` replaces every row in one
+  transaction, or leaves the table unchanged when a statement fails.
+  The rows go through DBI, so use it for small tables.
+
+## Bug Fixes
+* csdb now names a primary key constraint `pk_<slug>_<16 hexadecimal
+  characters>`, at most 63 characters, by the rule that names an index.
+  The old name was `PK_` plus the table name with `.`, `[` and `]` deleted.
+  It could give two tables one name, and PostgreSQL truncated it past 63
+  characters. A table that an earlier release created keeps its old name.
+* `insert_data()`, `upsert_data()` and the two `drop_all_rows_and_then_*()`
+  methods take `load_timeout`, in seconds. csdb kills a `psql` or `bcp` call
+  that runs longer, and stops with class `csdb_load_ambiguous`.
+* The default is 3600 s, because Airflow kills a norsyss task after 60
+  minutes (`DEFAULT_TIMEOUT_MINUTES` in `Fhi.Norsyss/dags/norsyss.py`).
+* csdb does not retry the same load after a timeout. An Airflow retry runs
+  the whole task again. That is safe for a task that rebuilds its output
+  from the start.
+* `bcp` gets a login timeout of 30 s (`-l 30`), and `psql` gets
+  `connect_timeout=30`.
+* The file that csdb hands to `psql` or `bcp` never holds a number in
+  scientific notation. csdb wrote 100000 as `1e+05`, and PostgreSQL refused
+  it for an integer column.
+
 # Version 2026.10.3
 
 ## Bug Fixes

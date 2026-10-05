@@ -920,7 +920,7 @@ test_that("mocked psql: a refused COPY stops, and a full COPY does not", {
   rec <- local_recorded_waits()
   con <- load_tools_connection()
   local_mocked_bindings(
-    run_load_tool = function(command, args) {
+    run_load_tool = function(command, args, timeout = 0) {
       return(list(
         status = 1L,
         output = "ERROR:  23505: duplicate key value violates unique constraint"
@@ -934,7 +934,7 @@ test_that("mocked psql: a refused COPY stops, and a full COPY does not", {
   )
 
   local_mocked_bindings(
-    run_load_tool = function(command, args) {
+    run_load_tool = function(command, args, timeout = 0) {
       return(list(status = 0L, output = "COPY 2"))
     }
   )
@@ -947,7 +947,7 @@ test_that("mocked psql: a transient failure, then success, is retried once", {
   con <- load_tools_connection()
   n <- 0L
   local_mocked_bindings(
-    run_load_tool = function(command, args) {
+    run_load_tool = function(command, args, timeout = 0) {
       n <<- n + 1L
       if (n == 1L) {
         return(list(status = 2L, output = "psql: error: Connection refused"))
@@ -972,7 +972,7 @@ test_that("mocked bcp: a short row count stops, and a full one does not", {
   rec <- local_recorded_waits()
   con <- load_tools_connection()
   local_mocked_bindings(
-    run_load_tool = function(command, args) {
+    run_load_tool = function(command, args, timeout = 0) {
       if (args[[2]] == "format") {
         return(list(status = 0L, output = character()))
       }
@@ -986,7 +986,7 @@ test_that("mocked bcp: a short row count stops, and a full one does not", {
   )
 
   local_mocked_bindings(
-    run_load_tool = function(command, args) {
+    run_load_tool = function(command, args, timeout = 0) {
       if (args[[2]] == "format") {
         return(list(status = 0L, output = character()))
       }

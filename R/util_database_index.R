@@ -7,8 +7,9 @@
 
 # index naming
 #
-# The UUID namespace that index_physical_name() hashes under. The value is
-# arbitrary and fixed. Changing it renames every index csdb manages.
+# The UUID namespace that physical_name() hashes under. The value is
+# arbitrary and fixed. Changing it renames every index and every primary key
+# constraint csdb manages.
 INDEX_NAME_NAMESPACE <- "3f2a6c1e-7d54-4b98-9a0f-6c5d2e8b41a7"
 
 # The longest identifier PostgreSQL keeps. NAMEDATALEN is 64 bytes, and one
@@ -17,6 +18,9 @@ INDEX_NAME_MAX_CHARS <- 63L
 
 # The front of every physical index name.
 INDEX_NAME_PREFIX <- "ix_"
+
+# The front of every primary key constraint name.
+PK_NAME_PREFIX <- "pk_"
 
 # How many hexadecimal characters of the digest the name carries.
 INDEX_NAME_DIGEST_CHARS <- 16L
@@ -89,7 +93,7 @@ index_table_text <- function(table) {
   paste(index_table_identity(table), collapse = ".")
 }
 
-# The name a declared index carries in the database.
+# The name a declared index or primary key carries in the database.
 #
 # csdb used the caller's logical name as the database name, verbatim.
 # `indexes = list(ind1 = "a")` created an index called `ind1`. A PostgreSQL
@@ -105,9 +109,10 @@ index_table_text <- function(table) {
 # The name built here carries the table identity, so one table cannot take
 # another table's name. It has three parts:
 #
-#   ix_       A fixed prefix. It keeps a letter at the front. PostgreSQL
-#             rejects an unquoted identifier that starts with a digit, and the
-#             db_postgres add_index method does not quote.
+#   <prefix>  `ix_` for an index, `pk_` for a primary key constraint. It
+#             keeps a letter at the front. PostgreSQL rejects an unquoted
+#             identifier that starts with a digit, and neither the db_postgres
+#             add_index method nor add_constraint() quotes the name.
 #   <slug>    The identity and the logical name, lowercased, with every other
 #             character replaced by an underscore. This part is readable only.
 #             It is cut from the LEFT when it is too long. That keeps the
@@ -123,13 +128,15 @@ index_table_text <- function(table) {
 # The name is lowercase. PostgreSQL folds an unquoted identifier to lowercase
 # and SQLite does not. A lowercase name therefore reads the same in the source
 # and in both catalogues. Measured on norsyss_data1: 92 lowercase `pk_`
-# constraint names and 0 uppercase, while the source writes `PK_`.
+# constraint names and 0 uppercase, while the source wrote `PK_`.
 #
 # The key the digest covers is unambiguous. It length-prefixes the component
 # count, then every table name component, then the logical name, so no two
-# different inputs build one key. That is stronger than the `PK_{table}` rule
-# in add_constraint(), which deletes `.`, `[` and `]`. Under that rule, schema
-# `a` with table `bc` and schema `ab` with table `c` both give `PK_abc`.
+# different inputs build one key. The rule it replaced for primary keys,
+# `PK_{table}`, deleted `.`, `[` and `]`. Under that rule, schema `a` with
+# table `bc` and schema `ab` with table `c` both gave `PK_abc`. The key does
+# not hold the prefix, so the prefix alone separates an index from a primary
+# key constraint.
 #
 # The name is collision-resistant and not injective. 16 hexadecimal characters
 # hold 64 bits, and the version nibble of a version 5 UUID is fixed, so 60 bits
@@ -138,10 +145,11 @@ index_table_text <- function(table) {
 # is left.
 #
 # table    The table identity. Text, or a DBI::Id.
-# index    One logical index name, from names(self$indexes).
+# logical  One logical name: an index name, or "pk" for the primary key.
+# prefix   The front of the name, INDEX_NAME_PREFIX or PK_NAME_PREFIX.
 # returns  One lowercase character string of at most 63 characters.
-index_physical_name <- function(table, index) {
-  if (!is.character(index) || length(index) != 1L || is.na(index)) {
+physical_name <- function(table, logical, prefix) {
+  if (!is.character(logical) || length(logical) != 1L || is.na(logical)) {
     stop("index must be one character string.")
   }
   parts <- index_table_identity(table)
@@ -151,7 +159,7 @@ index_physical_name <- function(table, index) {
   # count. A reader can therefore recover the exact input, so no two different
   # inputs build one key. Without the per-component prefix the pair
   # (Id("a", "b.c"), "ind1") and the pair (Id("a.b", "c"), "ind1") share a key.
-  fields <- c(as.character(length(parts)), parts, index)
+  fields <- c(as.character(length(parts)), parts, logical)
   key <- paste0(paste0(nchar(fields), ":", fields), collapse = "")
   digest <- gsub(
     "-",
@@ -162,10 +170,10 @@ index_physical_name <- function(table, index) {
   digest <- substr(digest, 1L, INDEX_NAME_DIGEST_CHARS)
 
   slug_max <- INDEX_NAME_MAX_CHARS -
-    nchar(INDEX_NAME_PREFIX) -
+    nchar(prefix) -
     1L -
     INDEX_NAME_DIGEST_CHARS
-  slug <- tolower(paste0(identity, "_", index))
+  slug <- tolower(paste0(identity, "_", logical))
   # Every character outside the class becomes an underscore, so the slug is
   # ASCII and one character is one byte. The 63 above is a byte limit.
   slug <- gsub("[^a-z0-9]+", "_", slug)
@@ -176,10 +184,32 @@ index_physical_name <- function(table, index) {
   }
 
   if (nzchar(slug)) {
-    paste0(INDEX_NAME_PREFIX, slug, "_", digest)
+    return(paste0(prefix, slug, "_", digest))
   } else {
-    paste0(INDEX_NAME_PREFIX, digest)
+    return(paste0(prefix, digest))
   }
+}
+
+# The name a declared index carries in the database. See physical_name().
+#
+# table    The table identity. Text, or a DBI::Id.
+# index    One logical index name, from names(self$indexes).
+# returns  One lowercase character string of at most 63 characters.
+index_physical_name <- function(table, index) {
+  return(
+    physical_name(table = table, logical = index, prefix = INDEX_NAME_PREFIX)
+  )
+}
+
+# The name of the primary key constraint of a table. See physical_name().
+#
+# add_constraint() and drop_constraint() both call this with the table
+# identity they receive, so a drop finds the name that the add created.
+#
+# table    The table identity. Text, or a DBI::Id.
+# returns  One lowercase character string of at most 63 characters.
+pk_physical_name <- function(table) {
+  return(physical_name(table = table, logical = "pk", prefix = PK_NAME_PREFIX))
 }
 
 # get_indexes methods

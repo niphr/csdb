@@ -8,11 +8,11 @@
 # dispatches to db_sqlite, and would test neither one. SQLite accepts the
 # db_postgres SQL, so the real body runs.
 #
-# No block writes an expected physical index name as a string literal. Every
-# one asks index_physical_name() for it. Each then asserts a property of the
-# answer: distinct, lowercase, inside the identifier limit, and the same name
-# at create and at drop. A block that pinned the layout would make the layout
-# impossible to change.
+# Every block but one asks index_physical_name() or pk_physical_name() for an
+# expected name, and asserts a property of the answer: distinct, lowercase,
+# inside the identifier limit, and the same name at create and at drop. The
+# one exception pins three index names from commit abddaad as string
+# literals, because the primary key change MUST NOT rename an index.
 
 # The physical names of every index a table declares, in declaration order.
 #
@@ -31,6 +31,34 @@ expected_physical_names <- function(tab) {
     character(1),
     USE.NAMES = FALSE
   )
+}
+
+# The constraint name that one add_constraint or drop_constraint method sends.
+#
+# DBI::dbExecute() is mocked, so the method needs no server and the block
+# reads the SQL that production builds. The method is looked up by S7
+# dispatch on the backend class, so db_mssql reaches the db_default method.
+capture_constraint_names <- function(generic, class, table) {
+  statements <- character(0)
+  local_mocked_bindings(
+    dbExecute = function(conn, statement, ...) {
+      statements <<- c(statements, as.character(statement))
+      0L
+    },
+    .package = "DBI"
+  )
+  method <- S7::method(generic, class)
+  if (identical(generic, add_constraint)) {
+    method(NULL, table, c("a", "b"))
+  } else {
+    method(NULL, table)
+  }
+  expect_length(statements, 1L)
+  m <- regmatches(
+    statements,
+    regexec("(ADD|DROP) CONSTRAINT\\s+([^\\s;]+)", statements, perl = TRUE)
+  )[[1]]
+  m[3]
 }
 
 test_that("the PostgreSQL add_index method raises instead of returning the error", {
@@ -520,10 +548,9 @@ test_that("add_indexes raises when the index does not reach the table", {
 # The physical name itself
 # ---------------------------------------------------------------------------
 
-test_that("two identities that the old constraint rule collapses stay apart", {
-  # `PK_{table}` at add_constraint() deletes `.`, `[` and `]`, so schema `a`
-  # with table `bc` and schema `ab` with table `c` both give `PK_abc`. That
-  # rule is the pattern to learn from, not the one to copy.
+test_that("two identities that the old constraint rule collapsed stay apart", {
+  # The old rule, `PK_{table}` with `.`, `[` and `]` deleted, gave schema `a`
+  # with table `bc` and schema `ab` with table `c` the one name `PK_abc`.
   collapse_old <- function(x) stringr::str_remove_all(x, "\\.")
   expect_identical(collapse_old("a.bc"), collapse_old("ab.c"))
 
@@ -531,12 +558,88 @@ test_that("two identities that the old constraint rule collapses stay apart", {
     index_physical_name(table = "a.bc", index = "ind1"),
     index_physical_name(table = "ab.c", index = "ind1")
   ))
+  expect_false(identical(
+    pk_physical_name("a.bc"),
+    pk_physical_name("ab.c")
+  ))
+
+  # The SQL that add_constraint() sends carries the two names too.
+  sent <- capture_constraint_names(add_constraint, db_postgres, "a.bc")
+  expect_false(identical(
+    sent,
+    capture_constraint_names(add_constraint, db_postgres, "ab.c")
+  ))
+  expect_identical(sent, pk_physical_name("a.bc"))
 
   # The logical name is part of the identity too, not only the table.
   expect_false(identical(
     index_physical_name(table = "tab", index = "ind1"),
     index_physical_name(table = "tab", index = "ind2")
   ))
+})
+
+# The longest table name in the norsyss data, as PostgreSQL and SQL Server
+# receive it. The old rule gave PostgreSQL a name past 63 characters, and the
+# server truncated it without a word.
+long_pk_table <- "anon_large_scale_surveillance_short_term_trends_xxpxx_respiratory_infections"
+pk_name_rule <- "^pk_[a-z0-9_]*_[0-9a-f]{16}$"
+
+test_that("the PostgreSQL add_constraint sends a pk_ name inside the identifier limit", {
+  table <- paste0("anon.", long_pk_table)
+  added <- capture_constraint_names(add_constraint, db_postgres, table)
+  expect_match(added, pk_name_rule)
+  expect_lte(nchar(added, type = "bytes"), INDEX_NAME_MAX_CHARS)
+  expect_identical(added, pk_physical_name(table))
+
+  # drop_constraint has no db_postgres method, so PostgreSQL dispatches to
+  # db_default. The drop MUST find the name the add created.
+  expect_identical(
+    capture_constraint_names(drop_constraint, db_postgres, table),
+    added
+  )
+})
+
+test_that("the SQL Server add_constraint sends a pk_ name inside the identifier limit", {
+  # On SQL Server the table identity is the bare table name.
+  added <- capture_constraint_names(add_constraint, db_mssql, long_pk_table)
+  expect_match(added, pk_name_rule)
+  expect_lte(nchar(added, type = "bytes"), INDEX_NAME_MAX_CHARS)
+  expect_identical(added, pk_physical_name(long_pk_table))
+  expect_identical(
+    capture_constraint_names(drop_constraint, db_mssql, long_pk_table),
+    added
+  )
+
+  # The schema is part of the identity on PostgreSQL, so the two backends give
+  # one table two names.
+  expect_false(identical(
+    added,
+    pk_physical_name(paste0("anon.", long_pk_table))
+  ))
+})
+
+test_that("index_physical_name returns the names it returned at abddaad", {
+  # The primary key rule reuses the index builder. These three names were
+  # recorded from index_physical_name() at commit abddaad, before the builder
+  # took a prefix. A change here renames every index csdb manages.
+  expect_identical(
+    index_physical_name("anon.anon_norsyss_data_xxpxx_r80", "ind1"),
+    "ix_anon_anon_norsyss_data_xxpxx_r80_ind1_41bad038642559c2"
+  )
+  expect_identical(
+    index_physical_name(
+      DBI::Id(schema = "anon", table = "anon_norsyss_data_xxpxx_r80"),
+      "ind2"
+    ),
+    "ix_anon_anon_norsyss_data_xxpxx_r80_ind2_2ab1bef67a1858a3"
+  )
+  # A 90-character table name, so the slug is cut from the left.
+  long <- paste0("anon.", strrep("abcdefghij", 8), "_tab_")
+  expect_identical(nchar(long), 90L)
+  expect_identical(
+    index_physical_name(long, "ind1"),
+    "ix_ghijabcdefghijabcdefghijabcdefghij_tab_ind1_32be51a8b78251be"
+  )
 })
 
 test_that("two DBI::Id values that join to one string stay apart", {
@@ -619,11 +722,16 @@ test_that("a DBI::Id and its text form name one index", {
   tab$disconnect()
 })
 
-test_that("a physical index name is lowercase and fits the identifier limit", {
+test_that("a physical index or primary key name is lowercase and fits the identifier limit", {
   # PostgreSQL folds an unquoted identifier to lowercase and SQLite does not.
   # A lowercase name reads the same in the source and in both catalogues.
   # Measured on norsyss_data1 on 2026-08-15: 92 lowercase `pk_` constraint
-  # names and 0 uppercase, while the source writes `PK_`.
+  # names and 0 uppercase, while the source then wrote `PK_`.
+  mixed_pk <- pk_physical_name("ANON.MixedCase")
+  expect_identical(mixed_pk, tolower(mixed_pk))
+  expect_true(grepl("^pk_[a-z0-9_]*_[0-9a-f]{16}$", mixed_pk))
+  expect_false(identical(pk_physical_name("anon.mixedcase"), mixed_pk))
+
   mixed <- index_physical_name(table = "ANON.MixedCase", index = "IND1")
   expect_identical(mixed, tolower(mixed))
   expect_true(grepl("^[a-z][a-z0-9_]*$", mixed))

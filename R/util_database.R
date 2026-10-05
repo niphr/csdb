@@ -74,7 +74,9 @@ write_data_infile <- function(
     col.names = colnames,
     eol = eol,
     quote = quote,
-    sep = sep
+    sep = sep,
+    # psql refused "1e+05" for an integer column on 2026-10-05
+    scipen = 999
   )
 }
 

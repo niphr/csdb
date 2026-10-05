@@ -198,10 +198,7 @@ S7::method(add_constraint, db_default) <- function(connection, table, keys) {
   t0 <- Sys.time()
 
   primary_keys <- glue::glue_collapse(keys, sep = ", ")
-  constraint <- glue::glue("PK_{table}") |>
-    stringr::str_remove_all("\\.") |>
-    stringr::str_remove_all("\\[") |>
-    stringr::str_remove_all("]")
+  constraint <- pk_physical_name(table)
   sql <- glue::glue(
     "
           ALTER table {table}
@@ -216,10 +213,7 @@ S7::method(add_constraint, db_postgres) <- function(connection, table, keys) {
   t0 <- Sys.time()
 
   primary_keys <- glue::glue_collapse(keys, sep = ", ")
-  constraint <- glue::glue("PK_{table}") |>
-    stringr::str_remove_all("\\.") |>
-    stringr::str_remove_all("\\[") |>
-    stringr::str_remove_all("]")
+  constraint <- pk_physical_name(table)
   sql <- glue::glue(
     "ALTER table {table}
     ADD CONSTRAINT {constraint}
@@ -254,10 +248,7 @@ S7::method(add_constraint, db_sqlite) <- function(connection, table, keys) {
 
 # drop_constraint methods
 S7::method(drop_constraint, db_default) <- function(connection, table) {
-  constraint <- glue::glue("PK_{table}") |>
-    stringr::str_remove_all("\\.") |>
-    stringr::str_remove_all("\\[") |>
-    stringr::str_remove_all("]")
+  constraint <- pk_physical_name(table)
   sql <- glue::glue(
     "
           ALTER table {table}

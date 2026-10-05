@@ -524,13 +524,15 @@ validator_field_contents_csfmt_rts_data_v2 <- function(data) {
 #' \describe{
 #'   \item{The table}{Named \code{table_name}, in the schema that
 #'     \code{dbconfig} names.}
-#'   \item{The primary key constraint}{Named \code{PK_} plus the fully
-#'     specified table name, with every \code{.}, \code{[} and \code{]}
-#'     deleted. Schema \code{anon} with table \code{anon_data} therefore gives
-#'     \code{PK_anonanon_data}. Two different tables can reach one name,
-#'     because the rule deletes the separator. Schema \code{a} with table
-#'     \code{bc} and schema \code{ab} with table \code{c} both give
-#'     \code{PK_abc}.}
+#'   \item{The primary key constraint}{Named
+#'     \code{pk_<slug>_<16 hexadecimal characters>}, at most 63 characters.
+#'     The rule is the index rule below, with the prefix \code{pk_} and the
+#'     logical name \code{pk}. The table identity is the table name on SQL
+#'     Server, and \code{schema.table} on PostgreSQL. Two different tables
+#'     get two names. Schema \code{a} with table \code{bc} and schema
+#'     \code{ab} with table \code{c} therefore no longer share a name.
+#'     \code{csdb:::pk_physical_name()} returns the name for one table. SQLite
+#'     gives the key no name.}
 #'   \item{One index per entry in \code{indexes}}{The names you write in
 #'     \code{indexes} are logical names. Each index reaches the database under
 #'     a physical name of the form \code{ix_<slug>_<16 hexadecimal
@@ -540,20 +542,17 @@ validator_field_contents_csfmt_rts_data_v2 <- function(data) {
 #'     one table and one logical name.}
 #' }
 #'
-#' @section The case of a constraint name on PostgreSQL:
-#' The source writes \code{PK_}, in upper case. PostgreSQL folds an unquoted
-#' identifier to lower case, so the catalogue stores \code{pk_}. Measured on
-#' the \code{norsyss_data1} database on 2026-08-15: 92 lower case \code{pk_}
-#' constraint names, and 0 upper case.
+#' @section The case of a constraint name:
+#' Every constraint name and every index name is lower case. PostgreSQL folds
+#' an unquoted identifier to lower case, and SQLite and SQL Server do not.
+#' A lower case name therefore reads the same in the source and in every
+#' catalogue. A \code{DROP CONSTRAINT} can quote the name or leave it
+#' unquoted, and it finds the constraint both ways.
 #'
-#' A \code{DROP CONSTRAINT} that quotes the source spelling therefore fails on
-#' PostgreSQL. Write the name unquoted, or write it in lower case.
-#'
-#' SQLite does not fold at all. It keeps \code{PK_MixedCase} exactly as the
-#' source writes it, so the two backends disagree on one identifier.
-#'
-#' The physical index name has no such trap. It is lower case already, so it
-#' reads the same in the source and in both catalogues.
+#' A table that an earlier csdb release created keeps its old constraint name,
+#' \code{PK_} plus the table name with every \code{.}, \code{[} and \code{]}
+#' deleted. PostgreSQL stores that name in lower case. csdb does not rename
+#' it.
 #'
 #' @import data.table
 #' @import R6
@@ -909,7 +908,18 @@ DBTable_v9 <- R6::R6Class(
     },
 
     #' @description
-    #' Create the database table.
+    #' Create the database table. When the table exists and its fields differ
+    #' from \code{field_types}, this drops the table with all its rows and
+    #' creates it again.
+    #'
+    #' The fields differ when the names or their order differ, as
+    #' \code{check_fields_match()} compares them. Do not call this on a table
+    #' whose rows you need, unless \code{field_types} matches the table.
+    #'
+    #' You rarely call this yourself. \code{connect()}, \code{tbl()} and 12
+    #' other public methods call it once per object, through the private
+    #' method \code{lazy_creation_of_table()}. 14 of the 22 public methods
+    #' therefore can drop the table.
     create_table = function() {
       # self$connect calls self$create_table.
       # cannot have infinite loop
@@ -954,11 +964,13 @@ DBTable_v9 <- R6::R6Class(
     #' Inserts data into the database table.
     #' @param newdata The data to insert.
     #' @param confirm_insert_via_nrow If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key is upserted once instead. Otherwise the method counts the rows after the insert, and upserts when the table holds fewer rows than \code{newdata}. It stops when the table still holds fewer rows than \code{newdata} after the upsert.
+    #' @param load_timeout The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.
     #' @param verbose Boolean.
     insert_data = function(
       newdata,
       confirm_insert_via_nrow = FALSE,
-      verbose = TRUE
+      verbose = TRUE,
+      load_timeout = 3600
     ) {
       private$lazy_creation_of_table()
       if (is.null(newdata)) {
@@ -994,7 +1006,8 @@ DBTable_v9 <- R6::R6Class(
           dbconfig = self$dbconnection$config,
           table = self$table_name_short_for_mssql_fully_specified_for_postgres,
           dt = newdata,
-          file = infile
+          file = infile,
+          load_timeout = load_timeout
         )
         return(NULL)
       }
@@ -1041,7 +1054,8 @@ DBTable_v9 <- R6::R6Class(
           self$upsert_data(
             newdata = newdata,
             drop_indexes = NULL,
-            verbose = verbose
+            verbose = verbose,
+            load_timeout = load_timeout
           )
           nrow_after <- self$nrow(use_count = TRUE)
           if (nrow_after < nrow(newdata)) {
@@ -1062,11 +1076,13 @@ DBTable_v9 <- R6::R6Class(
     #' Upserts data into the database table.
     #' @param newdata The data to insert.
     #' @param drop_indexes A vector of the indexes to drop before the upsert (can increase performance).
+    #' @param load_timeout The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.
     #' @param verbose Boolean.
     upsert_data = function(
       newdata,
       drop_indexes = names(self$indexes),
-      verbose = TRUE
+      verbose = TRUE,
+      load_timeout = 3600
     ) {
       private$lazy_creation_of_table()
       if (is.null(newdata)) {
@@ -1104,7 +1120,8 @@ DBTable_v9 <- R6::R6Class(
         file = infile,
         fields = names(self$field_types),
         keys = self$keys,
-        drop_indexes = drop_indexes
+        drop_indexes = drop_indexes,
+        load_timeout = load_timeout
       )
     },
 
@@ -1116,6 +1133,48 @@ DBTable_v9 <- R6::R6Class(
         connection = self$dbconnection$autoconnection,
         self$table_name_fully_specified_text
       )
+    },
+
+    #' @description
+    #' Replaces every row of the database table with \code{newdata}, in one
+    #' transaction. When a statement fails, the table keeps its old rows.
+    #'
+    #' The rows go through DBI, not through bcp or psql. Use this method for
+    #' small tables.
+    #'
+    #' The method stops before any statement unless \code{newdata} has each
+    #' name in \code{names(field_types)} once, and no other column.
+    #'
+    #' A change of \code{field_types} still drops and creates the table again
+    #' first, through \code{create_table()}. The first call after a schema
+    #' change can therefore start from an empty table.
+    #' @param newdata The data that replaces the rows.
+    replace_all_rows = function(newdata) {
+      private$lazy_creation_of_table()
+      if (
+        anyDuplicated(names(newdata)) > 0 ||
+          !setequal(names(newdata), names(self$field_types))
+      ) {
+        stop(glue::glue(
+          "replace_all_rows: the columns of newdata ",
+          "({paste0(names(newdata), collapse = ', ')}) differ from the fields ",
+          "of {self$table_name} ",
+          "({paste0(names(self$field_types), collapse = ', ')})"
+        ))
+      }
+      con <- self$dbconnection$autoconnection
+      DBI::dbWithTransaction(con, {
+        DBI::dbExecute(
+          con,
+          paste0("DELETE FROM ", self$table_name_fully_specified_text)
+        )
+        DBI::dbAppendTable(
+          con,
+          self$table_name_short_for_mssql_fully_specified_for_postgres,
+          newdata
+        )
+      })
+      invisible(NULL)
     },
 
     #' @description
@@ -1148,11 +1207,13 @@ DBTable_v9 <- R6::R6Class(
     #' Drops all rows in the database table and then upserts data.
     #' @param newdata The data to insert.
     #' @param drop_indexes A vector of the indexes to drop before the upsert (can increase performance).
+    #' @param load_timeout The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.
     #' @param verbose Boolean.
     drop_all_rows_and_then_upsert_data = function(
       newdata,
       drop_indexes = names(self$indexes),
-      verbose = TRUE
+      verbose = TRUE,
+      load_timeout = 3600
     ) {
       # The row count comes from the guard, which read it before the drop.
       # Never call nrow() here: a broken dim() method would then raise with
@@ -1172,7 +1233,8 @@ DBTable_v9 <- R6::R6Class(
       self$upsert_data(
         newdata = newdata,
         drop_indexes = drop_indexes,
-        verbose = verbose
+        verbose = verbose,
+        load_timeout = load_timeout
       )
     },
 
@@ -1180,11 +1242,13 @@ DBTable_v9 <- R6::R6Class(
     #' Drops all rows in the database table and then inserts data.
     #' @param newdata The data to insert.
     #' @param confirm_insert_via_nrow If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key is upserted once instead. Otherwise the method counts the rows after the insert, and upserts when the table holds fewer rows than \code{newdata}. It stops when the table still holds fewer rows than \code{newdata} after the upsert.
+    #' @param load_timeout The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.
     #' @param verbose Boolean.
     drop_all_rows_and_then_insert_data = function(
       newdata,
       confirm_insert_via_nrow = FALSE,
-      verbose = TRUE
+      verbose = TRUE,
+      load_timeout = 3600
     ) {
       newdata_n <- private$check_newdata_before_drop_all_rows(
         newdata = newdata,
@@ -1201,7 +1265,8 @@ DBTable_v9 <- R6::R6Class(
       self$insert_data(
         newdata = newdata,
         confirm_insert_via_nrow = confirm_insert_via_nrow,
-        verbose = verbose
+        verbose = verbose,
+        load_timeout = load_timeout
       )
     },
 

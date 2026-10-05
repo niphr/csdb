@@ -41,13 +41,15 @@ One object creates three kinds of thing, and each carries its own name rule.
 \describe{
   \item{The table}{Named \code{table_name}, in the schema that
     \code{dbconfig} names.}
-  \item{The primary key constraint}{Named \code{PK_} plus the fully
-    specified table name, with every \code{.}, \code{[} and \code{]}
-    deleted. Schema \code{anon} with table \code{anon_data} therefore gives
-    \code{PK_anonanon_data}. Two different tables can reach one name,
-    because the rule deletes the separator. Schema \code{a} with table
-    \code{bc} and schema \code{ab} with table \code{c} both give
-    \code{PK_abc}.}
+  \item{The primary key constraint}{Named
+    \code{pk_<slug>_<16 hexadecimal characters>}, at most 63 characters.
+    The rule is the index rule below, with the prefix \code{pk_} and the
+    logical name \code{pk}. The table identity is the table name on SQL
+    Server, and \code{schema.table} on PostgreSQL. Two different tables
+    get two names. Schema \code{a} with table \code{bc} and schema
+    \code{ab} with table \code{c} therefore no longer share a name.
+    \code{csdb:::pk_physical_name()} returns the name for one table. SQLite
+    gives the key no name.}
   \item{One index per entry in \code{indexes}}{The names you write in
     \code{indexes} are logical names. Each index reaches the database under
     a physical name of the form \code{ix_<slug>_<16 hexadecimal
@@ -58,21 +60,18 @@ One object creates three kinds of thing, and each carries its own name rule.
 }
 }
 
-\section{The case of a constraint name on PostgreSQL}{
+\section{The case of a constraint name}{
 
-The source writes \code{PK_}, in upper case. PostgreSQL folds an unquoted
-identifier to lower case, so the catalogue stores \code{pk_}. Measured on
-the \code{norsyss_data1} database on 2026-08-15: 92 lower case \code{pk_}
-constraint names, and 0 upper case.
+Every constraint name and every index name is lower case. PostgreSQL folds
+an unquoted identifier to lower case, and SQLite and SQL Server do not.
+A lower case name therefore reads the same in the source and in every
+catalogue. A \code{DROP CONSTRAINT} can quote the name or leave it
+unquoted, and it finds the constraint both ways.
 
-A \code{DROP CONSTRAINT} that quotes the source spelling therefore fails on
-PostgreSQL. Write the name unquoted, or write it in lower case.
-
-SQLite does not fold at all. It keeps \code{PK_MixedCase} exactly as the
-source writes it, so the two backends disagree on one identifier.
-
-The physical index name has no such trap. It is lower case already, so it
-reads the same in the source and in both catalogues.
+A table that an earlier csdb release created keeps its old constraint name,
+\code{PK_} plus the table name with every \code{.}, \code{[} and \code{]}
+deleted. PostgreSQL stores that name in lower case. csdb does not rename
+it.
 }
 
 \examples{
@@ -201,6 +200,7 @@ Other database classes:
     \item \href{#method-DBTable_v9-insert_data}{\code{DBTable_v9$insert_data()}}
     \item \href{#method-DBTable_v9-upsert_data}{\code{DBTable_v9$upsert_data()}}
     \item \href{#method-DBTable_v9-drop_all_rows}{\code{DBTable_v9$drop_all_rows()}}
+    \item \href{#method-DBTable_v9-replace_all_rows}{\code{DBTable_v9$replace_all_rows()}}
     \item \href{#method-DBTable_v9-drop_rows_where}{\code{DBTable_v9$drop_rows_where()}}
     \item \href{#method-DBTable_v9-keep_rows_where}{\code{DBTable_v9$keep_rows_where()}}
     \item \href{#method-DBTable_v9-drop_all_rows_and_then_upsert_data}{\code{DBTable_v9$drop_all_rows_and_then_upsert_data()}}
@@ -319,7 +319,18 @@ connection.
 \if{html}{\out{<a id="method-DBTable_v9-create_table"></a>}}
 \if{latex}{\out{\hypertarget{method-DBTable_v9-create_table}{}}}
 \subsection{\code{DBTable_v9$create_table()}}{
-  Create the database table.
+  Create the database table. When the table exists and its fields differ
+from \code{field_types}, this drops the table with all its rows and
+creates it again.
+
+The fields differ when the names or their order differ, as
+\code{check_fields_match()} compares them. Do not call this on a table
+whose rows you need, unless \code{field_types} matches the table.
+
+You rarely call this yourself. \code{connect()}, \code{tbl()} and 12
+other public methods call it once per object, through the private
+method \code{lazy_creation_of_table()}. 14 of the 22 public methods
+therefore can drop the table.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$create_table()}
@@ -349,7 +360,8 @@ connection.
     \preformatted{DBTable_v9$insert_data(
   newdata,
   confirm_insert_via_nrow = FALSE,
-  verbose = TRUE
+  verbose = TRUE,
+  load_timeout = 3600
 )}
     \if{html}{\out{</div>}}
   }
@@ -359,6 +371,7 @@ connection.
       \item{\code{newdata}}{The data to insert.}
       \item{\code{confirm_insert_via_nrow}}{If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key is upserted once instead. Otherwise the method counts the rows after the insert, and upserts when the table holds fewer rows than \code{newdata}. It stops when the table still holds fewer rows than \code{newdata} after the upsert.}
       \item{\code{verbose}}{Boolean.}
+      \item{\code{load_timeout}}{The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.}
     }
     \if{html}{\out{</div>}}
   }
@@ -374,7 +387,8 @@ connection.
     \preformatted{DBTable_v9$upsert_data(
   newdata,
   drop_indexes = names(self$indexes),
-  verbose = TRUE
+  verbose = TRUE,
+  load_timeout = 3600
 )}
     \if{html}{\out{</div>}}
   }
@@ -384,6 +398,7 @@ connection.
       \item{\code{newdata}}{The data to insert.}
       \item{\code{drop_indexes}}{A vector of the indexes to drop before the upsert (can increase performance).}
       \item{\code{verbose}}{Boolean.}
+      \item{\code{load_timeout}}{The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.}
     }
     \if{html}{\out{</div>}}
   }
@@ -397,6 +412,36 @@ connection.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$drop_all_rows()}
+    \if{html}{\out{</div>}}
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-DBTable_v9-replace_all_rows"></a>}}
+\if{latex}{\out{\hypertarget{method-DBTable_v9-replace_all_rows}{}}}
+\subsection{\code{DBTable_v9$replace_all_rows()}}{
+  Replaces every row of the database table with \code{newdata}, in one
+transaction. When a statement fails, the table keeps its old rows.
+
+The rows go through DBI, not through bcp or psql. Use this method for
+small tables.
+
+The method stops before any statement unless \code{newdata} has each
+name in \code{names(field_types)} once, and no other column.
+
+A change of \code{field_types} still drops and creates the table again
+first, through \code{create_table()}. The first call after a schema
+change can therefore start from an empty table.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{DBTable_v9$replace_all_rows(newdata)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{newdata}}{The data that replaces the rows.}
+    }
     \if{html}{\out{</div>}}
   }
 }
@@ -449,7 +494,8 @@ connection.
     \preformatted{DBTable_v9$drop_all_rows_and_then_upsert_data(
   newdata,
   drop_indexes = names(self$indexes),
-  verbose = TRUE
+  verbose = TRUE,
+  load_timeout = 3600
 )}
     \if{html}{\out{</div>}}
   }
@@ -459,6 +505,7 @@ connection.
       \item{\code{newdata}}{The data to insert.}
       \item{\code{drop_indexes}}{A vector of the indexes to drop before the upsert (can increase performance).}
       \item{\code{verbose}}{Boolean.}
+      \item{\code{load_timeout}}{The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.}
     }
     \if{html}{\out{</div>}}
   }
@@ -474,7 +521,8 @@ connection.
     \preformatted{DBTable_v9$drop_all_rows_and_then_insert_data(
   newdata,
   confirm_insert_via_nrow = FALSE,
-  verbose = TRUE
+  verbose = TRUE,
+  load_timeout = 3600
 )}
     \if{html}{\out{</div>}}
   }
@@ -484,6 +532,7 @@ connection.
       \item{\code{newdata}}{The data to insert.}
       \item{\code{confirm_insert_via_nrow}}{If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key is upserted once instead. Otherwise the method counts the rows after the insert, and upserts when the table holds fewer rows than \code{newdata}. It stops when the table still holds fewer rows than \code{newdata} after the upsert.}
       \item{\code{verbose}}{Boolean.}
+      \item{\code{load_timeout}}{The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.}
     }
     \if{html}{\out{</div>}}
   }

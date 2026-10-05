@@ -13,7 +13,8 @@ S7::method(load_data_infile, db_default) <- function(
   table,
   dt = NULL,
   file = "/xtmp/x123.csv",
-  force_tablock = FALSE
+  force_tablock = FALSE,
+  load_timeout = 3600
 ) {
   if (is.null(dt)) {
     return()
@@ -77,7 +78,8 @@ S7::method(load_data_infile, db_mssql) <- function(
   table,
   dt,
   file = tempfile(),
-  force_tablock = FALSE
+  force_tablock = FALSE,
+  load_timeout = 3600
 ) {
   if (is.null(dt)) {
     return()
@@ -128,7 +130,9 @@ S7::method(load_data_infile, db_mssql) <- function(
     "-U",
     dbconfig$user,
     "-P",
-    dbconfig$password
+    dbconfig$password,
+    "-l",
+    "30"
   )
   if (dbconfig$trusted_connection == "yes") {
     args <- c(args, "-T")
@@ -144,7 +148,8 @@ S7::method(load_data_infile, db_mssql) <- function(
     tool = "bcp format",
     table = table,
     secrets = dbconfig$password,
-    error_pattern = bcp_error_pattern
+    error_pattern = bcp_error_pattern,
+    timeout = load_timeout
   )
 
   if (FALSE) {
@@ -178,6 +183,8 @@ S7::method(load_data_infile, db_mssql) <- function(
     dbconfig$user,
     "-P",
     dbconfig$password,
+    "-l",
+    "30",
     "-f",
     format_file,
     "-m",
@@ -199,7 +206,8 @@ S7::method(load_data_infile, db_mssql) <- function(
     secrets = dbconfig$password,
     rows_sent = nrow(dt),
     rows_pattern = "^\\s*([0-9]+) rows copied\\.?\\s*$",
-    error_pattern = bcp_error_pattern
+    error_pattern = bcp_error_pattern,
+    timeout = load_timeout
   )
 
   b <- Sys.time()
@@ -214,7 +222,8 @@ S7::method(load_data_infile, db_postgres) <- function(
   table,
   dt,
   file = tempfile(),
-  force_tablock = FALSE
+  force_tablock = FALSE,
+  load_timeout = 3600
 ) {
   if (is.null(dt)) {
     return()
@@ -252,8 +261,9 @@ S7::method(load_data_infile, db_postgres) <- function(
     file
   )
 
+  # psql stops when it cannot connect within 30 s.
   uri <- sprintf(
-    "postgresql://%s:%s@%s:%s/%s",
+    "postgresql://%s:%s@%s:%s/%s?connect_timeout=30",
     dbconfig$user,
     dbconfig$password,
     dbconfig$server,
@@ -286,7 +296,8 @@ S7::method(load_data_infile, db_postgres) <- function(
     table = as.character(table_text),
     secrets = dbconfig$password,
     rows_sent = nrow(dt),
-    rows_pattern = "^COPY ([0-9]+)\\s*$"
+    rows_pattern = "^COPY ([0-9]+)\\s*$",
+    timeout = load_timeout
   )
 
   b <- Sys.time()
@@ -316,7 +327,8 @@ S7::method(load_data_infile, db_sqlite) <- function(
   table,
   dt = NULL,
   file = tempfile(),
-  force_tablock = FALSE
+  force_tablock = FALSE,
+  load_timeout = 3600
 ) {
   if (is.null(dt)) {
     return()
@@ -350,7 +362,8 @@ S7::method(upsert_load_data_infile, db_default) <- function(
   file = "/tmp/x123.csv",
   fields,
   keys = NULL,
-  drop_indexes = NULL
+  drop_indexes = NULL,
+  load_timeout = 3600
 ) {
   temp_name <- random_uuid()
   on.exit(DBI::dbRemoveTable(connection, temp_name), add = TRUE, after = FALSE)
@@ -383,7 +396,8 @@ S7::method(upsert_load_data_infile, db_default) <- function(
     dbconfig = dbconfig,
     table = temp_name,
     dt = dt,
-    file = file
+    file = file,
+    load_timeout = load_timeout
   )
 
   t0 <- Sys.time()
@@ -414,7 +428,8 @@ S7::method(upsert_load_data_infile, db_mssql) <- function(
   file = tempfile(),
   fields,
   keys,
-  drop_indexes = NULL
+  drop_indexes = NULL,
+  load_timeout = 3600
 ) {
   temp_name <- paste0("tmp", random_uuid())
   on.exit(DBI::dbRemoveTable(connection, temp_name), add = TRUE, after = FALSE)
@@ -428,7 +443,8 @@ S7::method(upsert_load_data_infile, db_mssql) <- function(
     table = temp_name,
     dt = dt,
     file = file,
-    force_tablock = TRUE
+    force_tablock = TRUE,
+    load_timeout = load_timeout
   )
 
   a <- Sys.time()
@@ -489,7 +505,8 @@ S7::method(upsert_load_data_infile, db_postgres) <- function(
   file = tempfile(),
   fields,
   keys,
-  drop_indexes = NULL
+  drop_indexes = NULL,
+  load_timeout = 3600
 ) {
   temp_name <- DBI::Id(
     schema = table@name[["schema"]],
@@ -511,7 +528,8 @@ S7::method(upsert_load_data_infile, db_postgres) <- function(
     table = temp_name,
     dt = dt,
     file = file,
-    force_tablock = TRUE
+    force_tablock = TRUE,
+    load_timeout = load_timeout
   )
 
   a <- Sys.time()
@@ -608,7 +626,8 @@ S7::method(upsert_load_data_infile, db_sqlite) <- function(
   file = tempfile(),
   fields,
   keys = NULL,
-  drop_indexes = NULL
+  drop_indexes = NULL,
+  load_timeout = 3600
 ) {
   if (length(keys) == 0) {
     stop(
@@ -668,7 +687,8 @@ S7::method(upsert_load_data_infile, db_sqlite) <- function(
     dbconfig = dbconfig,
     table = temp_name,
     dt = dt,
-    file = file
+    file = file,
+    load_timeout = load_timeout
   )
 
   fields_text <- paste0(
@@ -805,15 +825,24 @@ mssql_duplicate_native <- c("2627", "2601")
 # server. psql writes its errors to stderr and bcp writes them to stdout, so
 # both streams are captured.
 #
+# `timeout` is in seconds, and 0 means no limit. system2() kills a client
+# that runs longer and returns the status 124.
+#
 # suppressWarnings() is load-bearing. system2() warns on a non-zero status,
 # and that warning holds the whole command line, password included. The
 # tryCatch() is there for the same reason: on Windows a client that cannot
 # start raises an error that also holds the command line.
 # run_checked_load() redacts the output.
-run_load_tool <- function(command, args) {
+run_load_tool <- function(command, args, timeout = 0) {
   output <- tryCatch(
     suppressWarnings(
-      system2(command, args = args, stdout = TRUE, stderr = TRUE)
+      system2(
+        command,
+        args = args,
+        stdout = TRUE,
+        stderr = TRUE,
+        timeout = timeout
+      )
     ),
     error = function(e) {
       return(structure(conditionMessage(e), status = 127L))
@@ -984,29 +1013,38 @@ run_checked_load <- function(
   secrets = NULL,
   rows_sent = NULL,
   rows_pattern = NULL,
-  error_pattern = NULL
+  error_pattern = NULL,
+  timeout = 0
 ) {
   max_attempts <- length(load_retry_waits) + 1L
   attempt <- 0L
   repeat {
     attempt <- attempt + 1L
-    result <- run_load_tool(command, args)
-    # Parse the raw output. A password can be any text, such as "2" or
-    # "Error", so redacting first could hide a row count or an error line.
-    reason <- load_failure_reason(
-      result,
-      result$output,
-      rows_sent = rows_sent,
-      rows_pattern = rows_pattern,
-      error_pattern = error_pattern
-    )
-    if (is.null(reason)) {
-      break
-    }
-    failure_class <- if (reason$classify) {
-      classify_load_failure(command, result$output)
+    result <- run_load_tool(command, args, timeout = timeout)
+    timed_out <- timeout > 0 && result$status == 124L
+    if (timed_out) {
+      # Check the timeout before the output. A killed client may have printed
+      # "Starting copy..." or nothing, and either would give a wrong class.
+      reason <- list(text = paste0("timed out after ", timeout, " s"))
+      failure_class <- "ambiguous"
     } else {
-      "other"
+      # Parse the raw output. A password can be any text, such as "2" or
+      # "Error", so redacting first could hide a row count or an error line.
+      reason <- load_failure_reason(
+        result,
+        result$output,
+        rows_sent = rows_sent,
+        rows_pattern = rows_pattern,
+        error_pattern = error_pattern
+      )
+      if (is.null(reason)) {
+        break
+      }
+      failure_class <- if (reason$classify) {
+        classify_load_failure(command, result$output)
+      } else {
+        "other"
+      }
     }
     output <- redact_load_output(result$output, secrets)
     printed <- paste0(output[nzchar(trimws(output))], collapse = "\n")
@@ -1046,7 +1084,16 @@ run_checked_load <- function(
           attempt,
           if (attempt == 1L) " attempt" else " attempts",
           ".",
-          if (failure_class == "ambiguous") {
+          if (timed_out) {
+            paste0(
+              " csdb killed the client, so the server may or may not have",
+              " committed the rows to table ",
+              table,
+              ". Count the rows in table ",
+              table,
+              " before you load these rows again."
+            )
+          } else if (failure_class == "ambiguous") {
             paste0(
               " The connection broke after the load started, so the server",
               " may or may not have committed the rows to table ",
