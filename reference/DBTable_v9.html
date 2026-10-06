@@ -11,7 +11,7 @@ combines database connectivity with data validation and bulk operations."><meta 
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.5</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.6</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -124,6 +124,26 @@ unquoted, and it finds the constraint both ways.</p>
 <code>PK_</code> plus the table name with every <code>.</code>, <code>[</code> and <code>]</code>
 deleted. PostgreSQL stores that name in lower case. csdb does not rename
 it.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="indexes-on-a-table-that-exists">Indexes on a table that exists<a class="anchor" aria-label="anchor" href="#indexes-on-a-table-that-exists"></a></h2>
+
+
+<p>An existing table gets its missing declared indexes on first use. The first
+call that reaches the table looks for the physical name of each declared
+index on that table. It creates each index that is absent, and nothing
+else. Later calls on the same object do no index work, and a direct call
+to <code>create_table()</code> is one of them. After <code>remove_table()</code> or
+<code>keep_rows_where()</code>, the next <code>create_table()</code> call checks again.
+Each new R process, and each new object, checks again.</p>
+<p>A failed create gives a warning that names the table and the index. The
+call then continues with its read or write.</p>
+<p>An index under an old name stays. A table that a release before 2026.10.4
+indexed as <code>ind1</code> then holds both <code>ind1</code> and the new physical
+name. csdb does not drop the old index.</p>
+<p>The check reads <code>pg_indexes</code> on PostgreSQL and <code>sqlite_master</code> on
+SQLite. On SQL Server one statement reads <code>sys.indexes</code> and creates
+the index when it is absent. On any other backend csdb checks nothing.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
@@ -339,7 +359,10 @@ whose rows you need, unless <code>field_types</code> matches the table.</p>
 <p>You rarely call this yourself. <code>connect()</code>, <code>tbl()</code> and 12
 other public methods call it once per object, through the private
 method <code>lazy_creation_of_table()</code>. 14 of the 22 public methods
-therefore can drop the table.</p><div class="section">
+therefore can drop the table.</p>
+<p>When the table exists and its fields match, this creates each declared
+index that is missing. See the section "Indexes on a table that
+exists".</p><div class="section">
 <h4 id="usage-5">Usage<a class="anchor" aria-label="anchor" href="#usage-5"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">create_table</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
@@ -695,7 +718,9 @@ change of columns.</p><div class="section">
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="va">my_table</span><span class="op">$</span><span class="fu">create_table</span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Creating table my_data_table</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Added missing index ind1 to table my_data_table</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Adding index ind1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> NULL</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># insert_data() and upsert_data() need a data.table.</span></span></span>
 <span class="r-in"><span><span class="va">my_table</span><span class="op">$</span><span class="fu">insert_data</span><span class="op">(</span><span class="fu">data.table</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/data.table/man/data.table.html" class="external-link">data.table</a></span><span class="op">(</span></span></span>

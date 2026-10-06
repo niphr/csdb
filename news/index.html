@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.5</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.6</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -50,6 +50,15 @@
       <small>Source: <a href="https://github.com/niphr/csdb/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="2026.10.6" id="version-2026106">Version 2026.10.6<a class="anchor" aria-label="anchor" href="#version-2026106"></a></h2>
+<div class="section level3">
+<h3 id="bug-fixes-2026-10-6">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-2026-10-6"></a></h3>
+<ul><li>
+<code>DBTable_v9</code> creates each declared index that is missing on an existing table, once per object, on the first call that reaches the table. Until now only a table that csdb created got its indexes.</li>
+<li>A failed create on that path gives a warning that names the table and the index, and the call continues. An index under an old name, such as a bare <code>ind1</code>, stays beside the new one.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="2026.10.5" id="version-2026105">Version 2026.10.5<a class="anchor" aria-label="anchor" href="#version-2026105"></a></h2>
 <div class="section level3">
