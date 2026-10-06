@@ -49,11 +49,13 @@ rule.
 
 - The primary key constraint:
 
-  Named `PK_` plus the fully specified table name, with every `.`, `[`
-  and `]` deleted. Schema `anon` with table `anon_data` therefore gives
-  `PK_anonanon_data`. Two different tables can reach one name, because
-  the rule deletes the separator. Schema `a` with table `bc` and schema
-  `ab` with table `c` both give `PK_abc`.
+  Named `pk_<slug>_<16 hexadecimal characters>`, at most 63 characters.
+  The rule is the index rule below, with the prefix `pk_` and the
+  logical name `pk`. The table identity is the table name on SQL Server,
+  and `schema.table` on PostgreSQL. Two different tables get two names.
+  Schema `a` with table `bc` and schema `ab` with table `c` therefore no
+  longer share a name. `csdb:::pk_physical_name()` returns the name for
+  one table. SQLite gives the key no name.
 
 - One index per entry in `indexes`:
 
@@ -64,21 +66,17 @@ rule.
   declare `ind1` get two indexes. `csdb:::index_physical_name()` returns
   the name for one table and one logical name.
 
-## The case of a constraint name on PostgreSQL
+## The case of a constraint name
 
-The source writes `PK_`, in upper case. PostgreSQL folds an unquoted
-identifier to lower case, so the catalogue stores `pk_`. Measured on the
-`norsyss_data1` database on 2026-08-15: 92 lower case `pk_` constraint
-names, and 0 upper case.
+Every constraint name and every index name is lower case. PostgreSQL
+folds an unquoted identifier to lower case, and SQLite and SQL Server do
+not. A lower case name therefore reads the same in the source and in
+every catalogue. A `DROP CONSTRAINT` can quote the name or leave it
+unquoted, and it finds the constraint both ways.
 
-A `DROP CONSTRAINT` that quotes the source spelling therefore fails on
-PostgreSQL. Write the name unquoted, or write it in lower case.
-
-SQLite does not fold at all. It keeps `PK_MixedCase` exactly as the
-source writes it, so the two backends disagree on one identifier.
-
-The physical index name has no such trap. It is lower case already, so
-it reads the same in the source and in both catalogues.
+A table that an earlier csdb release created keeps its old constraint
+name, `PK_` plus the table name with every `.`, `[` and `]` deleted.
+PostgreSQL stores that name in lower case. csdb does not rename it.
 
 ## See also
 
@@ -190,6 +188,8 @@ Other database classes:
 - [`DBTable_v9$upsert_data()`](#method-DBTable_v9-upsert_data)
 
 - [`DBTable_v9$drop_all_rows()`](#method-DBTable_v9-drop_all_rows)
+
+- [`DBTable_v9$replace_all_rows()`](#method-DBTable_v9-replace_all_rows)
 
 - [`DBTable_v9$drop_rows_where()`](#method-DBTable_v9-drop_rows_where)
 
@@ -336,7 +336,18 @@ Does the table exist?
 
 ### `DBTable_v9$create_table()`
 
-Create the database table.
+Create the database table. When the table exists and its fields differ
+from `field_types`, this drops the table with all its rows and creates
+it again.
+
+The fields differ when the names or their order differ, as
+`check_fields_match()` compares them. Do not call this on a table whose
+rows you need, unless `field_types` matches the table.
+
+You rarely call this yourself. `connect()`, `tbl()` and 12 other public
+methods call it once per object, through the private method
+`lazy_creation_of_table()`. 14 of the 22 public methods therefore can
+drop the table.
 
 #### Usage
 
@@ -363,7 +374,8 @@ Inserts data into the database table.
     DBTable_v9$insert_data(
       newdata,
       confirm_insert_via_nrow = FALSE,
-      verbose = TRUE
+      verbose = TRUE,
+      load_timeout = 3600
     )
 
 #### Arguments
@@ -374,12 +386,22 @@ Inserts data into the database table.
 
 - `confirm_insert_via_nrow`:
 
-  Checks nrow() before the insert and after the insert. If nrow() did
-  not increase enough, the method attempts an upsert.
+  If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key
+  is upserted once instead. Otherwise the method counts the rows after
+  the insert, and upserts when the table holds fewer rows than
+  `newdata`. It stops when the table still holds fewer rows than
+  `newdata` after the upsert.
 
 - `verbose`:
 
   Boolean.
+
+- `load_timeout`:
+
+  The longest time in seconds that one psql or bcp call MAY run. csdb
+  then kills the client and stops with an error of class
+  `csdb_load_ambiguous`, and it does not retry the load. The default of
+  3600 s is the 60 minutes after which Airflow kills a norsyss task.
 
 ------------------------------------------------------------------------
 
@@ -392,7 +414,8 @@ Upserts data into the database table.
     DBTable_v9$upsert_data(
       newdata,
       drop_indexes = names(self$indexes),
-      verbose = TRUE
+      verbose = TRUE,
+      load_timeout = 3600
     )
 
 #### Arguments
@@ -410,6 +433,13 @@ Upserts data into the database table.
 
   Boolean.
 
+- `load_timeout`:
+
+  The longest time in seconds that one psql or bcp call MAY run. csdb
+  then kills the client and stops with an error of class
+  `csdb_load_ambiguous`, and it does not retry the load. The default of
+  3600 s is the 60 minutes after which Airflow kills a norsyss task.
+
 ------------------------------------------------------------------------
 
 ### `DBTable_v9$drop_all_rows()`
@@ -419,6 +449,33 @@ Drops all rows in the database table.
 #### Usage
 
     DBTable_v9$drop_all_rows()
+
+------------------------------------------------------------------------
+
+### `DBTable_v9$replace_all_rows()`
+
+Replaces every row of the database table with `newdata`, in one
+transaction. When a statement fails, the table keeps its old rows.
+
+The rows go through DBI, not through bcp or psql. Use this method for
+small tables.
+
+The method stops before any statement unless `newdata` has each name in
+`names(field_types)` once, and no other column.
+
+A change of `field_types` still drops and creates the table again first,
+through `create_table()`. The first call after a schema change can
+therefore start from an empty table.
+
+#### Usage
+
+    DBTable_v9$replace_all_rows(newdata)
+
+#### Arguments
+
+- `newdata`:
+
+  The data that replaces the rows.
 
 ------------------------------------------------------------------------
 
@@ -463,7 +520,8 @@ Drops all rows in the database table and then upserts data.
     DBTable_v9$drop_all_rows_and_then_upsert_data(
       newdata,
       drop_indexes = names(self$indexes),
-      verbose = TRUE
+      verbose = TRUE,
+      load_timeout = 3600
     )
 
 #### Arguments
@@ -481,6 +539,13 @@ Drops all rows in the database table and then upserts data.
 
   Boolean.
 
+- `load_timeout`:
+
+  The longest time in seconds that one psql or bcp call MAY run. csdb
+  then kills the client and stops with an error of class
+  `csdb_load_ambiguous`, and it does not retry the load. The default of
+  3600 s is the 60 minutes after which Airflow kills a norsyss task.
+
 ------------------------------------------------------------------------
 
 ### `DBTable_v9$drop_all_rows_and_then_insert_data()`
@@ -492,7 +557,8 @@ Drops all rows in the database table and then inserts data.
     DBTable_v9$drop_all_rows_and_then_insert_data(
       newdata,
       confirm_insert_via_nrow = FALSE,
-      verbose = TRUE
+      verbose = TRUE,
+      load_timeout = 3600
     )
 
 #### Arguments
@@ -503,12 +569,22 @@ Drops all rows in the database table and then inserts data.
 
 - `confirm_insert_via_nrow`:
 
-  Checks nrow() before the insert and after the insert. If nrow() did
-  not increase enough, the method attempts an upsert.
+  If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key
+  is upserted once instead. Otherwise the method counts the rows after
+  the insert, and upserts when the table holds fewer rows than
+  `newdata`. It stops when the table still holds fewer rows than
+  `newdata` after the upsert.
 
 - `verbose`:
 
   Boolean.
+
+- `load_timeout`:
+
+  The longest time in seconds that one psql or bcp call MAY run. csdb
+  then kills the client and stops with an error of class
+  `csdb_load_ambiguous`, and it does not retry the load. The default of
+  3600 s is the 60 minutes after which Airflow kills a norsyss task.
 
 ------------------------------------------------------------------------
 

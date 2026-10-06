@@ -11,7 +11,7 @@ combines database connectivity with data validation and bulk operations."><meta 
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.21</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.5</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -90,13 +90,15 @@ contents, which ensure data integrity and schema compliance.</p>
     <code>dbconfig</code> names.</p></dd>
 
   <dt>The primary key constraint</dt>
-<dd><p>Named <code>PK_</code> plus the fully
-    specified table name, with every <code>.</code>, <code>[</code> and <code>]</code>
-    deleted. Schema <code>anon</code> with table <code>anon_data</code> therefore gives
-    <code>PK_anonanon_data</code>. Two different tables can reach one name,
-    because the rule deletes the separator. Schema <code>a</code> with table
-    <code>bc</code> and schema <code>ab</code> with table <code>c</code> both give
-    <code>PK_abc</code>.</p></dd>
+<dd><p>Named
+    <code>pk_&lt;slug&gt;_&lt;16 hexadecimal characters&gt;</code>, at most 63 characters.
+    The rule is the index rule below, with the prefix <code>pk_</code> and the
+    logical name <code>pk</code>. The table identity is the table name on SQL
+    Server, and <code>schema.table</code> on PostgreSQL. Two different tables
+    get two names. Schema <code>a</code> with table <code>bc</code> and schema
+    <code>ab</code> with table <code>c</code> therefore no longer share a name.
+    <code>csdb:::pk_physical_name()</code> returns the name for one table. SQLite
+    gives the key no name.</p></dd>
 
   <dt>One index per entry in <code>indexes</code></dt>
 <dd><p>The names you write in
@@ -110,19 +112,18 @@ contents, which ensure data integrity and schema compliance.</p>
 
 </dl></div>
     <div class="section level2">
-    <h2 id="the-case-of-a-constraint-name-on-postgresql">The case of a constraint name on PostgreSQL<a class="anchor" aria-label="anchor" href="#the-case-of-a-constraint-name-on-postgresql"></a></h2>
+    <h2 id="the-case-of-a-constraint-name">The case of a constraint name<a class="anchor" aria-label="anchor" href="#the-case-of-a-constraint-name"></a></h2>
 
 
-<p>The source writes <code>PK_</code>, in upper case. PostgreSQL folds an unquoted
-identifier to lower case, so the catalogue stores <code>pk_</code>. Measured on
-the <code>norsyss_data1</code> database on 2026-08-15: 92 lower case <code>pk_</code>
-constraint names, and 0 upper case.</p>
-<p>A <code>DROP CONSTRAINT</code> that quotes the source spelling therefore fails on
-PostgreSQL. Write the name unquoted, or write it in lower case.</p>
-<p>SQLite does not fold at all. It keeps <code>PK_MixedCase</code> exactly as the
-source writes it, so the two backends disagree on one identifier.</p>
-<p>The physical index name has no such trap. It is lower case already, so it
-reads the same in the source and in both catalogues.</p>
+<p>Every constraint name and every index name is lower case. PostgreSQL folds
+an unquoted identifier to lower case, and SQLite and SQL Server do not.
+A lower case name therefore reads the same in the source and in every
+catalogue. A <code>DROP CONSTRAINT</code> can quote the name or leave it
+unquoted, and it finds the constraint both ways.</p>
+<p>A table that an earlier csdb release created keeps its old constraint name,
+<code>PK_</code> plus the table name with every <code>.</code>, <code>[</code> and <code>]</code>
+deleted. PostgreSQL stores that name in lower case. csdb does not rename
+it.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
@@ -215,6 +216,7 @@ reads the same in the source and in both catalogues.</p>
 <li><p><a href="#method-DBTable_v9-insert_data"><code>DBTable_v9$insert_data()</code></a></p></li>
 <li><p><a href="#method-DBTable_v9-upsert_data"><code>DBTable_v9$upsert_data()</code></a></p></li>
 <li><p><a href="#method-DBTable_v9-drop_all_rows"><code>DBTable_v9$drop_all_rows()</code></a></p></li>
+<li><p><a href="#method-DBTable_v9-replace_all_rows"><code>DBTable_v9$replace_all_rows()</code></a></p></li>
 <li><p><a href="#method-DBTable_v9-drop_rows_where"><code>DBTable_v9$drop_rows_where()</code></a></p></li>
 <li><p><a href="#method-DBTable_v9-keep_rows_where"><code>DBTable_v9$keep_rows_where()</code></a></p></li>
 <li><p><a href="#method-DBTable_v9-drop_all_rows_and_then_upsert_data"><code>DBTable_v9$drop_all_rows_and_then_upsert_data()</code></a></p></li>
@@ -328,7 +330,16 @@ connection.</p><div class="section">
 
 <p></p><hr><a id="method-DBTable_v9-create_table"></a><div class="section">
 <h3 id="dbtable-v-create-table-"><code>DBTable_v9$create_table()</code><a class="anchor" aria-label="anchor" href="#dbtable-v-create-table-"></a></h3>
-<p>Create the database table.</p><div class="section">
+<p>Create the database table. When the table exists and its fields differ
+from <code>field_types</code>, this drops the table with all its rows and
+creates it again.</p>
+<p>The fields differ when the names or their order differ, as
+<code>check_fields_match()</code> compares them. Do not call this on a table
+whose rows you need, unless <code>field_types</code> matches the table.</p>
+<p>You rarely call this yourself. <code>connect()</code>, <code>tbl()</code> and 12
+other public methods call it once per object, through the private
+method <code>lazy_creation_of_table()</code>. 14 of the 22 public methods
+therefore can drop the table.</p><div class="section">
 <h4 id="usage-5">Usage<a class="anchor" aria-label="anchor" href="#usage-5"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">create_table</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
@@ -351,7 +362,8 @@ connection.</p><div class="section">
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">insert_data</span><span class="op">(</span></span>
 <span>  <span class="va">newdata</span>,</span>
 <span>  confirm_insert_via_nrow <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  load_timeout <span class="op">=</span> <span class="fl">3600</span></span>
 <span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
 <h4 id="arguments-2">Arguments<a class="anchor" aria-label="anchor" href="#arguments-2"></a></h4>
@@ -359,10 +371,13 @@ connection.</p><div class="section">
 <dd><p>The data to insert.</p></dd>
 
       <dt><code>confirm_insert_via_nrow</code></dt>
-<dd><p>Checks nrow() before the insert and after the insert. If nrow() did not increase enough, the method attempts an upsert.</p></dd>
+<dd><p>If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key is upserted once instead. Otherwise the method counts the rows after the insert, and upserts when the table holds fewer rows than <code>newdata</code>. It stops when the table still holds fewer rows than <code>newdata</code> after the upsert.</p></dd>
 
       <dt><code>verbose</code></dt>
 <dd><p>Boolean.</p></dd>
+
+      <dt><code>load_timeout</code></dt>
+<dd><p>The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class <code>csdb_load_ambiguous</code>, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.</p></dd>
 
 
 </dl><p></p></div>
@@ -377,7 +392,8 @@ connection.</p><div class="section">
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">upsert_data</span><span class="op">(</span></span>
 <span>  <span class="va">newdata</span>,</span>
 <span>  drop_indexes <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">self</span><span class="op">$</span><span class="va">indexes</span><span class="op">)</span>,</span>
-<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  load_timeout <span class="op">=</span> <span class="fl">3600</span></span>
 <span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
 <h4 id="arguments-3">Arguments<a class="anchor" aria-label="anchor" href="#arguments-3"></a></h4>
@@ -389,6 +405,9 @@ connection.</p><div class="section">
 
       <dt><code>verbose</code></dt>
 <dd><p>Boolean.</p></dd>
+
+      <dt><code>load_timeout</code></dt>
+<dd><p>The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class <code>csdb_load_ambiguous</code>, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.</p></dd>
 
 
 </dl><p></p></div>
@@ -405,13 +424,37 @@ connection.</p><div class="section">
 
 </div>
 
+<p></p><hr><a id="method-DBTable_v9-replace_all_rows"></a><div class="section">
+<h3 id="dbtable-v-replace-all-rows-"><code>DBTable_v9$replace_all_rows()</code><a class="anchor" aria-label="anchor" href="#dbtable-v-replace-all-rows-"></a></h3>
+<p>Replaces every row of the database table with <code>newdata</code>, in one
+transaction. When a statement fails, the table keeps its old rows.</p>
+<p>The rows go through DBI, not through bcp or psql. Use this method for
+small tables.</p>
+<p>The method stops before any statement unless <code>newdata</code> has each
+name in <code>names(field_types)</code> once, and no other column.</p>
+<p>A change of <code>field_types</code> still drops and creates the table again
+first, through <code>create_table()</code>. The first call after a schema
+change can therefore start from an empty table.</p><div class="section">
+<h4 id="usage-10">Usage<a class="anchor" aria-label="anchor" href="#usage-10"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">replace_all_rows</span><span class="op">(</span><span class="va">newdata</span><span class="op">)</span></span></code></pre></div><p></p></div>
+</div><p></p><div class="section">
+<h4 id="arguments-4">Arguments<a class="anchor" aria-label="anchor" href="#arguments-4"></a></h4>
+<p></p><div class="arguments"><dl><dt><code>newdata</code></dt>
+<dd><p>The data that replaces the rows.</p></dd>
+
+
+</dl><p></p></div>
+</div>
+
+</div>
+
 <p></p><hr><a id="method-DBTable_v9-drop_rows_where"></a><div class="section">
 <h3 id="dbtable-v-drop-rows-where-"><code>DBTable_v9$drop_rows_where()</code><a class="anchor" aria-label="anchor" href="#dbtable-v-drop-rows-where-"></a></h3>
 <p>Drops rows in the database table according to the SQL condition.</p><div class="section">
-<h4 id="usage-10">Usage<a class="anchor" aria-label="anchor" href="#usage-10"></a></h4>
+<h4 id="usage-11">Usage<a class="anchor" aria-label="anchor" href="#usage-11"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">drop_rows_where</span><span class="op">(</span><span class="va">condition</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
-<h4 id="arguments-4">Arguments<a class="anchor" aria-label="anchor" href="#arguments-4"></a></h4>
+<h4 id="arguments-5">Arguments<a class="anchor" aria-label="anchor" href="#arguments-5"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>condition</code></dt>
 <dd><p>SQL text condition.</p></dd>
 
@@ -424,10 +467,10 @@ connection.</p><div class="section">
 <p></p><hr><a id="method-DBTable_v9-keep_rows_where"></a><div class="section">
 <h3 id="dbtable-v-keep-rows-where-"><code>DBTable_v9$keep_rows_where()</code><a class="anchor" aria-label="anchor" href="#dbtable-v-keep-rows-where-"></a></h3>
 <p>Keeps rows in the database table according to the SQL condition.</p><div class="section">
-<h4 id="usage-11">Usage<a class="anchor" aria-label="anchor" href="#usage-11"></a></h4>
+<h4 id="usage-12">Usage<a class="anchor" aria-label="anchor" href="#usage-12"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">keep_rows_where</span><span class="op">(</span><span class="va">condition</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
-<h4 id="arguments-5">Arguments<a class="anchor" aria-label="anchor" href="#arguments-5"></a></h4>
+<h4 id="arguments-6">Arguments<a class="anchor" aria-label="anchor" href="#arguments-6"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>condition</code></dt>
 <dd><p>SQL text condition.</p></dd>
 
@@ -440,14 +483,15 @@ connection.</p><div class="section">
 <p></p><hr><a id="method-DBTable_v9-drop_all_rows_and_then_upsert_data"></a><div class="section">
 <h3 id="dbtable-v-drop-all-rows-and-then-upsert-data-"><code>DBTable_v9$drop_all_rows_and_then_upsert_data()</code><a class="anchor" aria-label="anchor" href="#dbtable-v-drop-all-rows-and-then-upsert-data-"></a></h3>
 <p>Drops all rows in the database table and then upserts data.</p><div class="section">
-<h4 id="usage-12">Usage<a class="anchor" aria-label="anchor" href="#usage-12"></a></h4>
+<h4 id="usage-13">Usage<a class="anchor" aria-label="anchor" href="#usage-13"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">drop_all_rows_and_then_upsert_data</span><span class="op">(</span></span>
 <span>  <span class="va">newdata</span>,</span>
 <span>  drop_indexes <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">self</span><span class="op">$</span><span class="va">indexes</span><span class="op">)</span>,</span>
-<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  load_timeout <span class="op">=</span> <span class="fl">3600</span></span>
 <span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
-<h4 id="arguments-6">Arguments<a class="anchor" aria-label="anchor" href="#arguments-6"></a></h4>
+<h4 id="arguments-7">Arguments<a class="anchor" aria-label="anchor" href="#arguments-7"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>newdata</code></dt>
 <dd><p>The data to insert.</p></dd>
 
@@ -456,6 +500,9 @@ connection.</p><div class="section">
 
       <dt><code>verbose</code></dt>
 <dd><p>Boolean.</p></dd>
+
+      <dt><code>load_timeout</code></dt>
+<dd><p>The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class <code>csdb_load_ambiguous</code>, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.</p></dd>
 
 
 </dl><p></p></div>
@@ -466,22 +513,26 @@ connection.</p><div class="section">
 <p></p><hr><a id="method-DBTable_v9-drop_all_rows_and_then_insert_data"></a><div class="section">
 <h3 id="dbtable-v-drop-all-rows-and-then-insert-data-"><code>DBTable_v9$drop_all_rows_and_then_insert_data()</code><a class="anchor" aria-label="anchor" href="#dbtable-v-drop-all-rows-and-then-insert-data-"></a></h3>
 <p>Drops all rows in the database table and then inserts data.</p><div class="section">
-<h4 id="usage-13">Usage<a class="anchor" aria-label="anchor" href="#usage-13"></a></h4>
+<h4 id="usage-14">Usage<a class="anchor" aria-label="anchor" href="#usage-14"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">drop_all_rows_and_then_insert_data</span><span class="op">(</span></span>
 <span>  <span class="va">newdata</span>,</span>
 <span>  confirm_insert_via_nrow <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  load_timeout <span class="op">=</span> <span class="fl">3600</span></span>
 <span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
-<h4 id="arguments-7">Arguments<a class="anchor" aria-label="anchor" href="#arguments-7"></a></h4>
+<h4 id="arguments-8">Arguments<a class="anchor" aria-label="anchor" href="#arguments-8"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>newdata</code></dt>
 <dd><p>The data to insert.</p></dd>
 
       <dt><code>confirm_insert_via_nrow</code></dt>
-<dd><p>Checks nrow() before the insert and after the insert. If nrow() did not increase enough, the method attempts an upsert.</p></dd>
+<dd><p>If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key is upserted once instead. Otherwise the method counts the rows after the insert, and upserts when the table holds fewer rows than <code>newdata</code>. It stops when the table still holds fewer rows than <code>newdata</code> after the upsert.</p></dd>
 
       <dt><code>verbose</code></dt>
 <dd><p>Boolean.</p></dd>
+
+      <dt><code>load_timeout</code></dt>
+<dd><p>The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class <code>csdb_load_ambiguous</code>, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.</p></dd>
 
 
 </dl><p></p></div>
@@ -492,7 +543,7 @@ connection.</p><div class="section">
 <p></p><hr><a id="method-DBTable_v9-tbl"></a><div class="section">
 <h3 id="dbtable-v-tbl-"><code>DBTable_v9$tbl()</code><a class="anchor" aria-label="anchor" href="#dbtable-v-tbl-"></a></h3>
 <p>Provides access to the database table via dplyr::tbl.</p><div class="section">
-<h4 id="usage-14">Usage<a class="anchor" aria-label="anchor" href="#usage-14"></a></h4>
+<h4 id="usage-15">Usage<a class="anchor" aria-label="anchor" href="#usage-15"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">tbl</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
@@ -501,7 +552,7 @@ connection.</p><div class="section">
 <p></p><hr><a id="method-DBTable_v9-print_dplyr_select"></a><div class="section">
 <h3 id="dbtable-v-print-dplyr-select-"><code>DBTable_v9$print_dplyr_select()</code><a class="anchor" aria-label="anchor" href="#dbtable-v-print-dplyr-select-"></a></h3>
 <p>Prints a template dplyr::select call that you can copy and paste for all your variables.</p><div class="section">
-<h4 id="usage-15">Usage<a class="anchor" aria-label="anchor" href="#usage-15"></a></h4>
+<h4 id="usage-16">Usage<a class="anchor" aria-label="anchor" href="#usage-16"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">print_dplyr_select</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
@@ -522,7 +573,7 @@ other than the declared ones.</p>
 <p>That check is defined for SQLite and for PostgreSQL, and for no other
 backend. On any other backend the method creates each index and does
 NOT verify it.</p><div class="section">
-<h4 id="usage-16">Usage<a class="anchor" aria-label="anchor" href="#usage-16"></a></h4>
+<h4 id="usage-17">Usage<a class="anchor" aria-label="anchor" href="#usage-17"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">add_indexes</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
@@ -534,7 +585,7 @@ NOT verify it.</p><div class="section">
 <p>The method drops the physical name that `add_indexes()` created, for
 every logical name in `self$indexes`. An index that a legacy release
 created under the logical name is not dropped here.</p><div class="section">
-<h4 id="usage-17">Usage<a class="anchor" aria-label="anchor" href="#usage-17"></a></h4>
+<h4 id="usage-18">Usage<a class="anchor" aria-label="anchor" href="#usage-18"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">drop_indexes</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
@@ -554,7 +605,7 @@ actions per declared index:</p>
 </ul><p>The method reads an index definition on SQLite and on PostgreSQL only.
 On any other backend it checks the name alone, so it cannot see a
 change of columns.</p><div class="section">
-<h4 id="usage-18">Usage<a class="anchor" aria-label="anchor" href="#usage-18"></a></h4>
+<h4 id="usage-19">Usage<a class="anchor" aria-label="anchor" href="#usage-19"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">confirm_indexes</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
@@ -563,10 +614,10 @@ change of columns.</p><div class="section">
 <p></p><hr><a id="method-DBTable_v9-nrow"></a><div class="section">
 <h3 id="dbtable-v-nrow-"><code>DBTable_v9$nrow()</code><a class="anchor" aria-label="anchor" href="#dbtable-v-nrow-"></a></h3>
 <p>Gets the number of rows in the database table.</p><div class="section">
-<h4 id="usage-19">Usage<a class="anchor" aria-label="anchor" href="#usage-19"></a></h4>
+<h4 id="usage-20">Usage<a class="anchor" aria-label="anchor" href="#usage-20"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">nrow</span><span class="op">(</span>use_count <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
-<h4 id="arguments-8">Arguments<a class="anchor" aria-label="anchor" href="#arguments-8"></a></h4>
+<h4 id="arguments-9">Arguments<a class="anchor" aria-label="anchor" href="#arguments-9"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>use_count</code></dt>
 <dd><p>If TRUE, then uses the count command, which is slow but accurate. If FALSE, then uses summary statistics, which is fast but inaccurate.</p></dd>
 
@@ -579,7 +630,7 @@ change of columns.</p><div class="section">
 <p></p><hr><a id="method-DBTable_v9-info"></a><div class="section">
 <h3 id="dbtable-v-info-"><code>DBTable_v9$info()</code><a class="anchor" aria-label="anchor" href="#dbtable-v-info-"></a></h3>
 <p>Gets the information about the database table.</p><div class="section">
-<h4 id="usage-20">Usage<a class="anchor" aria-label="anchor" href="#usage-20"></a></h4>
+<h4 id="usage-21">Usage<a class="anchor" aria-label="anchor" href="#usage-21"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">info</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
@@ -588,10 +639,10 @@ change of columns.</p><div class="section">
 <p></p><hr><a id="method-DBTable_v9-clone"></a><div class="section">
 <h3 id="dbtable-v-clone-"><code>DBTable_v9$clone()</code><a class="anchor" aria-label="anchor" href="#dbtable-v-clone-"></a></h3>
 <p>The objects of this class are cloneable with this method.</p><div class="section">
-<h4 id="usage-21">Usage<a class="anchor" aria-label="anchor" href="#usage-21"></a></h4>
+<h4 id="usage-22">Usage<a class="anchor" aria-label="anchor" href="#usage-22"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">clone</span><span class="op">(</span>deep <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
-<h4 id="arguments-9">Arguments<a class="anchor" aria-label="anchor" href="#arguments-9"></a></h4>
+<h4 id="arguments-10">Arguments<a class="anchor" aria-label="anchor" href="#arguments-10"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>deep</code></dt>
 <dd><p>Whether to make a deep clone.</p></dd>
 

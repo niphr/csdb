@@ -1,5 +1,188 @@
 # Changelog
 
+## Version 2026.10.5
+
+### New Features
+
+- The lint gate in `.github/workflows/check-and-pkgdown.yml` passes. Its
+  allowlist exempts every function in 3 files from `cyclocomp_linter`:
+  `R/r6_DBConnection_v9.R`, `R/r6_DBTable_v9.R` and `R/util_database.R`.
+  These hold the whole `DBConnection_v9` and `DBTable_v9` classes and
+  `get_db_classes()`.
+
+### Bug Fixes
+
+- csdb shell-quotes every argument that it gives `psql` or `bcp`. A
+  `\copy` command keeps its quoted identifiers, and a password with
+  shell metacharacters cannot break or inject a command.
+- The `psql` `\copy` command quotes the column names and the file path.
+- `psql` reads the password from `PGPASSWORD`, not from the connection
+  URI. csdb URL-encodes the user, the host and the database in the URI.
+- `bcp` receives each of `-a` and `-h` and its value as two separate
+  arguments.
+- `bcp` still receives the password with `-P`. Use
+  `trusted_connection = "yes"`, which gives `bcp` the `-T` flag, to keep
+  the password off the command line.
+- The message of a failed load drops the `bcp` progress lines and holds
+  at most 82 lines. It keeps the first 20 and the last 20 distinct
+  `Error =` and `SQLState =` lines. It also keeps the first 20 and the
+  last 20 other lines.
+- The message of an ambiguous load warns: a table without a primary key
+  can get duplicate rows if you run the load again by hand.
+- The PostgreSQL and default statements of `add_constraint()`,
+  `drop_constraint()`, `drop_rows_where()`, `keep_rows_where()`,
+  `drop_table()` and `drop_all_rows()` quote the table and constraint
+  names. The SQL Server statements are unchanged. Fixes
+  [\#5](https://github.com/niphr/csdb/issues/5).
+- PostgreSQL `keep_rows_where()` works again. In 2026.10.4 it stopped
+  with “argument is of length zero” on every table. It now runs the
+  copy, the drop and the rename in one transaction.
+- csdb puts the ODBC password in braces, so a password that holds `;`,
+  `{`, `}` or `=` connects. A user name that holds one of these
+  characters is still not supported, because psqlODBC keeps the braces
+  in the user name.
+- `utils` is in Imports, because csdb calls
+  [`utils::URLencode()`](https://rdrr.io/r/utils/URLencode.html) and
+  [`utils::packageDescription()`](https://rdrr.io/r/utils/packageDescription.html).
+- Still open: dotted text table identities, the primary key column list
+  in `add_constraint()`, and the old constraint names of existing
+  tables.
+
+## Version 2026.10.4
+
+### New Features
+
+- `DBTable_v9$replace_all_rows(newdata)` replaces every row in one
+  transaction, or leaves the table unchanged when a statement fails. The
+  rows go through DBI, so use it for small tables.
+
+### Bug Fixes
+
+- csdb now names a primary key constraint
+  `pk_<slug>_<16 hexadecimal characters>`, at most 63 characters, by the
+  rule that names an index. The old name was `PK_` plus the table name
+  with `.`, `[` and `]` deleted. It could give two tables one name, and
+  PostgreSQL truncated it past 63 characters. A table that an earlier
+  release created keeps its old name.
+- `insert_data()`, `upsert_data()` and the two
+  `drop_all_rows_and_then_*()` methods take `load_timeout`, in seconds.
+  csdb kills a `psql` or `bcp` call that runs longer, and stops with
+  class `csdb_load_ambiguous`.
+- The default is 3600 s, because Airflow kills a norsyss task after 60
+  minutes (`DEFAULT_TIMEOUT_MINUTES` in `Fhi.Norsyss/dags/norsyss.py`).
+- csdb does not retry the same load after a timeout. An Airflow retry
+  runs the whole task again. That is safe for a task that rebuilds its
+  output from the start.
+- `bcp` gets a login timeout of 30 s (`-l 30`), and `psql` gets
+  `connect_timeout=30`.
+- The file that csdb hands to `psql` or `bcp` never holds a number in
+  scientific notation. csdb wrote 100000 as `1e+05`, and PostgreSQL
+  refused it for an integer column.
+
+## Version 2026.10.3
+
+### Bug Fixes
+
+- Loads into PostgreSQL and SQL Server now stop on failure. csdb ignored
+  the exit status of `psql` and `bcp`, so a load that the server refused
+  lost its rows and raised no error. Fixes
+  [\#6](https://github.com/niphr/csdb/issues/6).
+
+- csdb sorts a failed load into one of four classes, from the output of
+  the client: transient, ambiguous, duplicate key, or other. It runs no
+  query to do this, and it reads the output before it replaces the
+  password.
+
+- A transient failure certainly stored nothing, so csdb runs the same
+  load again. That is at most 3 attempts, with a wait of 1 s and then 3
+  s.
+
+- An ambiguous failure broke the connection after the load started. The
+  server may or may not have committed the rows, so csdb stops at once.
+
+- The error then has class `csdb_load_ambiguous`, and it says to count
+  the rows in the table before the next load.
+
+- The phase decides the class. `psql` starts every error that it meets
+  while it connects with `psql: error:`. `bcp` prints `Starting copy...`
+  when it starts to send rows.
+
+  | Failure                                                                                            | Phase    | Class     |
+  |----------------------------------------------------------------------------------------------------|----------|-----------|
+  | Refused, timed-out or reset connection, DNS failure, too many clients, server starting or stopping | connect  | transient |
+  | `psql` SQLSTATE 40001, 40P01, 53300, 55P03 or 57P03                                                | transfer | transient |
+  | `psql` SQLSTATE 08xxx, 57P01 or 57P02, or a lost connection                                        | transfer | ambiguous |
+  | `bcp` SQLState 08xxx, HYT00, HYT01 or S1T00                                                        | connect  | transient |
+  | `bcp` SQLState 08xxx, HYT00, HYT01 or S1T00, or NativeError 596                                    | transfer | ambiguous |
+  | `bcp` SQLState 40001, or NativeError 1205 or 1222                                                  | any      | transient |
+
+- `psql` runs with `-v VERBOSITY=verbose`, so it prints the SQLSTATE. A
+  failed connection prints no SQLSTATE, so csdb reads the libpq text.
+  For too many clients that is “sorry, too many clients already” or
+  “remaining connection slots are reserved”.
+
+- A duplicate key stops at once. That is SQLSTATE 23505 for `psql` and
+  NativeError 2627 or 2601 for `bcp`. Every other failure also stops at
+  once.
+
+- The error has class `csdb_load_transient`, `csdb_load_ambiguous`,
+  `csdb_load_duplicate_key` or `csdb_load_other`, and also
+  `csdb_load_error`. It names the table, the client, the exit status,
+  the class and the number of attempts.
+
+- The error holds the output of the client, with the password replaced
+  by `***`.
+
+- `insert_data(confirm_insert_via_nrow = TRUE)` catches a duplicate key
+  and upserts the same rows once. It stops when the table then holds
+  fewer rows than the new data.
+
+- Each failed attempt and each upsert fallback emits a
+  [`message()`](https://rdrr.io/r/base/message.html). It names the
+  table, the client, the attempt and the class. A load that succeeds on
+  a later attempt emits one more
+  [`message()`](https://rdrr.io/r/base/message.html).
+
+- These are messages and not warnings. A warning becomes an error under
+  `options(warn = 2)`, and that would fail a load that succeeded.
+
+- A load also stops, as class other, when `psql` or `bcp` reports a row
+  count that differs from the rows csdb sent. It stops when `bcp` prints
+  an `Error =` line and exits with status 0.
+
+- The SQL Server loader no longer passes `nul` to `bcp format`. On Linux
+  `bcp` created a file `./nul`. Where R could not write the working
+  directory, every SQL Server load stored 0 rows and raised no error.
+
+### Development
+
+- `tests/testthat/test-load-tools.R` puts a fake `psql` and a fake `bcp`
+  first on `PATH`, and those tests skip on Windows.
+- A retry is safe because a failed load stores no row. Verified on
+  2026-10-03: 50,000 rows with a duplicate key at row 40,000 stored 0
+  rows on PostgreSQL 16 and on SQL Server 2022.
+- csdb passes no `-b` to `bcp`, so `bcp` sends every row in one batch. A
+  `-b` would commit each batch, and a retry could then store a row
+  twice.
+- Verified on 2026-10-03 for 3,000,000-row loads.
+  `pg_terminate_backend()` mid-COPY, a TCP cut mid-COPY and `KILL`
+  mid-`bcp` each stopped after 1 attempt as ambiguous. In all three runs
+  the table kept 0 of the rows.
+- `bcp` 17.11 did not always return after its connection broke. This
+  happened after a TCP cut, and after one of two `KILL` runs. `bcp`
+  printed nothing after `Starting copy...` and waited 9 to 11 minutes,
+  until it was stopped by hand. csdb sets no timeout on the client, so
+  such a load waits indefinitely.
+- `psql` and `bcp` print a row count with no digit grouping, such as
+  `COPY 1000000` and `1000000 rows copied.`, measured for 1,000,000
+  rows.
+- `bcp` waits for its login timeout of about 15 s on a refused
+  connection. Three failed attempts on SQL Server therefore took 49.4 s,
+  and 4.35 s on PostgreSQL.
+- A load that succeeds at once sends the same statements as before.
+  Measured on PostgreSQL 16: 4 statements for each `insert_data()`, with
+  identical texts.
+
 ## Version 2026.8.21
 
 - The package drops `magrittr`. Every `%>%` is now the base pipe `|>`,

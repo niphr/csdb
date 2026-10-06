@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.21</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.5</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -50,6 +50,115 @@
       <small>Source: <a href="https://github.com/niphr/csdb/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="2026.10.5" id="version-2026105">Version 2026.10.5<a class="anchor" aria-label="anchor" href="#version-2026105"></a></h2>
+<div class="section level3">
+<h3 id="new-features-2026-10-5">New Features<a class="anchor" aria-label="anchor" href="#new-features-2026-10-5"></a></h3>
+<ul><li>The lint gate in <code>.github/workflows/check-and-pkgdown.yml</code> passes. Its allowlist exempts every function in 3 files from <code>cyclocomp_linter</code>: <code>R/r6_DBConnection_v9.R</code>, <code>R/r6_DBTable_v9.R</code> and <code>R/util_database.R</code>. These hold the whole <code>DBConnection_v9</code> and <code>DBTable_v9</code> classes and <code>get_db_classes()</code>.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="bug-fixes-2026-10-5">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-2026-10-5"></a></h3>
+<ul><li>csdb shell-quotes every argument that it gives <code>psql</code> or <code>bcp</code>. A <code>\copy</code> command keeps its quoted identifiers, and a password with shell metacharacters cannot break or inject a command.</li>
+<li>The <code>psql</code> <code>\copy</code> command quotes the column names and the file path.</li>
+<li>
+<code>psql</code> reads the password from <code>PGPASSWORD</code>, not from the connection URI. csdb URL-encodes the user, the host and the database in the URI.</li>
+<li>
+<code>bcp</code> receives each of <code>-a</code> and <code>-h</code> and its value as two separate arguments.</li>
+<li>
+<code>bcp</code> still receives the password with <code>-P</code>. Use <code>trusted_connection = "yes"</code>, which gives <code>bcp</code> the <code>-T</code> flag, to keep the password off the command line.</li>
+<li>The message of a failed load drops the <code>bcp</code> progress lines and holds at most 82 lines. It keeps the first 20 and the last 20 distinct <code>Error =</code> and <code>SQLState =</code> lines. It also keeps the first 20 and the last 20 other lines.</li>
+<li>The message of an ambiguous load warns: a table without a primary key can get duplicate rows if you run the load again by hand.</li>
+<li>The PostgreSQL and default statements of <code>add_constraint()</code>, <code>drop_constraint()</code>, <code>drop_rows_where()</code>, <code>keep_rows_where()</code>, <code>drop_table()</code> and <code>drop_all_rows()</code> quote the table and constraint names. The SQL Server statements are unchanged. Fixes <a href="https://github.com/niphr/csdb/issues/5" class="external-link">#5</a>.</li>
+<li>PostgreSQL <code>keep_rows_where()</code> works again. In 2026.10.4 it stopped with “argument is of length zero” on every table. It now runs the copy, the drop and the rename in one transaction.</li>
+<li>csdb puts the ODBC password in braces, so a password that holds <code>;</code>, <code>{</code>, <code>}</code> or <code>=</code> connects. A user name that holds one of these characters is still not supported, because psqlODBC keeps the braces in the user name.</li>
+<li>
+<code>utils</code> is in Imports, because csdb calls <code><a href="https://rdrr.io/r/utils/URLencode.html" class="external-link">utils::URLencode()</a></code> and <code><a href="https://rdrr.io/r/utils/packageDescription.html" class="external-link">utils::packageDescription()</a></code>.</li>
+<li>Still open: dotted text table identities, the primary key column list in <code>add_constraint()</code>, and the old constraint names of existing tables.</li>
+</ul></div>
+</div>
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="2026.10.4" id="version-2026104">Version 2026.10.4<a class="anchor" aria-label="anchor" href="#version-2026104"></a></h2>
+<div class="section level3">
+<h3 id="new-features-2026-10-4">New Features<a class="anchor" aria-label="anchor" href="#new-features-2026-10-4"></a></h3>
+<ul><li>
+<code>DBTable_v9$replace_all_rows(newdata)</code> replaces every row in one transaction, or leaves the table unchanged when a statement fails. The rows go through DBI, so use it for small tables.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="bug-fixes-2026-10-4">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-2026-10-4"></a></h3>
+<ul><li>csdb now names a primary key constraint <code>pk_&lt;slug&gt;_&lt;16 hexadecimal   characters&gt;</code>, at most 63 characters, by the rule that names an index. The old name was <code>PK_</code> plus the table name with <code>.</code>, <code>[</code> and <code>]</code> deleted. It could give two tables one name, and PostgreSQL truncated it past 63 characters. A table that an earlier release created keeps its old name.</li>
+<li>
+<code>insert_data()</code>, <code>upsert_data()</code> and the two <code>drop_all_rows_and_then_*()</code> methods take <code>load_timeout</code>, in seconds. csdb kills a <code>psql</code> or <code>bcp</code> call that runs longer, and stops with class <code>csdb_load_ambiguous</code>.</li>
+<li>The default is 3600 s, because Airflow kills a norsyss task after 60 minutes (<code>DEFAULT_TIMEOUT_MINUTES</code> in <code>Fhi.Norsyss/dags/norsyss.py</code>).</li>
+<li>csdb does not retry the same load after a timeout. An Airflow retry runs the whole task again. That is safe for a task that rebuilds its output from the start.</li>
+<li>
+<code>bcp</code> gets a login timeout of 30 s (<code>-l 30</code>), and <code>psql</code> gets <code>connect_timeout=30</code>.</li>
+<li>The file that csdb hands to <code>psql</code> or <code>bcp</code> never holds a number in scientific notation. csdb wrote 100000 as <code>1e+05</code>, and PostgreSQL refused it for an integer column.</li>
+</ul></div>
+</div>
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="2026.10.3" id="version-2026103">Version 2026.10.3<a class="anchor" aria-label="anchor" href="#version-2026103"></a></h2>
+<div class="section level3">
+<h3 id="bug-fixes-2026-10-3">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-2026-10-3"></a></h3>
+<ul><li><p>Loads into PostgreSQL and SQL Server now stop on failure. csdb ignored the exit status of <code>psql</code> and <code>bcp</code>, so a load that the server refused lost its rows and raised no error. Fixes <a href="https://github.com/niphr/csdb/issues/6" class="external-link">#6</a>.</p></li>
+<li><p>csdb sorts a failed load into one of four classes, from the output of the client: transient, ambiguous, duplicate key, or other. It runs no query to do this, and it reads the output before it replaces the password.</p></li>
+<li><p>A transient failure certainly stored nothing, so csdb runs the same load again. That is at most 3 attempts, with a wait of 1 s and then 3 s.</p></li>
+<li><p>An ambiguous failure broke the connection after the load started. The server may or may not have committed the rows, so csdb stops at once.</p></li>
+<li><p>The error then has class <code>csdb_load_ambiguous</code>, and it says to count the rows in the table before the next load.</p></li>
+<li>
+<p>The phase decides the class. <code>psql</code> starts every error that it meets while it connects with <code>psql: error:</code>. <code>bcp</code> prints <code>Starting copy...</code> when it starts to send rows.</p>
+<table class="table"><colgroup><col width="33%"><col width="33%"><col width="33%"></colgroup><thead><tr class="header"><th>Failure</th>
+<th>Phase</th>
+<th>Class</th>
+</tr></thead><tbody><tr class="odd"><td>Refused, timed-out or reset connection, DNS failure, too many clients, server starting or stopping</td>
+<td>connect</td>
+<td>transient</td>
+</tr><tr class="even"><td>
+<code>psql</code> SQLSTATE 40001, 40P01, 53300, 55P03 or 57P03</td>
+<td>transfer</td>
+<td>transient</td>
+</tr><tr class="odd"><td>
+<code>psql</code> SQLSTATE 08xxx, 57P01 or 57P02, or a lost connection</td>
+<td>transfer</td>
+<td>ambiguous</td>
+</tr><tr class="even"><td>
+<code>bcp</code> SQLState 08xxx, HYT00, HYT01 or S1T00</td>
+<td>connect</td>
+<td>transient</td>
+</tr><tr class="odd"><td>
+<code>bcp</code> SQLState 08xxx, HYT00, HYT01 or S1T00, or NativeError 596</td>
+<td>transfer</td>
+<td>ambiguous</td>
+</tr><tr class="even"><td>
+<code>bcp</code> SQLState 40001, or NativeError 1205 or 1222</td>
+<td>any</td>
+<td>transient</td>
+</tr></tbody></table></li>
+<li><p><code>psql</code> runs with <code>-v VERBOSITY=verbose</code>, so it prints the SQLSTATE. A failed connection prints no SQLSTATE, so csdb reads the libpq text. For too many clients that is “sorry, too many clients already” or “remaining connection slots are reserved”.</p></li>
+<li><p>A duplicate key stops at once. That is SQLSTATE 23505 for <code>psql</code> and NativeError 2627 or 2601 for <code>bcp</code>. Every other failure also stops at once.</p></li>
+<li><p>The error has class <code>csdb_load_transient</code>, <code>csdb_load_ambiguous</code>, <code>csdb_load_duplicate_key</code> or <code>csdb_load_other</code>, and also <code>csdb_load_error</code>. It names the table, the client, the exit status, the class and the number of attempts.</p></li>
+<li><p>The error holds the output of the client, with the password replaced by <code>***</code>.</p></li>
+<li><p><code>insert_data(confirm_insert_via_nrow = TRUE)</code> catches a duplicate key and upserts the same rows once. It stops when the table then holds fewer rows than the new data.</p></li>
+<li><p>Each failed attempt and each upsert fallback emits a <code><a href="https://rdrr.io/r/base/message.html" class="external-link">message()</a></code>. It names the table, the client, the attempt and the class. A load that succeeds on a later attempt emits one more <code><a href="https://rdrr.io/r/base/message.html" class="external-link">message()</a></code>.</p></li>
+<li><p>These are messages and not warnings. A warning becomes an error under <code>options(warn = 2)</code>, and that would fail a load that succeeded.</p></li>
+<li><p>A load also stops, as class other, when <code>psql</code> or <code>bcp</code> reports a row count that differs from the rows csdb sent. It stops when <code>bcp</code> prints an <code>Error =</code> line and exits with status 0.</p></li>
+<li><p>The SQL Server loader no longer passes <code>nul</code> to <code>bcp format</code>. On Linux <code>bcp</code> created a file <code>./nul</code>. Where R could not write the working directory, every SQL Server load stored 0 rows and raised no error.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="development-2026-10-3">Development<a class="anchor" aria-label="anchor" href="#development-2026-10-3"></a></h3>
+<ul><li>
+<code>tests/testthat/test-load-tools.R</code> puts a fake <code>psql</code> and a fake <code>bcp</code> first on <code>PATH</code>, and those tests skip on Windows.</li>
+<li>A retry is safe because a failed load stores no row. Verified on 2026-10-03: 50,000 rows with a duplicate key at row 40,000 stored 0 rows on PostgreSQL 16 and on SQL Server 2022.</li>
+<li>csdb passes no <code>-b</code> to <code>bcp</code>, so <code>bcp</code> sends every row in one batch. A <code>-b</code> would commit each batch, and a retry could then store a row twice.</li>
+<li>Verified on 2026-10-03 for 3,000,000-row loads. <code>pg_terminate_backend()</code> mid-COPY, a TCP cut mid-COPY and <code>KILL</code> mid-<code>bcp</code> each stopped after 1 attempt as ambiguous. In all three runs the table kept 0 of the rows.</li>
+<li>
+<code>bcp</code> 17.11 did not always return after its connection broke. This happened after a TCP cut, and after one of two <code>KILL</code> runs. <code>bcp</code> printed nothing after <code>Starting copy...</code> and waited 9 to 11 minutes, until it was stopped by hand. csdb sets no timeout on the client, so such a load waits indefinitely.</li>
+<li>
+<code>psql</code> and <code>bcp</code> print a row count with no digit grouping, such as <code>COPY 1000000</code> and <code>1000000 rows copied.</code>, measured for 1,000,000 rows.</li>
+<li>
+<code>bcp</code> waits for its login timeout of about 15 s on a refused connection. Three failed attempts on SQL Server therefore took 49.4 s, and 4.35 s on PostgreSQL.</li>
+<li>A load that succeeds at once sends the same statements as before. Measured on PostgreSQL 16: 4 statements for each <code>insert_data()</code>, with identical texts.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="2026.8.21" id="version-2026821">Version 2026.8.21<a class="anchor" aria-label="anchor" href="#version-2026821"></a></h2>
 <ul><li>The package drops <code>magrittr</code>. Every <code>%&gt;%</code> is now the base pipe <code>|&gt;</code>, and <code>magrittr</code> is gone from <code>DESCRIPTION</code>.</li>

@@ -23,7 +23,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.8.21</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.5</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -227,6 +227,23 @@ staged to a CSV file and shelled out.</td>
 through <code><a href="https://dbi.r-dbi.org/reference/dbAppendTable.html" class="external-link">DBI::dbAppendTable()</a></code>.</td>
 </tr>
 <tr class="odd">
+<td>A failed bulk load</td>
+<td>csdb reads the SQLSTATE that <code>psql</code> prints. A failure
+that certainly stored nothing runs again, at most 3 attempts in total.
+That is a connection that never started, such as too many connections,
+or a deadlock, a serialization failure or a lock timeout. A connection
+that broke during <code>\copy</code> stops at once with class
+<code>csdb_load_ambiguous</code>, because the server may have committed
+the rows. A duplicate key stops with class
+<code>csdb_load_duplicate_key</code>, and
+<code>$insert_data(confirm_insert_via_nrow = TRUE)</code> then upserts
+the rows once.</td>
+<td>
+<code><a href="https://dbi.r-dbi.org/reference/dbAppendTable.html" class="external-link">DBI::dbAppendTable()</a></code> raises at once, with no class and
+no retry. <code>confirm_insert_via_nrow = TRUE</code> does not upsert
+after a duplicate key.</td>
+</tr>
+<tr class="even">
 <td><code>$keep_rows_where()</code></td>
 <td>Copies the surviving rows to a new table, drops the old one,
 renames.</td>
