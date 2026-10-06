@@ -12,6 +12,7 @@ dev
 ^\.claude$
 ^\.github$
 ^CLAUDE\.md$
+^AGENTS\.md$
 ^CRAN-SUBMISSION$
 ^index\.md$
 ^pkgdown$
