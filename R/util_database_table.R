@@ -23,10 +23,10 @@ S7::method(create_table, db_default) <- function(
     connection,
     table,
     fields_new,
-    row.names = F,
-    temporary = F
+    row.names = FALSE,
+    temporary = FALSE
   )
-  DBI::dbExecute(connection, sql)
+  return(DBI::dbExecute(connection, sql))
 }
 
 S7::method(create_table, db_mssql) <- function(
@@ -53,13 +53,13 @@ S7::method(create_table, db_mssql) <- function(
     connection,
     table,
     fields_new,
-    row.names = F,
-    temporary = F
+    row.names = FALSE,
+    temporary = FALSE
   ) |>
     stringr::str_replace("\\\\", "\\") |>
     stringr::str_replace("\"", "") |>
     stringr::str_replace("\"", "")
-  DBI::dbExecute(connection, sql)
+  return(DBI::dbExecute(connection, sql))
 }
 
 S7::method(create_table, db_postgres) <- function(
@@ -87,8 +87,8 @@ S7::method(create_table, db_postgres) <- function(
     connection,
     table,
     fields_new,
-    row.names = F,
-    temporary = F
+    row.names = FALSE,
+    temporary = FALSE
   ) |>
     stringr::str_replace("\\\\", "\\") |>
     stringr::str_replace("\"", "") |>
@@ -106,7 +106,7 @@ S7::method(create_table, db_postgres) <- function(
     }
   }
 
-  DBI::dbExecute(connection, sql)
+  return(DBI::dbExecute(connection, sql))
 }
 
 #' The csdb field types that SQLite accepts, and what each becomes
@@ -150,7 +150,8 @@ S7::method(create_table, db_sqlite) <- function(
       ),
       ". The supported types are: ",
       paste0(names(sqlite_field_types), collapse = ", "),
-      "."
+      ".",
+      call. = FALSE
     )
   }
 
@@ -190,11 +191,59 @@ S7::method(create_table, db_sqlite) <- function(
     paste0(definitions, collapse = ",\n  "),
     "\n)"
   )
-  DBI::dbExecute(connection, sql)
+  return(DBI::dbExecute(connection, sql))
+}
+
+# The SQL text of a table identity, with every component quoted.
+#
+# index_table_identity() splits the identity into its components. Each
+# component is quoted on its own, and the quoted components are joined with a
+# dot. Schema `s q` and table `t"x` therefore give `"s q"."t""x"` on
+# PostgreSQL. Pasted in raw, the space and the quote break the statement or
+# change what it does.
+#
+# The dotted text form cannot carry a dot inside a component. Only a DBI::Id
+# can.
+#
+# connection  The connection whose quoting rule applies.
+# table       The table identity: text, or a DBI::Id.
+# returns     One character string.
+quote_table_identity <- function(connection, table) {
+  return(paste0(
+    as.character(DBI::dbQuoteIdentifier(
+      connection,
+      index_table_identity(table)
+    )),
+    collapse = "."
+  ))
 }
 
 # add_constraint methods
+#
+# The db_default method quotes the table and the constraint name. SQL Server
+# has its own method below, which keeps the statement it always received.
 S7::method(add_constraint, db_default) <- function(connection, table, keys) {
+  t0 <- Sys.time()
+
+  primary_keys <- glue::glue_collapse(keys, sep = ", ")
+  table_quoted <- quote_table_identity(connection, table)
+  constraint <- as.character(
+    DBI::dbQuoteIdentifier(connection, pk_physical_name(table))
+  )
+  sql <- glue::glue(
+    "
+          ALTER table {table_quoted}
+          ADD CONSTRAINT {constraint} PRIMARY KEY CLUSTERED ({primary_keys});"
+  )
+  a <- DBI::dbExecute(connection, sql)
+  t1 <- Sys.time()
+  return(dif <- round(as.numeric(difftime(t1, t0, units = "secs")), 1))
+}
+
+# The SQL Server statement stays unquoted. DBTable_v9 documents the SQL Server
+# identity as `[db].[dbo].[table_name]`, with each component already in square
+# brackets. Quoting such a component again names a different object.
+S7::method(add_constraint, db_mssql) <- function(connection, table, keys) {
   t0 <- Sys.time()
 
   primary_keys <- glue::glue_collapse(keys, sep = ", ")
@@ -207,15 +256,19 @@ S7::method(add_constraint, db_default) <- function(connection, table, keys) {
   a <- DBI::dbExecute(connection, sql)
   t1 <- Sys.time()
   dif <- round(as.numeric(difftime(t1, t0, units = "secs")), 1)
+  return(invisible(dif))
 }
 
 S7::method(add_constraint, db_postgres) <- function(connection, table, keys) {
   t0 <- Sys.time()
 
   primary_keys <- glue::glue_collapse(keys, sep = ", ")
-  constraint <- pk_physical_name(table)
+  table_quoted <- quote_table_identity(connection, table)
+  constraint <- as.character(
+    DBI::dbQuoteIdentifier(connection, pk_physical_name(table))
+  )
   sql <- glue::glue(
-    "ALTER table {table}
+    "ALTER table {table_quoted}
     ADD CONSTRAINT {constraint}
     PRIMARY KEY ({primary_keys});"
   )
@@ -223,7 +276,7 @@ S7::method(add_constraint, db_postgres) <- function(connection, table, keys) {
   a <- DBI::dbExecute(connection, sql)
 
   t1 <- Sys.time()
-  dif <- round(as.numeric(difftime(t1, t0, units = "secs")), 1)
+  return(dif <- round(as.numeric(difftime(t1, t0, units = "secs")), 1))
 }
 
 # Add a primary key constraint to a SQLite table.
@@ -243,16 +296,33 @@ S7::method(add_constraint, db_postgres) <- function(connection, table, keys) {
 # roxygen2 cannot name an S7 method registered against an S4 class, and a
 # roxygen block here makes roxygenise() report "Unknown S7 class type".
 S7::method(add_constraint, db_sqlite) <- function(connection, table, keys) {
-  invisible(NULL)
+  return(invisible(NULL))
 }
 
 # drop_constraint methods
+#
+# PostgreSQL has no drop_constraint method of its own, so it reaches the
+# db_default method. SQL Server keeps its unquoted statement, for the reason
+# given at the db_mssql add_constraint method.
 S7::method(drop_constraint, db_default) <- function(connection, table) {
+  table_quoted <- quote_table_identity(connection, table)
+  constraint <- as.character(
+    DBI::dbQuoteIdentifier(connection, pk_physical_name(table))
+  )
+  sql <- glue::glue(
+    "
+          ALTER table {table_quoted}
+          DROP CONSTRAINT {constraint};"
+  )
+  return(try(a <- DBI::dbExecute(connection, sql), TRUE))
+}
+
+S7::method(drop_constraint, db_mssql) <- function(connection, table) {
   constraint <- pk_physical_name(table)
   sql <- glue::glue(
     "
           ALTER table {table}
           DROP CONSTRAINT {constraint};"
   )
-  try(a <- DBI::dbExecute(connection, sql), TRUE)
+  return(try(a <- DBI::dbExecute(connection, sql), TRUE))
 }

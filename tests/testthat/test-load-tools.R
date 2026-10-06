@@ -76,7 +76,7 @@ fake_tool_script <- c(
   "  mode=$(pick \"$FAKE_MODE\" \"$FAKE_LOG.psql.n\")",
   "  sql=''; prev=''",
   "  for a in \"$@\"; do if [ \"$prev\" = '-c' ]; then sql=$a; fi; prev=$a; done",
-  "  file=$(printf '%s' \"$sql\" | sed -n \"s/.* from '\\([^']*\\)'.*/\\1/p\")",
+  "  file=$(printf '%s' \"$sql\" | sed -n \"s/.* from '\\(.*\\)' (FORMAT .*/\\1/p\" | sed \"s/''/'/g\")",
   "  n=$(wc -l < \"$file\" | tr -d ' ')",
   "  verbose=no",
   "  for a in \"$@\"; do if [ \"$a\" = 'VERBOSITY=verbose' ]; then verbose=yes; fi; done",
@@ -124,7 +124,10 @@ fake_tool_script <- c(
   "    other) err 'ERROR:  22P02: invalid input syntax for type integer: \"x\"'; exit 1 ;;",
   "    short) echo \"COPY $((n - 1))\"; exit 0 ;;",
   "    silent) exit 0 ;;",
-  "    echo_secret) for a in \"$@\"; do echo \"psql: error: $a\" >&2; done; exit 2 ;;",
+  "    echo_secret)",
+  "      for a in \"$@\"; do echo \"psql: error: $a\" >&2; done",
+  "      echo \"psql: error: PGPASSWORD=$PGPASSWORD\" >&2",
+  "      exit 2 ;;",
   "  esac",
   "  exit 99",
   "fi",
@@ -223,6 +226,19 @@ fake_tool_script <- c(
   "  short) echo; echo 'Starting copy...'; echo; echo \"$((n - 1)) rows copied.\"; exit 0 ;;",
   "  silent) exit 0 ;;",
   "  echo_secret) for a in \"$@\"; do echo \"Error = $a\"; done; exit 1 ;;",
+  "  progress)",
+  "    echo; echo 'Starting copy...'",
+  "    i=1",
+  "    while [ $i -le 3000 ]; do",
+  "      echo \"1000 rows sent to SQL Server. Total sent: $((i * 1000))\"",
+  "      if [ $i -eq 1500 ]; then",
+  "        echo 'SQLState = 22001, NativeError = 0'",
+  "        echo 'Error = [Microsoft][ODBC Driver 17 for SQL Server]String data, right truncation'",
+  "      fi",
+  "      i=$((i + 1))",
+  "    done",
+  "    echo; echo 'BCP copy in failed'",
+  "    exit 1 ;;",
   "esac",
   "exit 99"
 )
@@ -328,32 +344,42 @@ capture_load_conditions <- function(expr) {
   ))
 }
 
-# RSQLite quotes an identifier with backticks, and system2() hands the psql
-# arguments to a shell, which would run them as a command substitution.
-# PostgreSQL quotes with double quotes, so the mock below does too.
-run_pg_load <- function(con, password = load_tools_secret) {
+# RSQLite quotes an identifier with backticks. PostgreSQL quotes with double
+# quotes, so the mock below does too. It quotes a DBI::Id as one name, and a
+# character vector one element at a time.
+pg_quote_identifier <- function(conn, x, ...) {
+  if (is.character(x)) {
+    return(DBI::SQL(paste0("\"", gsub("\"", "\"\"", x, fixed = TRUE), "\"")))
+  }
+  return(DBI::SQL(paste0("\"", x@name, "\"", collapse = ".")))
+}
+
+run_pg_load <- function(con, password = load_tools_secret, file = tempfile()) {
   return(with_mocked_bindings(
     pg_method()(
       connection = con,
       dbconfig = load_tools_dbconfig(password),
       table = DBI::Id(table = "tab"),
       dt = load_tools_dt(),
-      file = tempfile()
+      file = file
     ),
-    dbQuoteIdentifier = function(conn, x, ...) {
-      return(DBI::SQL(paste0("\"", x@name, "\"", collapse = ".")))
-    },
+    dbQuoteIdentifier = pg_quote_identifier,
     .package = "DBI"
   ))
 }
 
-run_ms_load <- function(con, password = load_tools_secret) {
+run_ms_load <- function(
+  con,
+  password = load_tools_secret,
+  dt = load_tools_dt(),
+  file = tempfile()
+) {
   return(ms_method()(
     connection = con,
     dbconfig = load_tools_dbconfig(password),
     table = "tab",
-    dt = load_tools_dt(),
-    file = tempfile()
+    dt = dt,
+    file = file
   ))
 }
 
@@ -595,11 +621,77 @@ test_that("psql: the password reaches neither the error nor a warning", {
   con <- load_tools_connection()
   got <- capture_load_conditions(run_pg_load(con))
   expect_false(is.na(got$message))
-  # The fake echoed the URI, so the message held the password before redaction.
-  expect_match(got$message, "postgresql://fakeuser:***@fakehost", fixed = TRUE)
+  # The fake echoed every argument and PGPASSWORD. The URI holds no
+  # password, and the value of PGPASSWORD is redacted.
+  expect_match(
+    got$message,
+    "postgresql://fakeuser@fakehost:5432/fakedb?connect_timeout=30",
+    fixed = TRUE
+  )
+  expect_match(got$message, "PGPASSWORD=***", fixed = TRUE)
   expect_false(grepl(load_tools_secret, got$message, fixed = TRUE))
   expect_false(any(grepl(load_tools_secret, got$warnings, fixed = TRUE)))
   expect_false(any(grepl(load_tools_secret, got$messages, fixed = TRUE)))
+})
+
+test_that("psql: the arguments hold the copy command as one element and no password", {
+  fake <- local_fake_tools("ok")
+  rec <- local_recorded_waits()
+  con <- load_tools_connection()
+  withr::local_envvar(PGPASSWORD = "outer-value")
+  file <- file.path(withr::local_tempdir(), "it's a file.tsv")
+  got <- capture_load_conditions(run_pg_load(con, file = file))
+  expect_null(got$error)
+  calls <- fake_calls_of(fake$log, "psql")
+  expect_length(calls, 1)
+  copy <- sprintf(
+    "\\copy \"tab\" (\"id\", \"x\") from '%s' (FORMAT CSV, DELIMITER '\t')",
+    gsub("'", "''", file, fixed = TRUE)
+  )
+  expect_identical(
+    calls[[1]],
+    c(
+      "psql",
+      "-v",
+      "VERBOSITY=verbose",
+      "-U",
+      "fakeuser",
+      "-c",
+      copy,
+      "postgresql://fakeuser@fakehost:5432/fakedb?connect_timeout=30"
+    )
+  )
+  expect_false(any(grepl(load_tools_secret, calls[[1]], fixed = TRUE)))
+  # The load set PGPASSWORD for psql only.
+  expect_identical(Sys.getenv("PGPASSWORD"), "outer-value")
+})
+
+test_that("psql: the user, the host and the database are URL-encoded", {
+  fake <- local_fake_tools("ok")
+  rec <- local_recorded_waits()
+  con <- load_tools_connection()
+  dbconfig <- load_tools_dbconfig()
+  dbconfig$user <- "u@x:y/z"
+  dbconfig$server <- "fake host"
+  dbconfig$db <- "db/1?x"
+  got <- capture_load_conditions(with_mocked_bindings(
+    pg_method()(
+      connection = con,
+      dbconfig = dbconfig,
+      table = DBI::Id(table = "tab"),
+      dt = load_tools_dt(),
+      file = tempfile()
+    ),
+    dbQuoteIdentifier = pg_quote_identifier,
+    .package = "DBI"
+  ))
+  expect_null(got$error)
+  call <- fake_calls_of(fake$log, "psql")[[1]]
+  expect_identical(
+    call[[length(call)]],
+    "postgresql://u%40x%3Ay%2Fz@fake%20host:5432/db%2F1%3Fx?connect_timeout=30"
+  )
+  expect_identical(call[[5]], "u@x:y/z")
 })
 
 test_that("psql: a COPY that stores every row returns without an error", {
@@ -743,6 +835,11 @@ test_that("bcp: a communication link failure after Starting copy is ambiguous", 
   )
   expect_match(got$message, "Communication link failure", fixed = TRUE)
   expect_match(
+    got$message,
+    "If table tab has no primary key and you run the load again by hand, the table can get duplicate rows.",
+    fixed = TRUE
+  )
+  expect_match(
     got$messages,
     "table tab with bcp in failed on attempt 1 of at most 3 (ambiguous)",
     fixed = TRUE,
@@ -878,6 +975,38 @@ test_that("bcp: the password reaches neither the error nor a warning", {
   expect_false(any(grepl(load_tools_secret, got$messages, fixed = TRUE)))
 })
 
+test_that("bcp: every option and its value arrive as separate arguments", {
+  fake <- local_fake_tools("ok")
+  rec <- local_recorded_waits()
+  con <- load_tools_connection()
+  dt <- load_tools_dt()
+  data.table::setkey(dt, id)
+  got <- capture_load_conditions(run_ms_load(con, dt = dt))
+  expect_null(got$error)
+  call <- fake_calls_of(fake$log, "in")[[1]]
+  expect_identical(call[match("-a", call) + 1L], "16384")
+  expect_identical(call[match("-h", call) + 1L], "ORDER(id ASC)")
+  expect_identical(call[match("-P", call) + 1L], load_tools_secret)
+})
+
+test_that("bcp: 3000 progress lines leave the message short, with the error line", {
+  fake <- local_fake_tools("progress")
+  rec <- local_recorded_waits()
+  con <- load_tools_connection()
+  got <- capture_load_conditions(run_ms_load(con))
+  expect_s3_class(got$error, "csdb_load_error")
+  lines <- strsplit(got$message, "\n", fixed = TRUE)[[1]]
+  expect_lte(length(lines), 60)
+  expect_true(any(grepl(
+    "^Error = .*String data, right truncation$",
+    lines
+  )))
+  expect_false(any(grepl("rows sent to SQL Server", lines, fixed = TRUE)))
+  for (m in got$messages) {
+    expect_lte(length(strsplit(m, "\n", fixed = TRUE)[[1]]), 60)
+  }
+})
+
 test_that("bcp: a load that stores every row returns without an error", {
   fake <- local_fake_tools("ok")
   rec <- local_recorded_waits()
@@ -920,7 +1049,7 @@ test_that("mocked psql: a refused COPY stops, and a full COPY does not", {
   rec <- local_recorded_waits()
   con <- load_tools_connection()
   local_mocked_bindings(
-    run_load_tool = function(command, args, timeout = 0) {
+    run_load_tool = function(command, args, timeout = 0, env = NULL) {
       return(list(
         status = 1L,
         output = "ERROR:  23505: duplicate key value violates unique constraint"
@@ -934,7 +1063,7 @@ test_that("mocked psql: a refused COPY stops, and a full COPY does not", {
   )
 
   local_mocked_bindings(
-    run_load_tool = function(command, args, timeout = 0) {
+    run_load_tool = function(command, args, timeout = 0, env = NULL) {
       return(list(status = 0L, output = "COPY 2"))
     }
   )
@@ -947,7 +1076,7 @@ test_that("mocked psql: a transient failure, then success, is retried once", {
   con <- load_tools_connection()
   n <- 0L
   local_mocked_bindings(
-    run_load_tool = function(command, args, timeout = 0) {
+    run_load_tool = function(command, args, timeout = 0, env = NULL) {
       n <<- n + 1L
       if (n == 1L) {
         return(list(status = 2L, output = "psql: error: Connection refused"))
@@ -972,7 +1101,7 @@ test_that("mocked bcp: a short row count stops, and a full one does not", {
   rec <- local_recorded_waits()
   con <- load_tools_connection()
   local_mocked_bindings(
-    run_load_tool = function(command, args, timeout = 0) {
+    run_load_tool = function(command, args, timeout = 0, env = NULL) {
       if (args[[2]] == "format") {
         return(list(status = 0L, output = character()))
       }
@@ -986,7 +1115,7 @@ test_that("mocked bcp: a short row count stops, and a full one does not", {
   )
 
   local_mocked_bindings(
-    run_load_tool = function(command, args, timeout = 0) {
+    run_load_tool = function(command, args, timeout = 0, env = NULL) {
       if (args[[2]] == "format") {
         return(list(status = 0L, output = character()))
       }
@@ -996,17 +1125,211 @@ test_that("mocked bcp: a short row count stops, and a full one does not", {
   expect_no_error(run_ms_load(con))
 })
 
+# Record the arguments that csdb builds for every client call, and answer
+# each call as a load that stored both rows.
+local_recorded_args <- function(.local_envir = parent.frame()) {
+  rec <- new.env()
+  rec$calls <- list()
+  local_mocked_bindings(
+    run_load_tool = function(command, args, timeout = 0, env = NULL) {
+      rec$calls[[length(rec$calls) + 1L]] <- list(
+        command = command,
+        args = as.character(args),
+        env = env
+      )
+      if (command == "psql") {
+        return(list(status = 0L, output = "COPY 2"))
+      }
+      if (args[[2]] == "format") {
+        return(list(status = 0L, output = character()))
+      }
+      return(list(status = 0L, output = "2 rows copied."))
+    },
+    .env = .local_envir
+  )
+  return(rec)
+}
+
+test_that("mocked bcp: csdb builds each option and its value as separate elements", {
+  local_stand_in_tools()
+  rec <- local_recorded_args()
+  con <- load_tools_connection()
+  dt <- load_tools_dt()
+  data.table::setkey(dt, id, x)
+  run_ms_load(con, dt = dt)
+  expect_length(rec$calls, 2L)
+  args <- rec$calls[[2]]$args
+  expect_identical(args[[2]], "in")
+  expect_identical(args[which(args == "-a") + 1L], "16384")
+  expect_identical(args[which(args == "-h") + 1L], "ORDER(id ASC, x ASC)")
+  expect_false(any(grepl("'", args, fixed = TRUE)))
+})
+
+test_that("mocked psql: the copy command quotes the columns and the path, and the URI is encoded", {
+  local_stand_in_tools()
+  rec <- local_recorded_args()
+  con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+  withr::defer(DBI::dbDisconnect(con))
+  DBI::dbWriteTable(
+    con,
+    "tab",
+    data.frame(id = integer(), `a b` = character(), check.names = FALSE)
+  )
+  dbconfig <- load_tools_dbconfig()
+  dbconfig$user <- "u@x:y/z"
+  dbconfig$server <- "fake host"
+  dbconfig$db <- "db/1?x"
+  file <- file.path(withr::local_tempdir(), "it's.tsv")
+  with_mocked_bindings(
+    pg_method()(
+      connection = con,
+      dbconfig = dbconfig,
+      table = DBI::Id(table = "tab"),
+      dt = data.table::data.table(id = 1:2, `a b` = c("p", "q")),
+      file = file
+    ),
+    dbQuoteIdentifier = pg_quote_identifier,
+    .package = "DBI"
+  )
+  expect_length(rec$calls, 1L)
+  args <- rec$calls[[1]]$args
+  copy <- args[which(args == "-c") + 1L]
+  # psql MUST receive the bare command. No shell strips quotes any more.
+  expect_true(startsWith(copy, "\\copy "))
+  expect_false(startsWith(copy, "\""))
+  expect_false(endsWith(copy, "\""))
+  expect_match(copy, "(\"id\", \"a b\")", fixed = TRUE)
+  expect_match(copy, "/it''s.tsv' (FORMAT CSV", fixed = TRUE)
+  expect_identical(
+    copy,
+    sprintf(
+      "\\copy \"tab\" (\"id\", \"a b\") from '%s' (FORMAT CSV, DELIMITER '\t')",
+      gsub("'", "''", file, fixed = TRUE)
+    )
+  )
+  expect_identical(
+    args[[length(args)]],
+    "postgresql://u%40x%3Ay%2Fz@fake%20host:5432/db%2F1%3Fx?connect_timeout=30"
+  )
+  expect_identical(args[which(args == "-U") + 1L], "u@x:y/z")
+  expect_identical(rec$calls[[1]]$env, c(PGPASSWORD = load_tools_secret))
+})
+
 test_that("run_load_tool() captures stdout, stderr and the exit status", {
   rscript <- file.path(R.home("bin"), "Rscript")
   expect_no_warning(
     res <- run_load_tool(
       rscript,
-      c("-e", shQuote("cat('out\\n'); message('err'); quit(status = 3)"))
+      c("-e", "cat('out\\n'); message('err'); quit(status = 3)")
     )
   )
   expect_identical(res$status, 3L)
   expect_true("out" %in% res$output)
   expect_true("err" %in% res$output)
+})
+
+test_that("load_output_excerpt() keeps the first 20 and the last 20 lines", {
+  out <- c(
+    "pw s3cret-Pw",
+    sprintf("line %d", 2:100),
+    "",
+    "   ",
+    "5000 rows sent to SQL Server. Total sent: 5000"
+  )
+  got <- load_output_excerpt(out, secrets = "s3cret-Pw")
+  expect_identical(
+    strsplit(got, "\n", fixed = TRUE)[[1]],
+    c(
+      "pw ***",
+      sprintf("line %d", 2:20),
+      "[csdb omitted 60 lines here]",
+      sprintf("line %d", 81:100)
+    )
+  )
+  # 40 lines or fewer are kept whole.
+  expect_identical(
+    load_output_excerpt(sprintf("line %d", 1:40)),
+    paste0(sprintf("line %d", 1:40), collapse = "\n")
+  )
+})
+
+test_that("load_output_excerpt() keeps an error line among more than 40 other lines", {
+  state <- "SQLState = 22001, NativeError = 0"
+  error <- "Error = [Microsoft][ODBC Driver 17 for SQL Server]String data, right truncation"
+  out <- c(
+    sprintf("before %d", 1:50),
+    "1000 rows sent to SQL Server. Total sent: 1000",
+    state,
+    error,
+    sprintf("after %d", 1:50)
+  )
+  got <- strsplit(load_output_excerpt(out), "\n", fixed = TRUE)[[1]]
+  expect_identical(
+    got,
+    c(
+      sprintf("before %d", 1:20),
+      "[csdb omitted 60 lines here]",
+      state,
+      error,
+      sprintf("after %d", 31:50)
+    )
+  )
+  # 30 identical pairs collapse to one pair, and the error line is redacted.
+  out <- c(sprintf("x %d", 1:100), rep(c(state, "  Error = pw s3cret"), 30))
+  got <- strsplit(
+    load_output_excerpt(out, secrets = "s3cret"),
+    "\n",
+    fixed = TRUE
+  )[[1]]
+  expect_identical(
+    got,
+    c(
+      sprintf("x %d", 1:20),
+      "[csdb omitted 60 lines here]",
+      sprintf("x %d", 81:100),
+      state,
+      "  Error = pw ***"
+    )
+  )
+})
+
+test_that("load_output_excerpt() keeps the first 20 and the last 20 distinct error lines", {
+  out <- c(
+    sprintf("x %d", 1:100),
+    sprintf("Error = row %d failed", 1:60)
+  )
+  got <- strsplit(load_output_excerpt(out), "\n", fixed = TRUE)[[1]]
+  expect_identical(
+    got,
+    c(
+      sprintf("x %d", 1:20),
+      "[csdb omitted 60 lines here]",
+      sprintf("x %d", 81:100),
+      sprintf("Error = row %d failed", 1:20),
+      "[csdb omitted 20 further error lines]",
+      sprintf("Error = row %d failed", 41:60)
+    )
+  )
+})
+
+test_that("load_output_excerpt() holds at most 2 * 20 + 1 + 40 + 1 = 82 lines", {
+  bound <- 2L * 20L + 1L + 40L + 1L
+  # Distinct error lines and other lines, interleaved, at every size.
+  for (k in c(0L, 10L, 41L, 100L, 5000L)) {
+    out <- rbind(
+      sprintf("line %d", seq_len(k)),
+      sprintf("SQLState = %05d, NativeError = %d", seq_len(k), seq_len(k)),
+      sprintf("Error = row %d failed", seq_len(k)),
+      sprintf(
+        "%d rows sent to SQL Server. Total sent: %d",
+        seq_len(k),
+        seq_len(k)
+      )
+    )
+    got <- strsplit(load_output_excerpt(c(out)), "\n", fixed = TRUE)[[1]]
+    expect_lte(length(got), bound)
+  }
+  expect_length(got, bound)
 })
 
 # Part 3: insert_data(confirm_insert_via_nrow = TRUE) ------------------------

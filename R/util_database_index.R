@@ -65,14 +65,14 @@ index_table_identity <- function(table) {
     return(as.character(table@name))
   }
   if (!is.character(table) || length(table) != 1L || is.na(table)) {
-    stop("table must be one character string, or a DBI::Id.")
+    stop("table must be one character string, or a DBI::Id.", call. = FALSE)
   }
   dots <- gregexpr(".", table, fixed = TRUE)[[1]]
   n <- if (attr(dots, "match.length")[1] == -1L) 0L else length(dots)
   parts <- strsplit(table, ".", fixed = TRUE)[[1]]
   length(parts) <- n + 1L
   parts[is.na(parts)] <- ""
-  parts
+  return(parts)
 }
 
 # The dotted text form of a table identity.
@@ -90,7 +90,7 @@ index_table_identity <- function(table) {
 # table    Text, or a DBI::Id.
 # returns  One character string.
 index_table_text <- function(table) {
-  paste(index_table_identity(table), collapse = ".")
+  return(paste(index_table_identity(table), collapse = "."))
 }
 
 # The name a declared index or primary key carries in the database.
@@ -121,9 +121,11 @@ index_table_text <- function(table) {
 #             and the logical name. This part carries the distinctness.
 #
 # The result is at most 63 characters, the PostgreSQL identifier limit.
-# PostgreSQL truncates a longer name and reports nothing. A silently truncated
-# name plus `IF NOT EXISTS` is the same silent no-op again. csdb therefore
-# applies the limit here, rather than leave it to the server.
+# PostgreSQL truncates a longer name and reports it with a notice, not an
+# error. Two long names can truncate to one name. `IF NOT EXISTS` then skips
+# the second statement with another notice, and the second table gets
+# nothing. csdb therefore applies the limit here, rather than leave it to the
+# server.
 #
 # The name is lowercase. PostgreSQL folds an unquoted identifier to lowercase
 # and SQLite does not. A lowercase name therefore reads the same in the source
@@ -150,7 +152,7 @@ index_table_text <- function(table) {
 # returns  One lowercase character string of at most 63 characters.
 physical_name <- function(table, logical, prefix) {
   if (!is.character(logical) || length(logical) != 1L || is.na(logical)) {
-    stop("index must be one character string.")
+    stop("index must be one character string.", call. = FALSE)
   }
   parts <- index_table_identity(table)
   identity <- paste(parts, collapse = ".")
@@ -316,7 +318,7 @@ S7::method(get_index_columns, db_default) <- function(
   table,
   index
 ) {
-  NULL
+  return(NULL)
 }
 
 # Read the columns of one SQLite index.
@@ -344,11 +346,11 @@ S7::method(get_index_columns, db_sqlite) <- function(connection, table, index) {
   if (length(owner) == 0L || !identical(owner[1], table_bare)) {
     return(character(0))
   }
-  DBI::dbGetQuery(
+  return(DBI::dbGetQuery(
     connection,
     "SELECT name FROM pragma_index_info(?) ORDER BY seqno",
     params = list(index)
-  )$name
+  )$name)
 }
 
 # Read the columns of one PostgreSQL index.
@@ -392,7 +394,7 @@ S7::method(get_index_columns, db_postgres) <- function(
   }
   sql <- paste0(sql, " order by a.attnum")
 
-  DBI::dbGetQuery(connection, sql, params = params)$column_name
+  return(DBI::dbGetQuery(connection, sql, params = params)$column_name)
 }
 
 # drop_index methods
@@ -400,24 +402,24 @@ S7::method(drop_index, db_default) <- function(connection, table, index) {
   # DBTable_v9 hands this method a DBI::Id, and glue::glue() cannot coerce
   # one. index_table_text() gives the same string the caller used to pass.
   table <- index_table_text(table)
-  try(
+  return(try(
     DBI::dbExecute(
       connection,
       glue::glue("ALTER TABLE `{table}` DROP INDEX `{index}`")
     ),
     TRUE
-  )
+  ))
 }
 
 S7::method(drop_index, db_mssql) <- function(connection, table, index) {
   table <- index_table_text(table)
-  try(
+  return(try(
     DBI::dbExecute(
       connection,
       glue::glue("DROP INDEX {table}.{index}")
     ),
     TRUE
-  )
+  ))
 }
 
 # Drop a PostgreSQL index.
@@ -452,13 +454,13 @@ S7::method(drop_index, db_postgres) <- function(connection, table, index) {
     index_quoted
   }
 
-  try(
+  return(try(
     DBI::dbExecute(
       connection,
       glue::glue("DROP INDEX IF EXISTS {target}")
     ),
     TRUE
-  )
+  ))
 }
 
 # Drop a SQLite index.
@@ -474,13 +476,13 @@ S7::method(drop_index, db_postgres) <- function(connection, table, index) {
 # The comment block is deliberately plain `#` rather than roxygen `#'`:
 # roxygen2 cannot name an S7 method registered against an S4 class.
 S7::method(drop_index, db_sqlite) <- function(connection, table, index) {
-  DBI::dbExecute(
+  return(DBI::dbExecute(
     connection,
     paste0(
       "DROP INDEX IF EXISTS ",
       DBI::dbQuoteIdentifier(connection, index)
     )
-  )
+  ))
 }
 
 # add_index methods
@@ -521,19 +523,19 @@ S7::method(add_index, db_default) <- function(connection, table, index, keys) {
     ALTER TABLE `{table}` ADD INDEX `{index}` ({keys})
     ;"
   )
-  DBI::dbExecute(connection, sql)
+  return(DBI::dbExecute(connection, sql))
 }
 
 S7::method(add_index, db_mssql) <- function(connection, table, index, keys) {
   keys <- glue::glue_collapse(keys, sep = ", ")
 
-  try(
+  return(try(
     DBI::dbExecute(
       connection,
       glue::glue("CREATE INDEX {index} IF NOT EXISTS ON {table} ({keys});")
     ),
-    T
-  )
+    TRUE
+  ))
 }
 
 # Create a PostgreSQL index.
@@ -559,7 +561,7 @@ S7::method(add_index, db_postgres) <- function(connection, table, index, keys) {
     collapse = ", "
   )
 
-  DBI::dbExecute(
+  return(DBI::dbExecute(
     connection,
     paste0(
       "CREATE INDEX IF NOT EXISTS ",
@@ -570,7 +572,7 @@ S7::method(add_index, db_postgres) <- function(connection, table, index, keys) {
       keys_quoted,
       ")"
     )
-  )
+  ))
 }
 
 # Create a SQLite index.
@@ -591,7 +593,7 @@ S7::method(add_index, db_sqlite) <- function(connection, table, index, keys) {
     collapse = ", "
   )
 
-  DBI::dbExecute(
+  return(DBI::dbExecute(
     connection,
     paste0(
       "CREATE INDEX IF NOT EXISTS ",
@@ -602,5 +604,5 @@ S7::method(add_index, db_sqlite) <- function(connection, table, index, keys) {
       keys_quoted,
       ")"
     )
-  )
+  ))
 }

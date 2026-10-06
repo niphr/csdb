@@ -10,11 +10,11 @@
 #' @keywords internal
 #' @noRd
 random_uuid <- function() {
-  x <- uuid::UUIDgenerate(F)
+  x <- uuid::UUIDgenerate(FALSE)
   x <- gsub("-", "", x)
   # the second part here allows for the usage of set.seed()
   x <- paste0("a", x, round(runif(1) * 10000000))
-  x
+  return(x)
 }
 
 #' Generate a random file path
@@ -30,5 +30,5 @@ random_uuid <- function() {
 #' @noRd
 random_file <- function(folder, extension = ".csv", extra_insert = NULL) {
   dir.create(folder, showWarnings = FALSE, recursive = TRUE)
-  fs::path(folder, paste0(random_uuid(), extra_insert, extension))
+  return(fs::path(folder, paste0(random_uuid(), extra_insert, extension)))
 }

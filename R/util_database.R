@@ -31,7 +31,7 @@ scrub_non_finite <- function(dt) {
     dt[is.infinite(get(i)), (i) := NA]
     dt[is.nan(get(i)), (i) := NA]
   }
-  invisible(dt)
+  return(invisible(dt))
 }
 
 #' Write data.table to file for database bulk insert
@@ -53,7 +53,7 @@ scrub_non_finite <- function(dt) {
 write_data_infile <- function(
   dt,
   file = paste0(tempfile(), ".csv"),
-  colnames = T,
+  colnames = TRUE,
   eol = "\n",
   quote = "auto",
   na = "\\N",
@@ -66,10 +66,10 @@ write_data_infile <- function(
   for (i in names(dt)) {
     if (inherits(dt[[i]], "POSIXt")) dt[, (i) := as.character(get(i))]
   }
-  fwrite(
+  return(fwrite(
     dt,
     file = file,
-    logical01 = T,
+    logical01 = TRUE,
     na = na,
     col.names = colnames,
     eol = eol,
@@ -77,7 +77,7 @@ write_data_infile <- function(
     sep = sep,
     # psql refused "1e+05" for an integer column on 2026-10-05
     scipen = 999
-  )
+  ))
 }
 
 #' List indexes for a database table
@@ -130,7 +130,7 @@ register_s4_classes <- function() {
     },
     error = function(e) {
       # Silently continue if odbc package not available
-      NULL
+      return(NULL)
     }
   )
 
@@ -150,7 +150,7 @@ register_s4_classes <- function() {
   )
 
   # Register DBI classes if available
-  tryCatch(
+  return(tryCatch(
     {
       if (requireNamespace("DBI", quietly = TRUE)) {
         if (methods::isClass("DBIConnection")) {
@@ -159,7 +159,7 @@ register_s4_classes <- function() {
       }
     },
     error = function(e) NULL
-  )
+  ))
 }
 
 # Helper function to get or create database class objects for S7 dispatch
@@ -216,7 +216,8 @@ get_db_classes <- function() {
         methods::getClass("SQLiteConnection")
       } else {
         stop(
-          "the RSQLite package does not provide the S4 class 'SQLiteConnection'"
+          "the RSQLite package does not provide the S4 class 'SQLiteConnection'",
+          call. = FALSE
         )
       }
     },
@@ -225,7 +226,8 @@ get_db_classes <- function() {
         "csdb cannot register its SQLite methods: ",
         conditionMessage(e),
         ". RSQLite is listed in csdb's Imports; install it with ",
-        "install.packages(\"RSQLite\")."
+        "install.packages(\"RSQLite\").",
+        call. = FALSE
       )
     }
   )
@@ -280,7 +282,7 @@ refresh_database_methods <- function() {
   message(
     "Database methods refreshed. S4 classes re-registered and S7 methods updated."
   )
-  invisible(NULL)
+  return(invisible(NULL))
 }
 
 # Debug function to show method dispatch information

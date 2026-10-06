@@ -37,7 +37,12 @@ expected_physical_names <- function(tab) {
 #
 # DBI::dbExecute() is mocked, so the method needs no server and the block
 # reads the SQL that production builds. The method is looked up by S7
-# dispatch on the backend class, so db_mssql reaches the db_default method.
+# dispatch on the backend class. PostgreSQL reaches the db_default
+# drop_constraint method.
+#
+# The PostgreSQL and db_default methods quote the name, so they need a
+# connection that quotes. DBI::ANSI() quotes with `"`, as PostgreSQL does. The
+# name is returned without the quotes. test-postgres-ddl.R asserts the quoting.
 capture_constraint_names <- function(generic, class, table) {
   statements <- character(0)
   local_mocked_bindings(
@@ -49,14 +54,18 @@ capture_constraint_names <- function(generic, class, table) {
   )
   method <- S7::method(generic, class)
   if (identical(generic, add_constraint)) {
-    method(NULL, table, c("a", "b"))
+    method(DBI::ANSI(), table, c("a", "b"))
   } else {
-    method(NULL, table)
+    method(DBI::ANSI(), table)
   }
   expect_length(statements, 1L)
   m <- regmatches(
     statements,
-    regexec("(ADD|DROP) CONSTRAINT\\s+([^\\s;]+)", statements, perl = TRUE)
+    regexec(
+      "(ADD|DROP) CONSTRAINT\\s+\"?([^\\s;\"]+)",
+      statements,
+      perl = TRUE
+    )
   )[[1]]
   m[3]
 }

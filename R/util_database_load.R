@@ -27,16 +27,16 @@ S7::method(load_data_infile, db_default) <- function(
 
   correct_order <- DBI::dbListFields(connection, table)
   if (length(correct_order) > 0) {
-    dt <- dt[, correct_order, with = F]
+    dt <- dt[, correct_order, with = FALSE]
   }
   write_data_infile(dt = dt, file = file)
-  on.exit(unlink(file), add = T)
+  on.exit(unlink(file), add = TRUE)
 
   sep <- ","
   eol <- "\n"
   quote <- '"'
   skip <- 0
-  header <- T
+  header <- TRUE
   path <- normalizePath(file, winslash = "/", mustWork = TRUE)
 
   sql <- paste0(
@@ -69,7 +69,7 @@ S7::method(load_data_infile, db_default) <- function(
   t1 <- Sys.time()
   dif <- round(as.numeric(difftime(t1, t0, units = "secs")), 1)
 
-  invisible()
+  return(invisible())
 }
 
 S7::method(load_data_infile, db_mssql) <- function(
@@ -92,21 +92,21 @@ S7::method(load_data_infile, db_mssql) <- function(
 
   correct_order <- DBI::dbListFields(connection, table)
   if (length(correct_order) > 0) {
-    dt <- dt[, correct_order, with = F]
+    dt <- dt[, correct_order, with = FALSE]
   }
   write_data_infile(
     dt = dt,
     file = file,
-    colnames = F,
+    colnames = FALSE,
     eol = "\n",
     quote = FALSE,
     na = "",
     sep = "\t"
   )
-  on.exit(unlink(file), add = T)
+  on.exit(unlink(file), add = TRUE)
 
   format_file <- tempfile(tmpdir = tempdir(check = TRUE))
-  on.exit(unlink(format_file), add = T)
+  on.exit(unlink(format_file), add = TRUE)
 
   # bcp needs a data-file argument in format mode too. This was "nul", the
   # null device on Windows. On Linux "nul" is a relative file name, so bcp
@@ -139,7 +139,7 @@ S7::method(load_data_infile, db_mssql) <- function(
   }
 
   if (Sys.which("bcp") == "") {
-    stop("bcp command not found. Please install SQL Server command line tools.")
+    stop("bcp command not found. Please install SQL Server command line tools.", call. = FALSE)
   }
 
   run_checked_load(
@@ -152,28 +152,22 @@ S7::method(load_data_infile, db_mssql) <- function(
     timeout = load_timeout
   )
 
-  if (FALSE) {
-    hint_arg <- NULL
-  } else {
-    hint_arg <- NULL
-  }
-
+  # Every option and its value are separate elements. run_load_tool() quotes
+  # each element, so bcp receives "-h" and "ORDER(id ASC)" as two arguments.
+  hint_arg <- NULL
   if (!is.null(key(dt))) {
     hint_arg <- c(
-      hint_arg,
+      "-h",
       paste0("ORDER(", paste0(key(dt), " ASC", collapse = ", "), ")")
     )
-  }
-  if (length(hint_arg) > 0) {
-    hint_arg <- paste0(hint_arg, collapse = ", ")
-    hint_arg <- paste0("-h '", hint_arg, "'")
   }
 
   args <- c(
     table,
     "in",
     file,
-    "-a 16384",
+    "-a",
+    "16384",
     hint_arg,
     "-S",
     dbconfig$server,
@@ -195,7 +189,7 @@ S7::method(load_data_infile, db_mssql) <- function(
   }
 
   if (Sys.which("bcp") == "") {
-    stop("bcp command not found. Please install SQL Server command line tools.")
+    stop("bcp command not found. Please install SQL Server command line tools.", call. = FALSE)
   }
 
   run_checked_load(
@@ -213,7 +207,7 @@ S7::method(load_data_infile, db_mssql) <- function(
   b <- Sys.time()
   dif <- round(as.numeric(difftime(b, a, units = "secs")), 1)
 
-  invisible()
+  return(invisible())
 }
 
 S7::method(load_data_infile, db_postgres) <- function(
@@ -239,36 +233,43 @@ S7::method(load_data_infile, db_postgres) <- function(
   correct_order <- DBI::dbListFields(connection, table)
 
   if (length(correct_order) > 0) {
-    dt <- dt[, correct_order, with = F]
+    dt <- dt[, correct_order, with = FALSE]
   }
 
   write_data_infile(
     dt = dt,
     file = file,
-    colnames = F,
+    colnames = FALSE,
     eol = "\n",
     quote = FALSE,
     na = "",
     sep = "\t"
   )
 
-  on.exit(unlink(file), add = T)
+  on.exit(unlink(file), add = TRUE)
 
+  # run_load_tool() quotes every argument, so this text reaches psql
+  # unchanged. psql reads the file name between single quotes, and a single
+  # quote inside it is written twice.
   sql <- sprintf(
-    "\"\\copy %s (%s) from '%s' (FORMAT CSV, DELIMITER '\t')\"",
+    "\\copy %s (%s) from '%s' (FORMAT CSV, DELIMITER '\t')",
     table_text,
-    paste(correct_order, collapse = ","),
-    file
+    paste(DBI::dbQuoteIdentifier(connection, correct_order), collapse = ", "),
+    gsub("'", "''", file, fixed = TRUE)
   )
 
-  # psql stops when it cannot connect within 30 s.
+  # psql stops when it cannot connect within 30 s. The URI holds no password:
+  # an argument shows in the process list, so psql reads the password from
+  # PGPASSWORD. libpq decodes the percent-encoding of each URI part.
+  uri_part <- function(x) {
+    return(utils::URLencode(as.character(x), reserved = TRUE))
+  }
   uri <- sprintf(
-    "postgresql://%s:%s@%s:%s/%s?connect_timeout=30",
-    dbconfig$user,
-    dbconfig$password,
-    dbconfig$server,
+    "postgresql://%s@%s:%s/%s?connect_timeout=30",
+    uri_part(dbconfig$user),
+    uri_part(dbconfig$server),
     dbconfig$port,
-    dbconfig$db
+    uri_part(dbconfig$db)
   )
 
   # VERBOSITY=verbose makes psql print the SQLSTATE of an error, which
@@ -285,7 +286,8 @@ S7::method(load_data_infile, db_postgres) <- function(
 
   if (Sys.which("psql") == "") {
     stop(
-      "psql command not found. Please install PostgreSQL command line tools."
+      "psql command not found. Please install PostgreSQL command line tools.",
+      call. = FALSE
     )
   }
 
@@ -297,13 +299,14 @@ S7::method(load_data_infile, db_postgres) <- function(
     secrets = dbconfig$password,
     rows_sent = nrow(dt),
     rows_pattern = "^COPY ([0-9]+)\\s*$",
-    timeout = load_timeout
+    timeout = load_timeout,
+    env = c(PGPASSWORD = dbconfig$password)
   )
 
   b <- Sys.time()
   dif <- round(as.numeric(difftime(b, a, units = "secs")), 1)
 
-  invisible()
+  return(invisible())
 }
 
 # Load a data.table into a SQLite table.
@@ -350,7 +353,7 @@ S7::method(load_data_infile, db_sqlite) <- function(
 
   DBI::dbAppendTable(connection, table, dt)
 
-  invisible()
+  return(invisible())
 }
 
 # Continue with upsert_load_data_infile methods
@@ -417,7 +420,7 @@ S7::method(upsert_load_data_infile, db_default) <- function(
   t1 <- Sys.time()
   dif <- round(as.numeric(difftime(t1, t0, units = "secs")), 1)
 
-  invisible()
+  return(invisible())
 }
 
 S7::method(upsert_load_data_infile, db_mssql) <- function(
@@ -494,7 +497,7 @@ S7::method(upsert_load_data_infile, db_mssql) <- function(
   b <- Sys.time()
   dif <- round(as.numeric(difftime(b, a, units = "secs")), 1)
 
-  invisible()
+  return(invisible())
 }
 
 S7::method(upsert_load_data_infile, db_postgres) <- function(
@@ -589,7 +592,7 @@ S7::method(upsert_load_data_infile, db_postgres) <- function(
   b <- Sys.time()
   dif <- round(as.numeric(difftime(b, a, units = "secs")), 1)
 
-  invisible()
+  return(invisible())
 }
 
 # Upsert a data.table into a SQLite table.
@@ -632,7 +635,8 @@ S7::method(upsert_load_data_infile, db_sqlite) <- function(
   if (length(keys) == 0) {
     stop(
       "upsert on SQLite needs at least one key column: ",
-      "keys is empty, and ON CONFLICT () is a syntax error."
+      "keys is empty, and ON CONFLICT () is a syntax error.",
+      call. = FALSE
     )
   }
   if (!all(keys %in% fields)) {
@@ -640,7 +644,8 @@ S7::method(upsert_load_data_infile, db_sqlite) <- function(
       "upsert on SQLite needs every key to be one of the fields. ",
       "Missing from fields: ",
       paste0(setdiff(keys, fields), collapse = ", "),
-      "."
+      ".",
+      call. = FALSE
     )
   }
   live_fields <- DBI::dbListFields(connection, table)
@@ -651,7 +656,8 @@ S7::method(upsert_load_data_infile, db_sqlite) <- function(
       paste0(setdiff(fields, live_fields), collapse = ", "),
       ". In the table but not fields: ",
       paste0(setdiff(live_fields, fields), collapse = ", "),
-      "."
+      ".",
+      call. = FALSE
     )
   }
 
@@ -734,7 +740,7 @@ S7::method(upsert_load_data_infile, db_sqlite) <- function(
     )
   )
 
-  invisible()
+  return(invisible())
 }
 
 # The external load clients: psql for PostgreSQL, bcp for SQL Server.
@@ -833,12 +839,42 @@ mssql_duplicate_native <- c("2627", "2601")
 # tryCatch() is there for the same reason: on Windows a client that cannot
 # start raises an error that also holds the command line.
 # run_checked_load() redacts the output.
-run_load_tool <- function(command, args, timeout = 0) {
+#
+# system2() pastes `args` into one command line. On Linux a shell runs that
+# line, so shQuote() puts each element in quotes, and the client receives
+# every element unchanged as one argument. shQuote() picks the quote style of
+# the OS. A table name, a file name or a password can hold a space, a quote,
+# `;` or `$(...)`. In quotes, none of these can split an argument or run a
+# command.
+#
+# `env` is a named character vector of environment variables that the client
+# needs, such as PGPASSWORD. run_load_tool() sets them only while the client
+# runs. Afterwards it restores the old value, or the absence of one, also
+# after an error.
+# system2(env = ) is not used: on Windows it puts "NAME=value" into the
+# arguments.
+run_load_tool <- function(command, args, timeout = 0, env = NULL) {
+  if (length(env) > 0) {
+    old <- Sys.getenv(names(env), unset = NA, names = TRUE)
+    on.exit(
+      {
+        was_set <- !is.na(old)
+        if (any(was_set)) {
+          do.call(Sys.setenv, as.list(old[was_set]))
+        }
+        if (any(!was_set)) {
+          Sys.unsetenv(names(old)[!was_set])
+        }
+      },
+      add = TRUE
+    )
+    do.call(Sys.setenv, as.list(env))
+  }
   output <- tryCatch(
     suppressWarnings(
       system2(
         command,
-        args = args,
+        args = shQuote(args),
         stdout = TRUE,
         stderr = TRUE,
         timeout = timeout
@@ -871,6 +907,76 @@ redact_load_output <- function(x, secrets = NULL) {
   }
   x <- gsub("(postgresql://[^:/@]*:)[^@]*@", "\\1***@", x)
   return(x)
+}
+
+# A progress line that bcp prints while it sends rows, such as
+# "1000 rows sent to SQL Server. Total sent: 1000".
+bcp_progress_pattern <- "^\\s*[0-9]+ rows sent to SQL Server"
+
+# A line that bcp starts with "SQLState = " names the state of the error on
+# the next line.
+bcp_state_line_pattern <- "^\\s*SQLState = "
+
+# The client output that a load message shows, as one text.
+#
+# A large bcp load prints thousands of progress lines, so the message drops
+# them and every blank line. The other lines are of two kinds:
+#
+#   * error lines, which start with "Error = " or "SQLState = ". The message
+#     keeps the first copy of each distinct error line, wherever it is, and
+#     drops every repeat. When more than `max_errors` distinct error lines
+#     exist, it keeps the first half and the last half of `max_errors`. One
+#     line says how many it omitted between them.
+#   * all other lines. The message keeps the first `keep` and the last
+#     `keep`. One line says how many lines it omitted between them.
+#
+# So the message holds at most 2 * keep + 1 + max_errors + 1 lines, which is
+# 82 lines with the defaults. Every kept line stays in its original order.
+# The lines are selected from the raw output and then redacted. A password
+# such as "2" could otherwise change a progress line or an error line.
+load_output_excerpt <- function(
+  output,
+  secrets = NULL,
+  keep = 20L,
+  max_errors = 40L
+) {
+  output <- output[nzchar(trimws(output))]
+  output <- output[!grepl(bcp_progress_pattern, output)]
+  error_line <- grepl(bcp_error_pattern, output) |
+    grepl(bcp_state_line_pattern, output)
+  show <- rep(TRUE, length(output))
+  note <- rep(NA_character_, length(output))
+  # The first line of a run that is left out becomes the note about it.
+  leave_out <- function(at, text) {
+    show[at] <<- FALSE
+    show[at[[1]]] <<- TRUE
+    return(note[at[[1]]] <<- text)
+  }
+
+  other <- which(!error_line)
+  n <- length(other)
+  if (n > 2L * keep) {
+    omitted <- other[(keep + 1L):(n - keep)]
+    leave_out(omitted, sprintf("[csdb omitted %d lines here]", length(omitted)))
+  }
+
+  errors <- which(error_line)
+  repeated <- errors[duplicated(output[errors])]
+  show[repeated] <- FALSE
+  distinct <- setdiff(errors, repeated)
+  m <- length(distinct)
+  if (m > max_errors) {
+    half <- max_errors %/% 2L
+    extra <- distinct[(half + 1L):(m - (max_errors - half))]
+    leave_out(
+      extra,
+      sprintf("[csdb omitted %d further error lines]", length(extra))
+    )
+  }
+
+  output <- redact_load_output(output, secrets)
+  output <- ifelse(is.na(note), output, note)
+  return(paste0(output[show], collapse = "\n"))
 }
 
 # Return NULL when the client succeeded and stored every row. Otherwise
@@ -1003,8 +1109,8 @@ classify_bcp_failure <- function(output, states, natives) {
 #
 # The final failure stops with an error of class csdb_load_<class> and
 # csdb_load_error. Its message holds the output of the client after
-# redact_load_output(), and the error carries `table`, `tool`, `attempts` and
-# `failure_class`.
+# load_output_excerpt(), and the error carries `table`, `tool`, `attempts` and
+# `failure_class`. `env` goes to run_load_tool().
 run_checked_load <- function(
   command,
   args,
@@ -1014,13 +1120,14 @@ run_checked_load <- function(
   rows_sent = NULL,
   rows_pattern = NULL,
   error_pattern = NULL,
-  timeout = 0
+  timeout = 0,
+  env = NULL
 ) {
   max_attempts <- length(load_retry_waits) + 1L
   attempt <- 0L
   repeat {
     attempt <- attempt + 1L
-    result <- run_load_tool(command, args, timeout = timeout)
+    result <- run_load_tool(command, args, timeout = timeout, env = env)
     timed_out <- timeout > 0 && result$status == 124L
     if (timed_out) {
       # Check the timeout before the output. A killed client may have printed
@@ -1046,8 +1153,7 @@ run_checked_load <- function(
         "other"
       }
     }
-    output <- redact_load_output(result$output, secrets)
-    printed <- paste0(output[nzchar(trimws(output))], collapse = "\n")
+    printed <- load_output_excerpt(result$output, secrets)
     retry <- failure_class == "transient" && attempt < max_attempts
     message(sprintf(
       "csdb: loading data into table %s with %s failed on attempt %d of at most %d (%s). %s",
@@ -1101,6 +1207,14 @@ run_checked_load <- function(
               ". Count the rows in table ",
               table,
               " before you load these rows again."
+            )
+          },
+          if (failure_class == "ambiguous") {
+            paste0(
+              " csdb does not run an ambiguous load again. If table ",
+              table,
+              " has no primary key and you run the load again by hand,",
+              " the table can get duplicate rows."
             )
           },
           " It printed:\n",

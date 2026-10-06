@@ -12,7 +12,7 @@
     S7::methods_register()
   }, error = function(e) {
     # Silently continue if S7 registration fails
-    NULL
+    return(NULL)
   })
 
   # Try to register S4 classes and update method dispatch when package loads
@@ -24,7 +24,7 @@
     S7::methods_register()
   }, error = function(e) {
     # Silently continue if registration fails
-    NULL
+    return(NULL)
   })
 }
 
@@ -32,7 +32,7 @@
     version <- tryCatch(
       utils::packageDescription("csdb", fields = "Version"),
       warning = function(w){
-        1
+        return(1)
       }
     )
 

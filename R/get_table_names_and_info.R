@@ -184,10 +184,10 @@ get_table_names_and_info.SQLiteConnection <- function(connection) {
   nrow_per_table <- vapply(
     names_tables,
     function(x) {
-      as.numeric(DBI::dbGetQuery(
+      return(as.numeric(DBI::dbGetQuery(
         connection,
         paste0("SELECT COUNT(*) FROM ", DBI::dbQuoteIdentifier(connection, x))
-      )[[1]])
+      )[[1]]))
     },
     numeric(1),
     USE.NAMES = FALSE

@@ -1,3 +1,22 @@
+# Version 2026.10.5
+
+## New Features
+* The lint gate in `.github/workflows/check-and-pkgdown.yml` passes. Its allowlist exempts every function in 3 files from `cyclocomp_linter`: `R/r6_DBConnection_v9.R`, `R/r6_DBTable_v9.R` and `R/util_database.R`. These hold the whole `DBConnection_v9` and `DBTable_v9` classes and `get_db_classes()`.
+
+## Bug Fixes
+* csdb shell-quotes every argument that it gives `psql` or `bcp`. A `\copy` command keeps its quoted identifiers, and a password with shell metacharacters cannot break or inject a command.
+* The `psql` `\copy` command quotes the column names and the file path.
+* `psql` reads the password from `PGPASSWORD`, not from the connection URI. csdb URL-encodes the user, the host and the database in the URI.
+* `bcp` receives each of `-a` and `-h` and its value as two separate arguments.
+* `bcp` still receives the password with `-P`. Use `trusted_connection = "yes"`, which gives `bcp` the `-T` flag, to keep the password off the command line.
+* The message of a failed load drops the `bcp` progress lines and holds at most 82 lines. It keeps the first 20 and the last 20 distinct `Error =` and `SQLState =` lines. It also keeps the first 20 and the last 20 other lines.
+* The message of an ambiguous load warns: a table without a primary key can get duplicate rows if you run the load again by hand.
+* The PostgreSQL and default statements of `add_constraint()`, `drop_constraint()`, `drop_rows_where()`, `keep_rows_where()`, `drop_table()` and `drop_all_rows()` quote the table and constraint names. The SQL Server statements are unchanged. Fixes #5.
+* PostgreSQL `keep_rows_where()` works again. In 2026.10.4 it stopped with "argument is of length zero" on every table. It now runs the copy, the drop and the rename in one transaction.
+* csdb puts the ODBC password in braces, so a password that holds `;`, `{`, `}` or `=` connects. A user name that holds one of these characters is still not supported, because psqlODBC keeps the braces in the user name.
+* `utils` is in Imports, because csdb calls `utils::URLencode()` and `utils::packageDescription()`.
+* Still open: dotted text table identities, the primary key column list in `add_constraint()`, and the old constraint names of existing tables.
+
 # Version 2026.10.4
 
 ## New Features

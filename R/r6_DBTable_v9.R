@@ -661,7 +661,7 @@ DBTable_v9 <- R6::R6Class(
     #' @field validator_field_contents A function that validates the data before it is inserted into the database.
     validator_field_contents = NULL,
     #' @field load_folder A temporary folder that is used to write data to before inserting into the database.
-    load_folder = tempdir(check = T),
+    load_folder = tempdir(check = TRUE),
     #' @field censors A named list of censors.
     censors = NULL,
 
@@ -823,7 +823,7 @@ DBTable_v9 <- R6::R6Class(
       self$field_types <- stringr::str_remove(self$field_types, " \\([0-9]*\\)")
       names(self$field_types) <- naming
       # fixing indexes
-      self$keys_with_length <- self$field_types_with_length[self$keys]
+      return(self$keys_with_length <- self$field_types_with_length[self$keys])
     },
 
     #' @description
@@ -878,14 +878,14 @@ DBTable_v9 <- R6::R6Class(
       }
       cat("\n")
 
-      invisible(self)
+      return(invisible(self))
     },
 
     #' @description
     #' Connect to the database.
     connect = function() {
       self$dbconnection$connect()
-      private$lazy_creation_of_table()
+      return(private$lazy_creation_of_table())
     },
 
     #' @description
@@ -894,7 +894,7 @@ DBTable_v9 <- R6::R6Class(
     #' connection.
     disconnect = function() {
       if (private$owns_dbconnection) {
-        self$dbconnection$disconnect()
+        return(self$dbconnection$disconnect())
       }
     },
 
@@ -944,7 +944,7 @@ DBTable_v9 <- R6::R6Class(
           role_create_table = self$dbconnection$config$role_create_table
         )
         private$add_constraint()
-        self$add_indexes()
+        return(self$add_indexes())
       }
     },
 
@@ -953,10 +953,10 @@ DBTable_v9 <- R6::R6Class(
     remove_table = function() {
       if (self$table_exists()) {
         message(glue::glue("Dropping table {self$table_name}"))
-        DBI::dbRemoveTable(
+        return(DBI::dbRemoveTable(
           self$dbconnection$autoconnection,
           self$table_name_short_for_mssql_fully_specified_for_postgres
-        )
+        ))
       }
     },
 
@@ -1066,7 +1066,7 @@ DBTable_v9 <- R6::R6Class(
               nrow(newdata),
               "."
             )
-            stop("Upsert failed")
+            stop("Upsert failed", call. = FALSE)
           }
         }
       }
@@ -1112,27 +1112,27 @@ DBTable_v9 <- R6::R6Class(
           ""
         }
       )
-      upsert_load_data_infile(
+      return(upsert_load_data_infile(
         connection = self$dbconnection$autoconnection,
         dbconfig = self$dbconnection$config,
         table = self$table_name_short_for_mssql_fully_specified_for_postgres,
-        dt = newdata[, names(self$field_types), with = F],
+        dt = newdata[, names(self$field_types), with = FALSE],
         file = infile,
         fields = names(self$field_types),
         keys = self$keys,
         drop_indexes = drop_indexes,
         load_timeout = load_timeout
-      )
+      ))
     },
 
     #' @description
     #' Drops all rows in the database table.
     drop_all_rows = function() {
       private$lazy_creation_of_table()
-      drop_all_rows(
+      return(drop_all_rows(
         connection = self$dbconnection$autoconnection,
         self$table_name_fully_specified_text
-      )
+      ))
     },
 
     #' @description
@@ -1174,7 +1174,7 @@ DBTable_v9 <- R6::R6Class(
           newdata
         )
       })
-      invisible(NULL)
+      return(invisible(NULL))
     },
 
     #' @description
@@ -1183,11 +1183,11 @@ DBTable_v9 <- R6::R6Class(
     drop_rows_where = function(condition) {
       private$lazy_creation_of_table()
 
-      drop_rows_where(
+      return(drop_rows_where(
         connection = self$dbconnection$autoconnection,
         self$table_name_short_for_mssql_fully_specified_for_postgres_text,
         condition
-      )
+      ))
     },
 
     #' @description
@@ -1200,7 +1200,7 @@ DBTable_v9 <- R6::R6Class(
         self$table_name_short_for_mssql_fully_specified_for_postgres_text,
         condition
       )
-      private$add_constraint()
+      return(private$add_constraint())
     },
 
     #' @description
@@ -1230,12 +1230,12 @@ DBTable_v9 <- R6::R6Class(
       if (newdata_n == 0) {
         return(invisible(NULL))
       }
-      self$upsert_data(
+      return(self$upsert_data(
         newdata = newdata,
         drop_indexes = drop_indexes,
         verbose = verbose,
         load_timeout = load_timeout
-      )
+      ))
     },
 
     #' @description
@@ -1262,12 +1262,12 @@ DBTable_v9 <- R6::R6Class(
       if (newdata_n == 0) {
         return(invisible(NULL))
       }
-      self$insert_data(
+      return(self$insert_data(
         newdata = newdata,
         confirm_insert_via_nrow = confirm_insert_via_nrow,
         verbose = verbose,
         load_timeout = load_timeout
-      )
+      ))
     },
 
     #' @description
@@ -1290,7 +1290,7 @@ DBTable_v9 <- R6::R6Class(
         names() |>
         paste0(., collapse = ",\n  ")
       x <- paste0("dplyr::select(\n  ", x, "\n) |>")
-      cat(x)
+      return(cat(x))
     },
 
     #' @description
@@ -1337,7 +1337,7 @@ DBTable_v9 <- R6::R6Class(
       for (i in names(self$indexes)) {
         private$add_declared_index(i)
       }
-      invisible(NULL)
+      return(invisible(NULL))
     },
 
     #' @description
@@ -1360,7 +1360,7 @@ DBTable_v9 <- R6::R6Class(
           index = private$physical_index_name(i)
         )
       }
-      invisible(NULL)
+      return(invisible(NULL))
     },
 
     #' @description
@@ -1386,7 +1386,7 @@ DBTable_v9 <- R6::R6Class(
       for (i in names(self$indexes)) {
         private$confirm_declared_index(i)
       }
-      invisible(NULL)
+      return(invisible(NULL))
     },
 
     #' @description
@@ -1443,10 +1443,10 @@ DBTable_v9 <- R6::R6Class(
     # that boundary. A schema or a table name that holds a dot then reads as
     # two components rather than one.
     physical_index_name = function(i) {
-      index_physical_name(
+      return(index_physical_name(
         table = self$table_name_short_for_mssql_fully_specified_for_postgres,
         index = i
-      )
+      ))
     },
 
     # The columns one physical index covers, in index order. NULL means the
@@ -1460,11 +1460,11 @@ DBTable_v9 <- R6::R6Class(
     # the last of them `tab`. The method then reported that the index it had
     # just created was on no table.
     read_index_columns = function(physical) {
-      get_index_columns(
+      return(get_index_columns(
         connection = self$dbconnection$autoconnection,
         table = self$table_name_short_for_mssql_fully_specified_for_postgres,
         index = physical
-      )
+      ))
     },
 
     # Compare the catalogue against the declaration.
@@ -1473,7 +1473,7 @@ DBTable_v9 <- R6::R6Class(
     # column name to lowercase and SQLite keeps the case it was given. A
     # column list that differs only in case is the same list on both.
     index_columns_match = function(columns, i) {
-      identical(tolower(columns), tolower(unname(self$indexes[[i]])))
+      return(identical(tolower(columns), tolower(unname(self$indexes[[i]]))))
     },
 
     # Create one declared index, then read the catalogue back.
@@ -1520,7 +1520,7 @@ DBTable_v9 <- R6::R6Class(
           "Its name there is {physical}."
         ))
       }
-      invisible(NULL)
+      return(invisible(NULL))
     },
 
     # Reconcile one declared index without dropping anything.
@@ -1558,7 +1558,7 @@ DBTable_v9 <- R6::R6Class(
           "declaration to match. confirm_indexes() does not drop an index."
         ))
       }
-      invisible(NULL)
+      return(invisible(NULL))
     },
 
     # The two drop_all_rows_and_then_* methods empty the table before they
@@ -1616,7 +1616,7 @@ DBTable_v9 <- R6::R6Class(
       # arbitrary method can allocate, and it can be slow.
       as_text <- function(x) {
         out <- paste0(format(x), collapse = ", ")
-        if (nzchar(out)) out else "a zero-length value"
+        if (nzchar(out)) return(out) else return("a zero-length value")
       }
       n <- nrow(newdata)
       n_again <- nrow(newdata)
@@ -1657,13 +1657,13 @@ DBTable_v9 <- R6::R6Class(
         ))
       }
 
-      n
+      return(n)
     },
 
     lazy_creation_of_table = function() {
       if (!private$lazy_created_table) {
         self$create_table()
-        private$lazy_created_table <- TRUE
+        return(private$lazy_created_table <- TRUE)
       }
     },
 
@@ -1682,21 +1682,21 @@ DBTable_v9 <- R6::R6Class(
       return(retval)
     },
 
-    load_folder_fn = function() tempdir(check = T),
+    load_folder_fn = function() tempdir(check = TRUE),
 
     add_constraint = function() {
-      add_constraint(
+      return(add_constraint(
         connection = self$dbconnection$autoconnection,
         table = self$table_name_short_for_mssql_fully_specified_for_postgres_text,
         keys = self$keys
-      )
+      ))
     },
 
     drop_constraint = function() {
-      drop_constraint(
+      return(drop_constraint(
         connection = self$dbconnection$autoconnection,
         table = self$table_name_short_for_mssql_fully_specified_for_postgres_text
-      )
+      ))
     },
 
     make_censored_data = function(newdata) {

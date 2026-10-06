@@ -38,11 +38,11 @@
 #' }
 csdb_set_auth_hook <- function(hook) {
   if (!is.null(hook) && !is.function(hook)) {
-    stop("hook must be a function or NULL")
+    stop("hook must be a function or NULL", call. = FALSE)
   }
   old_hook <- getOption("csdb.auth_hook")
   options(csdb.auth_hook = hook)
-  invisible(old_hook)
+  return(invisible(old_hook))
 }
 
 #' Get the current authentication hook
@@ -73,7 +73,93 @@ csdb_set_auth_hook <- function(hook) {
 #' csdb_set_auth_hook(previous)
 #' }
 csdb_get_auth_hook <- function() {
-  getOption("csdb.auth_hook")
+  return(getOption("csdb.auth_hook"))
+}
+
+# ODBC connection arguments ----
+
+# Quote one value for an ODBC connection string.
+#
+# odbc pastes every argument into one string of `key=value` pairs, separated
+# by `;`. A raw `;` in a password therefore ends the password, and the rest
+# reads as more pairs. The ODBC rule puts the value in braces and doubles
+# every `}` inside it. odbc::quote_value() cannot do this: it stops on a value
+# that holds both quote characters.
+#
+# I() tells odbc that the value is already quoted. Without it odbc prints a
+# message about the special characters on every connection.
+#
+# Measured on 2026-10-06 against psqlODBC 13.02 in rbase:4.6.1. The driver
+# reads a password in braces with this rule. It reads a user name in braces
+# as the literal name, braces included. So this function quotes the password
+# only.
+#
+# x        One character string, or NULL.
+# returns  The quoted value, of class AsIs, or NULL when x is NULL.
+odbc_quote_value <- function(x) {
+  if (is.null(x)) {
+    return(NULL)
+  }
+  return(I(paste0("{", gsub("}", "}}", x, fixed = TRUE), "}")))
+}
+
+# The arguments that DBConnection_v9 gives DBI::dbConnect() for an ODBC
+# driver, after odbc::odbc().
+#
+# config   The config list of a DBConnection_v9 object.
+# returns  A named list.
+odbc_connect_args <- function(config) {
+  if (
+    config$trusted_connection == "yes" &&
+      config$driver %in% c("ODBC Driver 17 for SQL Server")
+  ) {
+    return(list(
+      driver = config$driver,
+      server = config$server,
+      port = config$port,
+      trusted_connection = "yes"
+    ))
+  } else if (config$driver %in% c("ODBC Driver 17 for SQL Server")) {
+    return(list(
+      driver = config$driver,
+      server = config$server,
+      port = config$port,
+      uid = config$user,
+      pwd = odbc_quote_value(config$password),
+      encoding = "utf8"
+    ))
+  } else if (
+    config$sslmode == "require" &&
+      config$driver %in% c("PostgreSQL Unicode")
+  ) {
+    return(list(
+      driver = config$driver,
+      server = config$server,
+      port = config$port,
+      uid = config$user,
+      password = odbc_quote_value(config$password),
+      database = config$db,
+      sslmode = "require"
+    ))
+  } else if (config$driver %in% c("PostgreSQL Unicode")) {
+    return(list(
+      driver = config$driver,
+      server = config$server,
+      port = config$port,
+      uid = config$user,
+      password = odbc_quote_value(config$password),
+      database = config$db
+    ))
+  } else {
+    return(list(
+      driver = config$driver,
+      server = config$server,
+      port = config$port,
+      user = config$user,
+      password = odbc_quote_value(config$password),
+      encoding = "utf8"
+    ))
+  }
 }
 
 # DBConnection_v9 ----
@@ -220,7 +306,7 @@ DBConnection_v9 <- R6::R6Class(
         role_create_table <- "x"
       }
 
-      self$config <- list(
+      return(self$config <- list(
         driver = driver,
         server = server,
         port = port,
@@ -231,7 +317,7 @@ DBConnection_v9 <- R6::R6Class(
         trusted_connection = trusted_connection,
         sslmode = sslmode,
         role_create_table = role_create_table
-      )
+      ))
     },
 
     #' @description
@@ -253,10 +339,10 @@ DBConnection_v9 <- R6::R6Class(
             retval <- TRUE
           },
           error = function(e) {
-            retval <<- FALSE
+            return(retval <<- FALSE)
           },
           warning = function(e) {
-            retval <<- FALSE
+            return(retval <<- FALSE)
           }
         )
       }
@@ -304,7 +390,7 @@ DBConnection_v9 <- R6::R6Class(
       }
       cat("\n")
 
-      invisible(self)
+      return(invisible(self))
     },
 
     #' @description
@@ -325,7 +411,7 @@ DBConnection_v9 <- R6::R6Class(
             success <- TRUE
           },
           error = function(e) {
-            message("Attempt ", i, ": ", e)
+            return(message("Attempt ", i, ": ", e))
           }
         )
         if (success) {
@@ -343,7 +429,7 @@ DBConnection_v9 <- R6::R6Class(
                 auth_hook_called <- TRUE
               },
               error = function(e) {
-                message("Auth hook failed: ", conditionMessage(e))
+                return(message("Auth hook failed: ", conditionMessage(e)))
               }
             )
           }
@@ -354,7 +440,7 @@ DBConnection_v9 <- R6::R6Class(
         if (i != attempts) Sys.sleep(i)
       }
       if (!success) {
-        stop("Failed to connect to database after ", attempts, " attempts")
+        stop("Failed to connect to database after ", attempts, " attempts", call. = FALSE)
       }
     },
 
@@ -366,7 +452,7 @@ DBConnection_v9 <- R6::R6Class(
     disconnect = function() {
       private$discard_inherited_connection()
       if (self$is_connected()) {
-        suppressWarnings(DBI::dbDisconnect(private$pconnection))
+        return(suppressWarnings(DBI::dbDisconnect(private$pconnection)))
       }
     }
   ),
@@ -377,7 +463,7 @@ DBConnection_v9 <- R6::R6Class(
     #'   it.
     connection = function() {
       private$discard_inherited_connection()
-      private$pconnection
+      return(private$pconnection)
     },
     #' @field autoconnection Database connection that automatically connects if
     #'   possible. After a fork it opens a connection for the current process.
@@ -423,7 +509,7 @@ DBConnection_v9 <- R6::R6Class(
       ]] <- private$pconnection
       private$pconnection <- NULL
       private$pconnection_pid <- NULL
-      invisible(NULL)
+      return(invisible(NULL))
     },
     connect_once = function() {
       if (self$is_connected()) {
@@ -453,67 +539,17 @@ DBConnection_v9 <- R6::R6Class(
               dbname = self$config$db,
               extended_types = TRUE
             )
-          } else if (
-            self$config$trusted_connection == "yes" &
-              self$config$driver %in% c("ODBC Driver 17 for SQL Server")
-          ) {
-            private$pconnection <- DBI::dbConnect(
-              odbc::odbc(),
-              driver = self$config$driver,
-              server = self$config$server,
-              port = self$config$port,
-              trusted_connection = "yes"
-            )
-          } else if (
-            self$config$driver %in% c("ODBC Driver 17 for SQL Server")
-          ) {
-            private$pconnection <- DBI::dbConnect(
-              odbc::odbc(),
-              driver = self$config$driver,
-              server = self$config$server,
-              port = self$config$port,
-              uid = self$config$user,
-              pwd = self$config$password,
-              encoding = "utf8"
-            )
-          } else if (
-            self$config$sslmode == "require" &
-              self$config$driver %in% c("PostgreSQL Unicode")
-          ) {
-            private$pconnection <- DBI::dbConnect(
-              odbc::odbc(),
-              driver = self$config$driver,
-              server = self$config$server,
-              port = self$config$port,
-              uid = self$config$user,
-              password = self$config$password,
-              database = self$config$db,
-              sslmode = "require"
-            )
-          } else if (self$config$driver %in% c("PostgreSQL Unicode")) {
-            private$pconnection <- DBI::dbConnect(
-              odbc::odbc(),
-              driver = self$config$driver,
-              server = self$config$server,
-              port = self$config$port,
-              uid = self$config$user,
-              password = self$config$password,
-              database = self$config$db
-            )
           } else {
-            private$pconnection <- DBI::dbConnect(
-              odbc::odbc(),
-              driver = self$config$driver,
-              server = self$config$server,
-              port = self$config$port,
-              user = self$config$user,
-              password = self$config$password,
-              encoding = "utf8"
+            # odbc_connect_args() holds the five ODBC branches, and it quotes
+            # the password.
+            private$pconnection <- do.call(
+              DBI::dbConnect,
+              c(list(odbc::odbc()), odbc_connect_args(self$config))
             )
           }
-          # Record the owning process here, and not inside each branch. All six
+          # Record the owning process here, and not inside each branch. Both
           # DBI::dbConnect() calls above run in this process, so one record
-          # covers every one of them, and it also covers a branch added later.
+          # covers both, and it also covers a branch added later.
           # A failed connection never reaches this line, because the error
           # handler below calls stop().
           private$pconnection_pid <- Sys.getpid()
@@ -524,7 +560,8 @@ DBConnection_v9 <- R6::R6Class(
             self$config$server,
             "'\n",
             "Original error: ",
-            conditionMessage(cond)
+            conditionMessage(cond),
+            call. = FALSE
           )
         }
       )
@@ -533,11 +570,11 @@ DBConnection_v9 <- R6::R6Class(
       # SQLite is excluded because the file is already the database: it has no
       # USE statement, and issuing one is a syntax error.
       if (
-        !is.null(self$config$db) &
-          !self$config$driver %in% c("PostgreSQL Unicode") &
+        !is.null(self$config$db) &&
+          !isTRUE(self$config$driver == "PostgreSQL Unicode") &&
           !identical(toupper(self$config$driver), "SQLITE")
       ) {
-        tryCatch(
+        return(tryCatch(
           {
             a <- DBI::dbExecute(
               private$pconnection,
@@ -547,14 +584,14 @@ DBConnection_v9 <- R6::R6Class(
             )
           },
           error = function(e) {
-            stop("Database '", self$config$db, "' does not exist")
+            stop("Database '", self$config$db, "' does not exist", call. = FALSE)
           }
-        )
+        ))
       }
     },
     finalize = function() {
       # message("Closing connection automatically")
-      self$disconnect()
+      return(self$disconnect())
     }
   )
 )
