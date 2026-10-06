@@ -1,3 +1,9 @@
+# Version 2026.10.6
+
+## Bug Fixes
+* `DBTable_v9` creates each declared index that is missing on an existing table, once per object, on the first call that reaches the table. Until now only a table that csdb created got its indexes.
+* A failed create on that path gives a warning that names the table and the index, and the call continues. An index under an old name, such as a bare `ind1`, stays beside the new one.
+
 # Version 2026.10.5
 
 ## New Features

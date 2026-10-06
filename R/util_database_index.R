@@ -4,6 +4,9 @@
 # The generics and the db_* class objects are in "util_database.R". R
 # sources this directory in C collation order. This name sorts after that
 # one, so every generic and class exists before the assignments below run.
+#
+# The one exception is the ensure_index generic. It is defined at the end of
+# this file, beside its only methods and its only caller.
 
 # index naming
 #
@@ -346,11 +349,13 @@ S7::method(get_index_columns, db_sqlite) <- function(connection, table, index) {
   if (length(owner) == 0L || !identical(owner[1], table_bare)) {
     return(character(0))
   }
-  return(DBI::dbGetQuery(
-    connection,
-    "SELECT name FROM pragma_index_info(?) ORDER BY seqno",
-    params = list(index)
-  )$name)
+  return(
+    DBI::dbGetQuery(
+      connection,
+      "SELECT name FROM pragma_index_info(?) ORDER BY seqno",
+      params = list(index)
+    )$name
+  )
 }
 
 # Read the columns of one PostgreSQL index.
@@ -605,4 +610,175 @@ S7::method(add_index, db_sqlite) <- function(connection, table, index, keys) {
       ")"
     )
   ))
+}
+
+# ensure_index: create one index on an existing table when its name is absent
+#
+# DBTable_v9 created the declared indexes only when it created the table. A
+# table that existed already never got them. The 106 partitions of
+# anon_norsyss_data_staging on norsyss_data1 were the case that needed this.
+#
+# Every method looks for the PHYSICAL name on THIS table, and creates the
+# index only when the name is absent. It never drops and never renames. An
+# index under an old name, for example a bare `ind1` from before 2026.10.4,
+# is a different name, so the table then holds both.
+#
+# Every method returns one of three values:
+#
+#   TRUE   The catalogue had no such index, and the method sent the create.
+#   FALSE  The catalogue had the index. The method sent no DDL.
+#   NA     The method cannot tell. It sent a statement that does its own
+#          check on the server, or it did nothing at all.
+#
+# The comment block is deliberately plain `#` rather than roxygen `#'`:
+# roxygen2 cannot name an S7 method registered against an S4 class.
+ensure_index <- S7::new_generic("ensure_index", "connection")
+
+# MySQL and every other backend: csdb checks nothing and creates nothing.
+S7::method(ensure_index, db_default) <- function(
+  connection,
+  table,
+  index,
+  keys
+) {
+  return(NA)
+}
+
+# SQLite: get_index_columns() reads sqlite_master by name AND by table, then
+# add_index() sends `CREATE INDEX IF NOT EXISTS`.
+S7::method(ensure_index, db_sqlite) <- function(
+  connection,
+  table,
+  index,
+  keys
+) {
+  columns <- get_index_columns(
+    connection = connection,
+    table = table,
+    index = index
+  )
+  if (length(columns) > 0L) {
+    return(FALSE)
+  }
+  add_index(connection = connection, table = table, index = index, keys = keys)
+  return(TRUE)
+}
+
+# PostgreSQL: read pg_indexes by index name, table name and schema, then send
+# `CREATE INDEX IF NOT EXISTS` only when the row is absent. A present index
+# therefore costs one SELECT and no DDL.
+#
+# The create is the db_postgres add_index method, named explicitly. The method
+# then sends PostgreSQL SQL whatever connection class it receives, and a test
+# can read that SQL from a DBI::ANSI() connection.
+S7::method(ensure_index, db_postgres) <- function(
+  connection,
+  table,
+  index,
+  keys
+) {
+  parts <- index_table_identity(table)
+  sql <- "select indexname from pg_indexes where indexname = ? and tablename = ?"
+  params <- list(index, parts[length(parts)])
+  if (length(parts) > 1L) {
+    sql <- paste0(sql, " and schemaname = ?")
+    params <- c(params, list(parts[length(parts) - 1L]))
+  }
+  if (nrow(DBI::dbGetQuery(connection, sql, params = params)) > 0L) {
+    return(FALSE)
+  }
+  S7::method(add_index, db_postgres)(
+    connection = connection,
+    table = table,
+    index = index,
+    keys = keys
+  )
+  return(TRUE)
+}
+
+# SQL Server: one statement. SQL Server has no `CREATE INDEX IF NOT EXISTS`,
+# so the statement reads sys.indexes by the index name and the object id of
+# the table, and creates the index only when that row is absent. The result
+# of the check stays on the server, so the method returns NA.
+#
+# This statement was not run against a SQL Server. A test reads its text.
+S7::method(ensure_index, db_mssql) <- function(connection, table, index, keys) {
+  table_quoted <- quote_table_identity(connection, table)
+  sql <- paste0(
+    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N",
+    DBI::dbQuoteString(connection, index),
+    " AND object_id = OBJECT_ID(N",
+    DBI::dbQuoteString(connection, table_quoted),
+    ")) CREATE INDEX ",
+    DBI::dbQuoteIdentifier(connection, index),
+    " ON ",
+    table_quoted,
+    " (",
+    paste0(DBI::dbQuoteIdentifier(connection, keys), collapse = ", "),
+    ");"
+  )
+  DBI::dbExecute(connection, sql)
+  return(NA)
+}
+
+# Create every declared index that is missing on an existing table.
+#
+# DBTable_v9$create_table() calls this when the table exists and its fields
+# match. The private flag declared_indexes_ensured holds that to one run per
+# object per R process, whatever called create_table().
+#
+# A failure gives a warning and does not raise. An index is a performance
+# property and not a correctness one, so a read or a write MUST NOT stop
+# because an index could not be created. The warning names the table, the
+# logical name and the physical name.
+#
+# After a create, the catalogue is read back where the backend has a reader.
+# `IF NOT EXISTS` reports success when another table holds the name, and the
+# read-back is what catches that.
+#
+# connection  The DBI connection.
+# table       The table identity, the DBI::Id field
+#             table_name_short_for_mssql_fully_specified_for_postgres.
+# indexes     The declared indexes: a named list of column vectors.
+# table_name  The table name, for messages.
+# returns     NULL, invisibly.
+ensure_declared_indexes <- function(connection, table, indexes, table_name) {
+  for (i in names(indexes)) {
+    physical <- index_physical_name(table = table, index = i)
+    tryCatch(
+      {
+        created <- ensure_index(
+          connection = connection,
+          table = table,
+          index = physical,
+          keys = indexes[[i]]
+        )
+        if (isTRUE(created)) {
+          message(glue::glue("Added missing index {i} to table {table_name}"))
+          columns <- get_index_columns(
+            connection = connection,
+            table = table,
+            index = physical
+          )
+          if (!is.null(columns) && length(columns) == 0L) {
+            stop(
+              "the catalogue holds no such index on this table after the create",
+              call. = FALSE
+            )
+          }
+        }
+      },
+      error = function(e) {
+        warning(
+          glue::glue(
+            "Index {i} was not created on table {table_name}. ",
+            "Its name there is {physical}. {conditionMessage(e)}"
+          ),
+          call. = FALSE
+        )
+        return(invisible(NULL))
+      }
+    )
+  }
+  return(invisible(NULL))
 }

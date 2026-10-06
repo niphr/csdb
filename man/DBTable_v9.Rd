@@ -74,6 +74,28 @@ deleted. PostgreSQL stores that name in lower case. csdb does not rename
 it.
 }
 
+\section{Indexes on a table that exists}{
+
+An existing table gets its missing declared indexes on first use. The first
+call that reaches the table looks for the physical name of each declared
+index on that table. It creates each index that is absent, and nothing
+else. Later calls on the same object do no index work, and a direct call
+to \code{create_table()} is one of them. After \code{remove_table()} or
+\code{keep_rows_where()}, the next \code{create_table()} call checks again.
+Each new R process, and each new object, checks again.
+
+A failed create gives a warning that names the table and the index. The
+call then continues with its read or write.
+
+An index under an old name stays. A table that a release before 2026.10.4
+indexed as \code{ind1} then holds both \code{ind1} and the new physical
+name. csdb does not drop the old index.
+
+The check reads \code{pg_indexes} on PostgreSQL and \code{sqlite_master} on
+SQLite. On SQL Server one statement reads \code{sys.indexes} and creates
+the index when it is absent. On any other backend csdb checks nothing.
+}
+
 \examples{
 # Creating the object opens no connection, and the field types are
 # checked while it is created. These field types do not satisfy the
@@ -331,6 +353,10 @@ You rarely call this yourself. \code{connect()}, \code{tbl()} and 12
 other public methods call it once per object, through the private
 method \code{lazy_creation_of_table()}. 14 of the 22 public methods
 therefore can drop the table.
+
+When the table exists and its fields match, this creates each declared
+index that is missing. See the section "Indexes on a table that
+exists".
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$create_table()}

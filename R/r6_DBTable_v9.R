@@ -554,6 +554,26 @@ validator_field_contents_csfmt_rts_data_v2 <- function(data) {
 #' deleted. PostgreSQL stores that name in lower case. csdb does not rename
 #' it.
 #'
+#' @section Indexes on a table that exists:
+#' An existing table gets its missing declared indexes on first use. The first
+#' call that reaches the table looks for the physical name of each declared
+#' index on that table. It creates each index that is absent, and nothing
+#' else. Later calls on the same object do no index work, and a direct call
+#' to \code{create_table()} is one of them. After \code{remove_table()} or
+#' \code{keep_rows_where()}, the next \code{create_table()} call checks again.
+#' Each new R process, and each new object, checks again.
+#'
+#' A failed create gives a warning that names the table and the index. The
+#' call then continues with its read or write.
+#'
+#' An index under an old name stays. A table that a release before 2026.10.4
+#' indexed as \code{ind1} then holds both \code{ind1} and the new physical
+#' name. csdb does not drop the old index.
+#'
+#' The check reads \code{pg_indexes} on PostgreSQL and \code{sqlite_master} on
+#' SQLite. On SQL Server one statement reads \code{sys.indexes} and creates
+#' the index when it is absent. On any other backend csdb checks nothing.
+#'
 #' @import data.table
 #' @import R6
 #' @export DBTable_v9
@@ -920,6 +940,10 @@ DBTable_v9 <- R6::R6Class(
     #' other public methods call it once per object, through the private
     #' method \code{lazy_creation_of_table()}. 14 of the 22 public methods
     #' therefore can drop the table.
+    #'
+    #' When the table exists and its fields match, this creates each declared
+    #' index that is missing. See the section "Indexes on a table that
+    #' exists".
     create_table = function() {
       # self$connect calls self$create_table.
       # cannot have infinite loop
@@ -932,6 +956,20 @@ DBTable_v9 <- R6::R6Class(
           self$remove_table()
         } else {
           create_tab <- FALSE
+          # Until 2026.10.6 this branch did no index work, so a table that
+          # existed never got its declared indexes. A failure here is a
+          # warning. See ensure_declared_indexes() in util_database_index.R.
+          # The flag holds this to one run per object, whatever called
+          # create_table().
+          if (!private$declared_indexes_ensured) {
+            ensure_declared_indexes(
+              connection = self$dbconnection$autoconnection,
+              table = self$table_name_short_for_mssql_fully_specified_for_postgres,
+              indexes = self$indexes,
+              table_name = self$table_name
+            )
+            private$declared_indexes_ensured <- TRUE
+          }
         }
       }
       if (create_tab) {
@@ -944,13 +982,18 @@ DBTable_v9 <- R6::R6Class(
           role_create_table = self$dbconnection$config$role_create_table
         )
         private$add_constraint()
-        return(self$add_indexes())
+        retval <- self$add_indexes()
+        # The new table got its indexes from add_indexes(), so there is
+        # nothing left to ensure. A raise above leaves the flag FALSE.
+        private$declared_indexes_ensured <- TRUE
+        return(retval)
       }
     },
 
     #' @description
     #' Drop the database table.
     remove_table = function() {
+      private$declared_indexes_ensured <- FALSE
       if (self$table_exists()) {
         message(glue::glue("Dropping table {self$table_name}"))
         return(DBI::dbRemoveTable(
@@ -1200,6 +1243,9 @@ DBTable_v9 <- R6::R6Class(
         self$table_name_short_for_mssql_fully_specified_for_postgres_text,
         condition
       )
+      # On PostgreSQL and SQL Server this copies, drops and renames the
+      # table, and the copy carries no index.
+      private$declared_indexes_ensured <- FALSE
       return(private$add_constraint())
     },
 
@@ -1424,6 +1470,13 @@ DBTable_v9 <- R6::R6Class(
 
     # Lazyload the creation of the table
     lazy_created_table = FALSE,
+
+    # TRUE once create_table() has checked the declared indexes on an
+    # existing table, or created the table with them. It holds that check to
+    # one run per object, also for a direct create_table() call. A forked
+    # worker inherits it. remove_table() and keep_rows_where() reset it,
+    # because both can leave the table without its indexes.
+    declared_indexes_ensured = FALSE,
 
     # TRUE while add_indexes() runs. create_table() calls add_indexes(), and
     # add_indexes() reaches create_table() through lazy_creation_of_table(),
