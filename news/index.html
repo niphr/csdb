@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.6</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.7</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -50,6 +50,13 @@
       <small>Source: <a href="https://github.com/niphr/csdb/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="2026.10.7" id="version-2026107">Version 2026.10.7<a class="anchor" aria-label="anchor" href="#version-2026107"></a></h2>
+<div class="section level3">
+<h3 id="bug-fixes-2026-10-7">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-2026-10-7"></a></h3>
+<ul><li>The default MySQL methods of <code>load_data_infile()</code> and <code>upsert_load_data_infile()</code> write their load file to <code>tempfile(fileext = ".csv")</code>, a new file in <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code> for each call. The old fixed path <code>/tmp/x123.csv</code> let two concurrent upserts write the same file. When a write fails partway, the PostgreSQL, SQL Server and MySQL methods now delete their default load file.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="2026.10.6" id="version-2026106">Version 2026.10.6<a class="anchor" aria-label="anchor" href="#version-2026106"></a></h2>
 <div class="section level3">

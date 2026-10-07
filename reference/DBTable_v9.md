@@ -427,6 +427,18 @@ Inserts data into the database table.
   `csdb_load_ambiguous`, and it does not retry the load. The default of
   3600 s is the 60 minutes after which Airflow kills a norsyss task.
 
+#### Details
+
+For PostgreSQL, SQL Server and MySQL, the method writes `newdata` to a
+new load file in [`tempdir()`](https://rdrr.io/r/base/tempfile.html) for
+each call. csdb deletes that file when the load returns, also after a
+failed load. A write that fails partway leaves the file in
+[`tempdir()`](https://rdrr.io/r/base/tempfile.html). SQLite writes no
+file. Called without `file`, the internal load methods default to a new
+file from [`tempfile()`](https://rdrr.io/r/base/tempfile.html). They
+delete that default file in every case, also after a write that fails
+partway.
+
 ------------------------------------------------------------------------
 
 ### `DBTable_v9$upsert_data()`
@@ -463,6 +475,12 @@ Upserts data into the database table.
   then kills the client and stops with an error of class
   `csdb_load_ambiguous`, and it does not retry the load. The default of
   3600 s is the 60 minutes after which Airflow kills a norsyss task.
+
+#### Details
+
+The load file follows the same rules as in `insert_data()`: a new file
+in [`tempdir()`](https://rdrr.io/r/base/tempfile.html) for each call,
+deleted when the load returns.
 
 ------------------------------------------------------------------------
 

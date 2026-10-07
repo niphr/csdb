@@ -1,5 +1,17 @@
 # Changelog
 
+## Version 2026.10.7
+
+### Bug Fixes
+
+- The default MySQL methods of `load_data_infile()` and
+  `upsert_load_data_infile()` write their load file to
+  `tempfile(fileext = ".csv")`, a new file in
+  [`tempdir()`](https://rdrr.io/r/base/tempfile.html) for each call. The
+  old fixed path `/tmp/x123.csv` let two concurrent upserts write the
+  same file. When a write fails partway, the PostgreSQL, SQL Server and
+  MySQL methods now delete their default load file.
+
 ## Version 2026.10.6
 
 ### Bug Fixes

@@ -11,7 +11,7 @@ combines database connectivity with data validation and bulk operations."><meta 
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.6</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.7</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -404,6 +404,13 @@ exists".</p><div class="section">
 
 
 </dl><p></p></div>
+</div><p></p><div class="section">
+<h4 id="details-1">Details<a class="anchor" aria-label="anchor" href="#details-1"></a></h4>
+<p>For PostgreSQL, SQL Server and MySQL, the method writes <code>newdata</code> to a new load file in <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code> for each call.
+csdb deletes that file when the load returns, also after a failed load.
+A write that fails partway leaves the file in <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code>. SQLite writes no file.
+Called without <code>file</code>, the internal load methods default to a new file from <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile()</a></code>.
+They delete that default file in every case, also after a write that fails partway.</p>
 </div>
 
 </div>
@@ -434,6 +441,9 @@ exists".</p><div class="section">
 
 
 </dl><p></p></div>
+</div><p></p><div class="section">
+<h4 id="details-2">Details<a class="anchor" aria-label="anchor" href="#details-2"></a></h4>
+<p>The load file follows the same rules as in <code>insert_data()</code>: a new file in <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code> for each call, deleted when the load returns.</p>
 </div>
 
 </div>
