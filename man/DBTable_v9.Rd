@@ -401,6 +401,13 @@ exists".
     }
     \if{html}{\out{</div>}}
   }
+  \subsection{Details}{
+    For PostgreSQL, SQL Server and MySQL, the method writes \code{newdata} to a new load file in \code{tempdir()} for each call.
+csdb deletes that file when the load returns, also after a failed load.
+A write that fails partway leaves the file in \code{tempdir()}. SQLite writes no file.
+Called without \code{file}, the internal load methods default to a new file from \code{tempfile()}.
+They delete that default file in every case, also after a write that fails partway.
+  }
 }
 
 \if{html}{\out{<hr>}}
@@ -427,6 +434,9 @@ exists".
       \item{\code{load_timeout}}{The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.}
     }
     \if{html}{\out{</div>}}
+  }
+  \subsection{Details}{
+    The load file follows the same rules as in \code{insert_data()}: a new file in \code{tempdir()} for each call, deleted when the load returns.
   }
 }
 

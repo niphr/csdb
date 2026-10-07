@@ -7,12 +7,19 @@
 
 # S7 method definitions
 # load_data_infile methods
+
+# The default `file` is tempfile(fileext = ".csv"). R evaluates it once per
+# call, so two concurrent calls write two different files, both in tempdir().
+# The method deletes `file` when it returns, also a `file` that the caller
+# passed. A write that fails partway leaves a caller's `file` in place, and
+# the method deletes a default `file` then too. Until 2026.10.7 the default
+# was the fixed path "/xtmp/x123.csv".
 S7::method(load_data_infile, db_default) <- function(
   connection,
   dbconfig = NULL,
   table,
   dt = NULL,
-  file = "/xtmp/x123.csv",
+  file = tempfile(fileext = ".csv"),
   force_tablock = FALSE,
   load_timeout = 3600
 ) {
@@ -28,6 +35,11 @@ S7::method(load_data_infile, db_default) <- function(
   correct_order <- DBI::dbListFields(connection, table)
   if (length(correct_order) > 0) {
     dt <- dt[, correct_order, with = FALSE]
+  }
+  # Registered before the write, so a partly written default file is also
+  # deleted. A file that the caller passed is deleted only after a full write.
+  if (missing(file)) {
+    on.exit(unlink(file), add = TRUE)
   }
   write_data_infile(dt = dt, file = file)
   on.exit(unlink(file), add = TRUE)
@@ -94,6 +106,11 @@ S7::method(load_data_infile, db_mssql) <- function(
   if (length(correct_order) > 0) {
     dt <- dt[, correct_order, with = FALSE]
   }
+  # Registered before the write, so a partly written default file is also
+  # deleted. A file that the caller passed is deleted only after a full write.
+  if (missing(file)) {
+    on.exit(unlink(file), add = TRUE)
+  }
   write_data_infile(
     dt = dt,
     file = file,
@@ -139,7 +156,10 @@ S7::method(load_data_infile, db_mssql) <- function(
   }
 
   if (Sys.which("bcp") == "") {
-    stop("bcp command not found. Please install SQL Server command line tools.", call. = FALSE)
+    stop(
+      "bcp command not found. Please install SQL Server command line tools.",
+      call. = FALSE
+    )
   }
 
   run_checked_load(
@@ -189,7 +209,10 @@ S7::method(load_data_infile, db_mssql) <- function(
   }
 
   if (Sys.which("bcp") == "") {
-    stop("bcp command not found. Please install SQL Server command line tools.", call. = FALSE)
+    stop(
+      "bcp command not found. Please install SQL Server command line tools.",
+      call. = FALSE
+    )
   }
 
   run_checked_load(
@@ -236,6 +259,11 @@ S7::method(load_data_infile, db_postgres) <- function(
     dt <- dt[, correct_order, with = FALSE]
   }
 
+  # Registered before the write, so a partly written default file is also
+  # deleted. A file that the caller passed is deleted only after a full write.
+  if (missing(file)) {
+    on.exit(unlink(file), add = TRUE)
+  }
   write_data_infile(
     dt = dt,
     file = file,
@@ -357,17 +385,28 @@ S7::method(load_data_infile, db_sqlite) <- function(
 }
 
 # Continue with upsert_load_data_infile methods
+
+# The default `file` is tempfile(fileext = ".csv"), one new file in tempdir()
+# for each call. load_data_infile() writes it, and this method deletes it when
+# it returns, also after a write that fails partway. Until 2026.10.7 the
+# default was the fixed path "/tmp/x123.csv", so two concurrent upserts wrote
+# the same file.
 S7::method(upsert_load_data_infile, db_default) <- function(
   connection,
   dbconfig = NULL,
   table,
   dt,
-  file = "/tmp/x123.csv",
+  file = tempfile(fileext = ".csv"),
   fields,
   keys = NULL,
   drop_indexes = NULL,
   load_timeout = 3600
 ) {
+  # load_data_infile() receives `file` explicitly, so this method deletes its
+  # own default file. A partly written file is deleted too.
+  if (missing(file)) {
+    on.exit(unlink(file), add = TRUE)
+  }
   temp_name <- random_uuid()
   on.exit(DBI::dbRemoveTable(connection, temp_name), add = TRUE, after = FALSE)
 
@@ -434,6 +473,11 @@ S7::method(upsert_load_data_infile, db_mssql) <- function(
   drop_indexes = NULL,
   load_timeout = 3600
 ) {
+  # load_data_infile() receives `file` explicitly, so this method deletes its
+  # own default file. A partly written file is deleted too.
+  if (missing(file)) {
+    on.exit(unlink(file), add = TRUE)
+  }
   temp_name <- paste0("tmp", random_uuid())
   on.exit(DBI::dbRemoveTable(connection, temp_name), add = TRUE, after = FALSE)
 
@@ -511,6 +555,11 @@ S7::method(upsert_load_data_infile, db_postgres) <- function(
   drop_indexes = NULL,
   load_timeout = 3600
 ) {
+  # load_data_infile() receives `file` explicitly, so this method deletes its
+  # own default file. A partly written file is deleted too.
+  if (missing(file)) {
+    on.exit(unlink(file), add = TRUE)
+  }
   temp_name <- DBI::Id(
     schema = table@name[["schema"]],
     paste0("tmp", random_uuid())
