@@ -76,6 +76,134 @@ csdb_get_auth_hook <- function() {
   return(getOption("csdb.auth_hook"))
 }
 
+# Password hook ----
+
+#' Set the password hook for PostgreSQL connections
+#'
+#' @description
+#' Registers a function that returns the password for each new PostgreSQL
+#' connection and each \code{psql} load. Use it for a password that expires,
+#' such as an Entra access token.
+#'
+#' @details
+#' csdb calls the hook with no arguments, and uses its current return value as
+#' the password:
+#' \itemize{
+#'   \item once for each attempt of \code{DBConnection_v9$connect()} with the
+#'     driver \code{"PostgreSQL Unicode"}.
+#'   \item once for each PostgreSQL load or upsert that runs \code{psql}.
+#' }
+#'
+#' The hook MUST return a single non-empty string. Any other value stops the
+#' connection or the load with an error that names the hook. The error does not
+#' show the value.
+#'
+#' The hook applies to PostgreSQL only. A SQL Server, SQLite or other
+#' connection, and a \code{bcp} load, use the \code{password} in their settings.
+#' csdb therefore never sends the hook value to another kind of server.
+#'
+#' The message of a failed connection shows \code{***} in place of the hook
+#' value.
+#'
+#' @param hook A function with no arguments that returns the password, or NULL
+#'   to clear the hook.
+#' @return Invisibly returns the previous hook, or NULL when no hook was set.
+#' @export
+#' @family password hook functions
+#' @seealso \code{\link{csdb_set_auth_hook}} registers a function that
+#'   \code{DBConnection_v9$connect()} calls after its first failed attempt.
+#' @examples
+#' # The hook is held in the csdb.password_hook option. Registering the hook
+#' # does not call it.
+#' previous <- csdb_set_password_hook(function() "example-token")
+#' is.function(csdb_get_password_hook())
+#'
+#' # Put back whatever was registered before.
+#' csdb_set_password_hook(previous)
+#' csdb_get_password_hook()
+csdb_set_password_hook <- function(hook) {
+  if (!is.null(hook) && !is.function(hook)) {
+    stop("hook must be a function or NULL", call. = FALSE)
+  }
+  old_hook <- getOption("csdb.password_hook")
+  options(csdb.password_hook = hook)
+  return(invisible(old_hook))
+}
+
+#' Get the current password hook
+#'
+#' @description
+#' Returns the function that \code{\link{csdb_set_password_hook}} registered.
+#'
+#' @return The current password hook function, or NULL when no hook is set.
+#' @export
+#' @family password hook functions
+#' @examples
+#' # Returns NULL when no hook is set.
+#' csdb_get_password_hook()
+csdb_get_password_hook <- function() {
+  return(getOption("csdb.password_hook"))
+}
+
+# The current value of the password hook.
+#
+# The error messages name the hook and never show what it returned, because
+# that value is a credential.
+#
+# returns  NULL when no hook is set, else the single non-empty string that the
+#          hook returned.
+password_hook_value <- function() {
+  hook <- csdb_get_password_hook()
+  if (is.null(hook)) {
+    return(NULL)
+  }
+  value <- tryCatch(
+    hook(),
+    error = function(e) {
+      stop(
+        "The csdb password hook (csdb_set_password_hook()) failed: ",
+        conditionMessage(e),
+        call. = FALSE
+      )
+    }
+  )
+  if (
+    !is.character(value) ||
+      length(value) != 1L ||
+      is.na(value) ||
+      !nzchar(value)
+  ) {
+    stop(
+      "The csdb password hook (csdb_set_password_hook()) must return a ",
+      "single non-empty string. It returned an object of class ",
+      paste(class(value), collapse = "/"),
+      " and length ",
+      length(value),
+      ".",
+      call. = FALSE
+    )
+  }
+  return(value)
+}
+
+# Replace every copy of a secret in a text with "***".
+#
+# The ODBC driver receives the secret in braces, with every "}" doubled, so
+# that form is replaced as well.
+#
+# x        A character vector.
+# secret   NULL, or one string.
+# returns  x, with every copy of secret replaced.
+redact_secret <- function(x, secret) {
+  if (is.null(secret)) {
+    return(x)
+  }
+  quoted <- unclass(odbc_quote_value(secret))
+  x <- gsub(quoted, "***", x, fixed = TRUE)
+  x <- gsub(secret, "***", x, fixed = TRUE)
+  return(x)
+}
+
 # ODBC connection arguments ----
 
 # Quote one value for an ODBC connection string.
@@ -306,18 +434,20 @@ DBConnection_v9 <- R6::R6Class(
         role_create_table <- "x"
       }
 
-      return(self$config <- list(
-        driver = driver,
-        server = server,
-        port = port,
-        db = db,
-        schema = schema,
-        user = user,
-        password = password,
-        trusted_connection = trusted_connection,
-        sslmode = sslmode,
-        role_create_table = role_create_table
-      ))
+      return(
+        self$config <- list(
+          driver = driver,
+          server = server,
+          port = port,
+          db = db,
+          schema = schema,
+          user = user,
+          password = password,
+          trusted_connection = trusted_connection,
+          sslmode = sslmode,
+          role_create_table = role_create_table
+        )
+      )
     },
 
     #' @description
@@ -440,7 +570,12 @@ DBConnection_v9 <- R6::R6Class(
         if (i != attempts) Sys.sleep(i)
       }
       if (!success) {
-        stop("Failed to connect to database after ", attempts, " attempts", call. = FALSE)
+        stop(
+          "Failed to connect to database after ",
+          attempts,
+          " attempts",
+          call. = FALSE
+        )
       }
     },
 
@@ -516,6 +651,10 @@ DBConnection_v9 <- R6::R6Class(
         return()
       }
 
+      # The value of the password hook, when this attempt sends one. The error
+      # handler below redacts it.
+      hook_password <- NULL
+
       # create connection
       tryCatch(
         {
@@ -542,9 +681,19 @@ DBConnection_v9 <- R6::R6Class(
           } else {
             # odbc_connect_args() holds the five ODBC branches, and it quotes
             # the password.
+            args <- odbc_connect_args(self$config)
+            # The password hook applies to PostgreSQL only, so its value never
+            # reaches another kind of server. Both PostgreSQL branches of
+            # odbc_connect_args() send the password as `password`.
+            if (self$config$driver %in% c("PostgreSQL Unicode")) {
+              hook_password <- password_hook_value()
+            }
+            if (!is.null(hook_password)) {
+              args[["password"]] <- odbc_quote_value(hook_password)
+            }
             private$pconnection <- do.call(
               DBI::dbConnect,
-              c(list(odbc::odbc()), odbc_connect_args(self$config))
+              c(list(odbc::odbc()), args)
             )
           }
           # Record the owning process here, and not inside each branch. Both
@@ -560,7 +709,7 @@ DBConnection_v9 <- R6::R6Class(
             self$config$server,
             "'\n",
             "Original error: ",
-            conditionMessage(cond),
+            redact_secret(conditionMessage(cond), hook_password),
             call. = FALSE
           )
         }
@@ -584,7 +733,12 @@ DBConnection_v9 <- R6::R6Class(
             )
           },
           error = function(e) {
-            stop("Database '", self$config$db, "' does not exist", call. = FALSE)
+            stop(
+              "Database '",
+              self$config$db,
+              "' does not exist",
+              call. = FALSE
+            )
           }
         ))
       }

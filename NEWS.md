@@ -1,3 +1,8 @@
+# Version 2026.10.8
+
+## New Features
+* New `csdb_set_password_hook()` and `csdb_get_password_hook()`. The hook gives the password for each new PostgreSQL connection and each `psql` load, so csdb fetches an expiring token again each time. Other drivers keep their configured password.
+
 # Version 2026.10.7
 
 ## Bug Fixes

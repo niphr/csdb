@@ -319,16 +319,22 @@ S7::method(load_data_infile, db_postgres) <- function(
     )
   }
 
+  # The password hook, when one is set, gives the password for this load.
+  password <- password_hook_value()
+  if (is.null(password)) {
+    password <- dbconfig$password
+  }
+
   run_checked_load(
     command = "psql",
     args = args,
     tool = "psql \\copy",
     table = as.character(table_text),
-    secrets = dbconfig$password,
+    secrets = password,
     rows_sent = nrow(dt),
     rows_pattern = "^COPY ([0-9]+)\\s*$",
     timeout = load_timeout,
-    env = c(PGPASSWORD = dbconfig$password)
+    env = c(PGPASSWORD = password)
   )
 
   b <- Sys.time()

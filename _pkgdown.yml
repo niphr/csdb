@@ -31,6 +31,8 @@ reference:
   - get_table_names_and_info
   - csdb_set_auth_hook
   - csdb_get_auth_hook
+  - csdb_set_password_hook
+  - csdb_get_password_hook
 
 - title: "Data Validation"
   desc: "Functions for validating field types and data contents"
