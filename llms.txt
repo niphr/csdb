@@ -43,6 +43,10 @@ Helper functions for database operations and metadata
   : Set authentication hook for database connections
 - [`csdb_get_auth_hook()`](https://niphr.github.io/csdb/reference/csdb_get_auth_hook.md)
   : Get the current authentication hook
+- [`csdb_set_password_hook()`](https://niphr.github.io/csdb/reference/csdb_set_password_hook.md)
+  : Set the password hook for PostgreSQL connections
+- [`csdb_get_password_hook()`](https://niphr.github.io/csdb/reference/csdb_get_password_hook.md)
+  : Get the current password hook
 
 ## Data Validation
 
