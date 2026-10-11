@@ -725,6 +725,21 @@ DBTable_v9 <- R6::R6Class(
       self$dbconfig$sslmode <- dbconfig$sslmode
       self$dbconfig$role_create_table <- dbconfig$role_create_table
 
+      # PostgreSQL silently truncates an identifier longer than 63 bytes.
+      # table_exists() would then miss the truncated table, and
+      # create_table() would fail with "already exists".
+      force(table_name)
+      if (
+        identical(self$dbconfig$driver, "PostgreSQL Unicode") &&
+          nchar(table_name, type = "bytes") > 63
+      ) {
+        stop(glue::glue(
+          "table_name '{table_name}' is ",
+          "{nchar(table_name, type = 'bytes')} bytes. ",
+          "The PostgreSQL limit for an identifier is 63 bytes."
+        ))
+      }
+
       force(dbconnection)
       if (is.null(dbconnection)) {
         self$dbconnection <- DBConnection_v9$new(
