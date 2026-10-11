@@ -1,5 +1,13 @@
 # Changelog
 
+## Version 2026.10.9
+
+### Bug Fixes
+
+- `DBTable_v9$new()` stops when the driver is PostgreSQL and the table
+  name is longer than 63 bytes. PostgreSQL truncates such a name without
+  a warning, so `create_table()` failed later with “already exists”.
+
 ## Version 2026.10.8
 
 ### New Features
