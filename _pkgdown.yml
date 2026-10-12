@@ -29,6 +29,7 @@ reference:
   desc: "Helper functions for database operations and metadata"
   contents:
   - get_table_names_and_info
+  - insert_data_many
   - csdb_set_auth_hook
   - csdb_get_auth_hook
   - csdb_set_password_hook

@@ -253,17 +253,40 @@ S7::method(load_data_infile, db_postgres) <- function(
 
   table_text <- DBI::dbQuoteIdentifier(connection, table)
 
+  # Registered before the write, so a partly written default file is also
+  # deleted. A file that the caller passed is deleted only after a full write.
+  if (missing(file)) {
+    on.exit(unlink(file), add = TRUE)
+  }
+  sql <- pg_write_copy_command(connection, table, dt, file)
+  on.exit(unlink(file), add = TRUE)
+
+  run_psql_load(
+    dbconfig = dbconfig,
+    command = c("-c", sql),
+    table = as.character(table_text),
+    rows_sent = nrow(dt),
+    load_timeout = load_timeout
+  )
+
+  b <- Sys.time()
+  dif <- round(as.numeric(difftime(b, a, units = "secs")), 1)
+
+  return(invisible())
+}
+
+# Write `dt` to `file` in the format that psql \copy reads, and return the
+# \copy command for it. The PostgreSQL load of one table and the psql session
+# of insert_data_many() both use it.
+pg_write_copy_command <- function(connection, table, dt, file) {
+  table_text <- DBI::dbQuoteIdentifier(connection, table)
+
   correct_order <- DBI::dbListFields(connection, table)
 
   if (length(correct_order) > 0) {
     dt <- dt[, correct_order, with = FALSE]
   }
 
-  # Registered before the write, so a partly written default file is also
-  # deleted. A file that the caller passed is deleted only after a full write.
-  if (missing(file)) {
-    on.exit(unlink(file), add = TRUE)
-  }
   write_data_infile(
     dt = dt,
     file = file,
@@ -274,18 +297,31 @@ S7::method(load_data_infile, db_postgres) <- function(
     sep = "\t"
   )
 
-  on.exit(unlink(file), add = TRUE)
-
   # run_load_tool() quotes every argument, so this text reaches psql
   # unchanged. psql reads the file name between single quotes, and a single
   # quote inside it is written twice.
-  sql <- sprintf(
+  return(sprintf(
     "\\copy %s (%s) from '%s' (FORMAT CSV, DELIMITER '\t')",
     table_text,
     paste(DBI::dbQuoteIdentifier(connection, correct_order), collapse = ", "),
     gsub("'", "''", file, fixed = TRUE)
-  )
+  ))
+}
 
+# Run psql once against the database of `dbconfig`, and check it with
+# run_checked_load().
+#
+# `command` is what psql runs: c("-c", sql) for one table, or c("-f", script)
+# for a session. `options` go before it. `table` and `rows_sent` have one
+# element for each \copy, in the order that psql runs them.
+run_psql_load <- function(
+  dbconfig,
+  command,
+  table,
+  rows_sent,
+  load_timeout,
+  options = NULL
+) {
   # psql stops when it cannot connect within 30 s. The URI holds no password:
   # an argument shows in the process list, so psql reads the password from
   # PGPASSWORD. libpq decodes the percent-encoding of each URI part.
@@ -305,10 +341,10 @@ S7::method(load_data_infile, db_postgres) <- function(
   args <- c(
     "-v",
     "VERBOSITY=verbose",
+    options,
     "-U",
     dbconfig$user,
-    "-c",
-    sql,
+    command,
     uri
   )
 
@@ -325,22 +361,17 @@ S7::method(load_data_infile, db_postgres) <- function(
     password <- dbconfig$password
   }
 
-  run_checked_load(
+  return(run_checked_load(
     command = "psql",
     args = args,
     tool = "psql \\copy",
-    table = as.character(table_text),
+    table = table,
     secrets = password,
-    rows_sent = nrow(dt),
+    rows_sent = rows_sent,
     rows_pattern = "^COPY ([0-9]+)\\s*$",
     timeout = load_timeout,
     env = c(PGPASSWORD = password)
-  )
-
-  b <- Sys.time()
-  dif <- round(as.numeric(difftime(b, a, units = "secs")), 1)
-
-  return(invisible())
+  ))
 }
 
 # Load a data.table into a SQLite table.
@@ -832,6 +863,14 @@ bcp_error_pattern <- "^\\s*Error = "
 # seconds to recover, not 1 s.
 retry_waits <- c(2, 10)
 
+# The longest time in seconds that the psql session of insert_data_many() waits
+# for one lock. The session script starts with SET lock_timeout. A longer wait
+# stops the session with SQLSTATE 55P03, the server rolls back the whole
+# transaction, and run_checked_load() runs the session again after the waits
+# above. One table, for example, waits behind a TRUNCATE or a CREATE INDEX
+# that another connection has not committed.
+load_lock_timeout_seconds <- 60
+
 # psql prints the SQLSTATE because the load passes -v VERBOSITY=verbose, as
 # "ERROR:  23505: duplicate key value ...". The SQLSTATE does not depend on
 # the language of the server. A failed connection has no SQLSTATE, so the
@@ -839,6 +878,13 @@ retry_waits <- c(2, 10)
 # raises it while the connection starts, so psql prints only the text. psql
 # 14.24 printed "FATAL:  sorry, too many clients already" (PostgreSQL 16).
 pg_sqlstate_pattern <- "(^|\\s)\\S+:\\s+([0-9A-Z]{5}):\\s"
+
+# psql starts each error of a script that -f names with "psql:<file>:<line>: ",
+# as in "psql:/tmp/x.sql:2: ERROR:  23505: duplicate key value ...". The
+# psql session of insert_data_many() runs such a script. Without this prefix
+# removed, pg_sqlstate_pattern reads "ERROR" as the SQLSTATE. A connection
+# error has "psql: error: " with a space, so the prefix leaves it alone.
+pg_script_prefix <- "^psql:(?=\\S).*?:[0-9]+: "
 
 # psql starts every error that it meets while it connects with "psql: error: ".
 # No row is sent then, so a failed connection is safe to retry. Any other
@@ -1062,12 +1108,18 @@ load_output_excerpt <- function(
 #     from it. psql prints "COPY <n>" and bcp prints "<n> rows copied.".
 #
 # The last two print no error, so the failure class is always "other".
+#
+# A psql session of insert_data_many() loads several tables. `rows_sent` and
+# `tables` then hold one element for each table, in the order of the \copy
+# commands, and the last length(rows_sent) counts are compared with them in
+# that order.
 load_failure_reason <- function(
   result,
   output,
   rows_sent = NULL,
   rows_pattern = NULL,
-  error_pattern = NULL
+  error_pattern = NULL,
+  tables = NULL
 ) {
   if (result$status != 0) {
     return(list(text = "returned a non-zero exit status", classify = TRUE))
@@ -1081,24 +1133,35 @@ load_failure_reason <- function(
   hits <- regmatches(output, regexec(rows_pattern, output))
   hits <- unlist(lapply(hits, `[`, 2))
   hits <- hits[!is.na(hits)]
-  if (length(hits) == 0) {
+  n_tables <- length(rows_sent)
+  if (length(hits) < n_tables) {
     return(list(
       text = paste0(
-        "did not report how many rows it stored, and csdb sent ",
-        rows_sent,
+        "did not report how many rows it stored",
+        if (n_tables > 1L) {
+          paste0(" into each of the ", n_tables, " tables")
+        },
+        ", and csdb sent ",
+        paste0(rows_sent, collapse = ", "),
         " rows"
       ),
       classify = FALSE
     ))
   }
-  rows_stored <- as.numeric(hits[length(hits)])
-  if (rows_stored != rows_sent) {
+  rows_stored <- as.numeric(utils::tail(hits, n_tables))
+  wrong <- which(rows_stored != rows_sent)
+  if (length(wrong) > 0) {
+    i <- wrong[[1]]
     return(list(
       text = paste0(
         "stored ",
-        rows_stored,
-        " rows, and csdb sent ",
-        rows_sent,
+        rows_stored[[i]],
+        " rows",
+        if (n_tables > 1L) {
+          paste0(" into table ", tables[[i]])
+        },
+        ", and csdb sent ",
+        rows_sent[[i]],
         " rows"
       ),
       classify = FALSE
@@ -1117,6 +1180,7 @@ classify_load_failure <- function(command, output) {
     return(vapply(m, `[`, character(1), group + 1L))
   }
   if (command == "psql") {
+    output <- sub(pg_script_prefix, "", output, perl = TRUE)
     return(classify_psql_failure(output, capture(pg_sqlstate_pattern, 2L)))
   }
   return(classify_bcp_failure(
@@ -1167,6 +1231,23 @@ classify_bcp_failure <- function(output, states, natives) {
   return("other")
 }
 
+# The words that the messages of run_checked_load() use for `table`. One table
+# keeps the words that csdb used before insert_data_many() existed.
+load_target_words <- function(table) {
+  if (length(table) > 1L) {
+    return(list(
+      where = paste0("tables ", paste0(table, collapse = ", ")),
+      has = " have",
+      the_table = " the tables"
+    ))
+  }
+  return(list(
+    where = paste0("table ", table),
+    has = " has",
+    the_table = " the table"
+  ))
+}
+
 # Run a load client, check it, and retry a transient failure.
 #
 # Each failed attempt emits a message() that names the table, the client, the
@@ -1183,6 +1264,10 @@ classify_bcp_failure <- function(output, states, natives) {
 # csdb_load_error. Its message holds the output of the client after
 # load_output_excerpt(), and the error carries `table`, `tool`, `attempts` and
 # `failure_class`. `env` goes to run_load_tool().
+#
+# `table` holds one name for each table that the client loads. A psql session
+# of insert_data_many() loads several tables in one transaction, and the
+# messages then name all of them.
 run_checked_load <- function(
   command,
   args,
@@ -1196,6 +1281,8 @@ run_checked_load <- function(
   env = NULL
 ) {
   max_attempts <- length(retry_waits) + 1L
+  words <- load_target_words(table)
+  where <- words$where
   attempt <- 0L
   repeat {
     attempt <- attempt + 1L
@@ -1214,7 +1301,8 @@ run_checked_load <- function(
         result$output,
         rows_sent = rows_sent,
         rows_pattern = rows_pattern,
-        error_pattern = error_pattern
+        error_pattern = error_pattern,
+        tables = table
       )
       if (is.null(reason)) {
         break
@@ -1228,8 +1316,8 @@ run_checked_load <- function(
     printed <- load_output_excerpt(result$output, secrets)
     retry <- failure_class == "transient" && attempt < max_attempts
     message(sprintf(
-      "csdb: loading data into table %s with %s failed on attempt %d of at most %d (%s). %s",
-      table,
+      "csdb: loading data into %s with %s failed on attempt %d of at most %d (%s). %s",
+      where,
       tool,
       attempt,
       max_attempts,
@@ -1247,8 +1335,8 @@ run_checked_load <- function(
     if (!retry) {
       stop(errorCondition(
         paste0(
-          "Loading data into table ",
-          table,
+          "Loading data into ",
+          where,
           " failed. ",
           tool,
           " ",
@@ -1264,28 +1352,30 @@ run_checked_load <- function(
           if (timed_out) {
             paste0(
               " csdb killed the client, so the server may or may not have",
-              " committed the rows to table ",
-              table,
-              ". Count the rows in table ",
-              table,
+              " committed the rows to ",
+              where,
+              ". Count the rows in ",
+              where,
               " before you load these rows again."
             )
           } else if (failure_class == "ambiguous") {
             paste0(
               " The connection broke after the load started, so the server",
-              " may or may not have committed the rows to table ",
-              table,
-              ". Count the rows in table ",
-              table,
+              " may or may not have committed the rows to ",
+              where,
+              ". Count the rows in ",
+              where,
               " before you load these rows again."
             )
           },
           if (failure_class == "ambiguous") {
             paste0(
-              " csdb does not run an ambiguous load again. If table ",
-              table,
-              " has no primary key and you run the load again by hand,",
-              " the table can get duplicate rows."
+              " csdb does not run an ambiguous load again. If ",
+              where,
+              words$has,
+              " no primary key and you run the load again by hand,",
+              words$the_table,
+              " can get duplicate rows."
             )
           },
           " It printed:\n",
@@ -1305,8 +1395,8 @@ run_checked_load <- function(
   }
   if (attempt > 1L) {
     message(sprintf(
-      "csdb: loading data into table %s with %s succeeded on attempt %d of at most %d.",
-      table,
+      "csdb: loading data into %s with %s succeeded on attempt %d of at most %d.",
+      where,
       tool,
       attempt,
       max_attempts

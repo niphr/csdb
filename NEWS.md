@@ -1,3 +1,10 @@
+# Version 2026.10.13
+
+## New Features
+* New `insert_data_many()` inserts one data.table into each table of a list. On PostgreSQL one `psql` session loads every table in one transaction, so the call needs one login and stores every row or no row. With another driver, or with tables that have different connection settings, it calls `$insert_data()` on each table in turn.
+* The session holds a ROW EXCLUSIVE lock on each table until it commits. A `TRUNCATE`, `DROP TABLE`, `CREATE INDEX` or `DROP INDEX` on one of the tables waits until then. The session waits at most 60 s for one lock. A longer wait (SQLSTATE 55P03) rolls back the transaction, and csdb runs the session again, as for a deadlock.
+* A duplicate key in the session stores no row. With `confirm_insert_via_nrow = TRUE`, `insert_data_many()` then calls `$insert_data(confirm_insert_via_nrow = TRUE)` on each table, which upserts a table that stops on the duplicate key. Otherwise it stops with an error of class `csdb_load_duplicate_key`.
+
 # Version 2026.10.12
 
 ## Bug Fixes

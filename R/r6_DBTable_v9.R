@@ -1036,34 +1036,18 @@ DBTable_v9 <- R6::R6Class(
       verbose = TRUE,
       load_timeout = 3600
     ) {
-      private$lazy_creation_of_table()
-      if (is.null(newdata)) {
-        return()
-      }
-      if (nrow(newdata) == 0) {
+      # insert_prepare(), insert_load_file() and insert_confirm() are in
+      # util_database_load_many.R. insert_data_many() runs the same steps.
+      if (!insert_prepare(self, private, newdata)) {
         return()
       }
 
       #newdata <- private$make_censored_data(newdata)
 
-      validated <- self$validator_field_contents(newdata)
-      if (!validated) {
-        stop(glue::glue(
-          "load_data_infile not validated in {self$table_name}. {attr(validated,'var')}"
-        ))
-      }
-
       # this will make the insert go faster, because
       # the data will be sorted
       # setkeyv(newdata, self$keys)
-      infile <- random_file(
-        private$load_folder_fn(),
-        extra_insert = if (requireNamespace("digest", quietly = TRUE)) {
-          digest::digest(newdata[1, ])
-        } else {
-          ""
-        }
-      )
+      infile <- insert_load_file(private, newdata)
       load <- function() {
         load_data_infile(
           connection = self$dbconnection$autoconnection,
@@ -1088,51 +1072,13 @@ DBTable_v9 <- R6::R6Class(
       }
 
       if (confirm_insert_via_nrow) {
-        if (is.null(duplicate)) {
-          nrow_after <- self$nrow(use_count = TRUE)
-          upsert <- nrow_after < nrow(newdata)
-          if (upsert) {
-            message(
-              "After insert have ",
-              nrow_after,
-              " rows. Tried to insert ",
-              nrow(newdata),
-              ". Now trying upsert."
-            )
-          }
-        } else {
-          upsert <- TRUE
-          message(
-            "csdb: insert_data(confirm_insert_via_nrow = TRUE) on table ",
-            self$table_name,
-            ": ",
-            duplicate$tool,
-            " failed on attempt ",
-            duplicate$attempts,
-            " (duplicate key). It upserts the ",
-            nrow(newdata),
-            " rows once instead."
-          )
-        }
-        if (upsert) {
-          self$upsert_data(
-            newdata = newdata,
-            drop_indexes = NULL,
-            verbose = verbose,
-            load_timeout = load_timeout
-          )
-          nrow_after <- self$nrow(use_count = TRUE)
-          if (nrow_after < nrow(newdata)) {
-            message(
-              "After upsert have ",
-              nrow_after,
-              " rows. Tried to upsert ",
-              nrow(newdata),
-              "."
-            )
-            stop("Upsert failed", call. = FALSE)
-          }
-        }
+        return(insert_confirm(
+          self,
+          newdata,
+          duplicate = duplicate,
+          verbose = verbose,
+          load_timeout = load_timeout
+        ))
       }
     },
 
