@@ -1,9 +1,12 @@
 # Version 2026.10.13
 
 ## New Features
-* New `insert_data_many()` inserts one data.table into each table of a list. On PostgreSQL one `psql` session loads every table in one transaction, so the call needs one login and stores every row or no row. With another driver, or with tables that have different connection settings, it calls `$insert_data()` on each table in turn.
+* New `insert_data_many()` inserts one data.table into each table of a list. On PostgreSQL one `psql` session loads every table in one transaction, so the load needs one `psql` login and stores every row or no row. A caller that records the insert afterwards, as cs9 does, needs one more login for that write.
+* The one exception to every row or no row is a duplicate key with `confirm_insert_via_nrow = TRUE`. The session then stores no row, and `insert_data_many()` calls `$insert_data(confirm_insert_via_nrow = TRUE)` on each table, which upserts a table that stops on the duplicate key. Without it, the call stops with an error of class `csdb_load_duplicate_key`.
+* After each `\copy`, the session compares the rows that `psql` reports with the rows that csdb sent. A difference raises an error before the commit, so no table keeps a row.
 * The session holds a ROW EXCLUSIVE lock on each table until it commits. A `TRUNCATE`, `DROP TABLE`, `CREATE INDEX` or `DROP INDEX` on one of the tables waits until then. The session waits at most 60 s for one lock. A longer wait (SQLSTATE 55P03) rolls back the transaction, and csdb runs the session again, as for a deadlock.
-* A duplicate key in the session stores no row. With `confirm_insert_via_nrow = TRUE`, `insert_data_many()` then calls `$insert_data(confirm_insert_via_nrow = TRUE)` on each table, which upserts a table that stops on the duplicate key. Otherwise it stops with an error of class `csdb_load_duplicate_key`.
+* A table whose data.table is `NULL` or has no rows gets no `\copy` in the session.
+* With another driver, or with tables that have different connection settings, `insert_data_many()` calls `$insert_data()` on each table in turn. A failure then leaves the rows in the tables before it.
 
 # Version 2026.10.12
 

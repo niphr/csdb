@@ -32,9 +32,14 @@ MAY run. csdb then kills \code{psql} and stops with an error of class
 \code{csdb_load_ambiguous}, and it does not run the session again. The
 per-table path passes it to \code{$insert_data()}.}
 
-\item{...}{More arguments to \code{$insert_data()} and
-\code{$upsert_data()} of each table, for a subclass of \code{DBTable_v9}
-whose methods take more arguments.}
+\item{...}{Named arguments for a subclass of \code{DBTable_v9} whose
+\code{$insert_data()} and \code{$upsert_data()} take more arguments. csdb
+passes them to every call of these two methods that it makes. It makes
+these calls on the per-table path, after a duplicate key, and for the
+upsert of \code{confirm_insert_via_nrow}. The \code{psql} session calls neither
+method, so an override of \code{$insert_data()} in a subclass does not run
+for the rows that the session loads. csdb stops before any load when one
+of the two methods of a table does not take an argument.}
 }
 \value{
 \code{NULL}, invisibly.
@@ -42,23 +47,35 @@ whose methods take more arguments.}
 \description{
 Inserts one data.table into each table of a list. On PostgreSQL, one
 \code{psql} session loads every table in one transaction, so the call stores
-every row or no row.
+every row or no row. The one exception is a duplicate key with
+\code{confirm_insert_via_nrow = TRUE}: csdb then inserts table by table.
 }
 \details{
 On PostgreSQL, csdb writes one load file for each table and starts
 \code{psql} once. That \code{psql} runs a script of one \code{\\copy} for
 each table, with \code{--single-transaction} and \code{-v ON_ERROR_STOP=1}.
-The insert therefore needs one login. \code{$insert_data()} on each table
-needs one login for each table. csdb compares the \code{COPY <n>} that
-\code{psql} prints for each table with the rows that it sent to that table.
+The load therefore needs one \code{psql} login. \code{$insert_data()} on
+each table needs one \code{psql} login for each table. A caller that records
+the insert afterwards, as the last-updated bookkeeping of cs9 does, needs
+one more login for that write.
+
+After each \code{\\copy}, the script compares the row count that \code{psql}
+reports with the rows that csdb sent to that table. A difference raises an
+error before the commit, so the server stores no row in any table. After
+\code{psql} exits, csdb also compares each \code{COPY <n>} line with the
+rows that it sent.
 
 The whole call is one transaction. Each \code{\\copy} takes a ROW EXCLUSIVE
 lock on its table, and the transaction holds every one of these locks until
 it commits. Reads and inserts of other keys into the same tables do not
-wait. An insert of the same key waits until the commit, and then stops on
-the duplicate key. A \code{TRUNCATE}, a \code{DROP TABLE}, a
-\code{CREATE INDEX} or a \code{DROP INDEX} on one of the tables waits until
-the commit.
+wait. An insert of the same key from another connection waits until the
+commit, and then stops on the duplicate key. A \code{TRUNCATE}, a
+\code{DROP TABLE}, a \code{CREATE INDEX} or a \code{DROP INDEX} on one of
+the tables waits until the commit.
+
+The script starts with \code{SET lock_timeout = '60s'}, so the session
+waits at most 60 s for one lock. A longer wait stops the session with
+SQLSTATE 55P03, which is the lock timeout below.
 
 The session uses the retry rules of \code{$insert_data()}:
 \itemize{
@@ -77,16 +94,19 @@ With \code{confirm_insert_via_nrow = FALSE}, the function then stops with an
 error of class \code{csdb_load_duplicate_key}. With
 \code{confirm_insert_via_nrow = TRUE}, it calls
 \code{$insert_data(confirm_insert_via_nrow = TRUE)} on each table in turn.
-That call upserts the rows of a table that stops on a duplicate key.
+That call upserts the rows of a table that stops on a duplicate key. Each
+table then has its own transaction, so a later failure leaves the rows in
+the tables before it.
 
 After a session that succeeds with \code{confirm_insert_via_nrow = TRUE},
 csdb counts the rows of each table, as \code{$insert_data()} does. It
 upserts the rows of a table that holds fewer rows than its data.table.
 
 Before the session, csdb runs the first steps of \code{$insert_data()} on
-every table, in order. It creates a table that does not exist, skips a table
-whose data.table is \code{NULL} or has no rows, and runs the validator of the
-field contents. A validator that fails stops the call before any load.
+every table, in order. It creates a table that does not exist. It skips a
+table whose data.table is \code{NULL} or has no rows, so the script has no
+\code{\\copy} for that table. It runs the validator of the field contents on
+the other tables. A validator that fails stops the call before any load.
 
 The session needs every table to have the same connection configuration,
 and a driver whose loads use \code{psql}. Otherwise

@@ -3,31 +3,43 @@
 # table. Before 2026.10.13 a caller called $insert_data() once for each table,
 # and each call started its own psql process and its own login.
 #
-# The tests put a fake psql first on PATH. It records its arguments and the
-# script that -f names, and prints one "COPY <n>" for each \copy line. SQLite
-# tables stand in for the PostgreSQL tables: a SQLite connection answers
-# dbListFields(), and loads_through_psql() is mocked to TRUE. The fake is a
-# POSIX shell script, so these tests skip on Windows and run in CI on Linux.
+# The tests put a fake psql first on PATH. It records its arguments, the
+# script that -f names and the value of PGPASSWORD, and it plays the part of
+# psql and the server for the lines of the script. SQLite tables stand in for
+# the PostgreSQL tables: a SQLite connection answers dbListFields(), and
+# loads_through_psql() is mocked to TRUE. The fake is a POSIX shell script,
+# so these tests skip on Windows and run in CI on Linux.
 
 # FAKE_MODE is a comma-separated list: the first psql run uses the first
 # entry, the second run the second, and the last entry repeats.
 #
-#   ok       one "COPY <rows>" line for each \copy line.
-#   short2   as ok, but the count for the second \copy is one row short.
-#   dupkey2  "COPY <rows>" for the first \copy, then the duplicate-key error
-#            that psql 14.24 printed for the second \copy of a session
-#            against PostgreSQL 14.24 on 2026-10-12, and exit status 3.
-#   lock2    as dupkey2, with the error of a lock wait longer than
-#            lock_timeout, SQLSTATE 55P03.
-#   proxy    the error line of a login that a token proxy refuses.
+#   ok           ROW_COUNT and the "COPY <n>" line equal the lines of the
+#                load file of each \copy.
+#   short2       the second \copy stores one row less: ROW_COUNT and the
+#                "COPY <n>" line are both one short.
+#   tagshort2    ROW_COUNT is right, but the "COPY <n>" line of the second
+#                \copy is one short.
+#   dupkey2      "COPY <rows>" for the first \copy, then the duplicate-key
+#                error that psql 14.24 printed for the second \copy of a
+#                session against PostgreSQL 14.24 on 2026-10-12, and exit 3.
+#   lock2        as dupkey2, with the error of a lock wait longer than
+#                lock_timeout, SQLSTATE 55P03.
+#   proxy        the error line of a login that a token proxy refuses.
+#   echo_secret  prints every argument and PGPASSWORD as connection errors.
+#   sleep        waits 5 s, then runs as ok.
 #
-# The fake prints "SET" for a line that starts with "SET ", as psql does. A -c
-# argument is read as a script of one line, so the fake also serves the
-# single-table load of load_data_infile().
+# The fake runs the row count check of the script as psql and the server do.
+# After a "SELECT :ROW_COUNT ... = <n> ..." line whose <n> differs from the
+# rows of the \copy before it, it prints the \echo line of the \else branch
+# with :csdb_rows replaced, then the RAISE EXCEPTION text of the DO line as a
+# P0001 error, and exits 3. It ignores the other lines of the check. It
+# prints "SET" for a line that starts with "SET ". A -c argument is read as a
+# script of one line, so the fake also serves load_data_infile().
 fake_psql_session <- c(
   "#!/bin/sh",
   "{ printf '%s\\n' psql; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; printf '%s\\n' '---'; } >> \"$FAKE_LOG\"",
   "n=$(( $(cat \"$FAKE_LOG.n\" 2>/dev/null || echo 0) + 1 )); echo \"$n\" > \"$FAKE_LOG.n\"",
+  "printf '%s\\n' \"$PGPASSWORD\" > \"$FAKE_LOG.pw.$n\"",
   "mode=$(printf '%s\\n' \"$FAKE_MODE\" | cut -s -d, -f\"$n\")",
   "if [ -z \"$mode\" ]; then mode=$(printf '%s\\n' \"$FAKE_MODE\" | awk -F, '{print $NF}'); fi",
   "script=\"$FAKE_LOG.script.$n\"; : > \"$script\"; prev=''",
@@ -40,23 +52,51 @@ fake_psql_session <- c(
   "  echo 'psql: error: connection to server at \"pg-auth\" (10.0.0.9), port 5432 failed: ERROR:  internal proxy error' >&2",
   "  exit 2",
   "fi",
-  "i=0",
+  "if [ \"$mode\" = echo_secret ]; then",
+  "  for a in \"$@\"; do echo \"psql: error: $a\" >&2; done",
+  "  echo \"psql: error: PGPASSWORD=$PGPASSWORD\" >&2",
+  "  exit 2",
+  "fi",
+  "if [ \"$mode\" = sleep ]; then sleep 5; fi",
+  "i=0; rc=0; failing=0",
   "while IFS= read -r line; do",
   "  if [ \"${line#SET }\" != \"$line\" ]; then echo SET; continue; fi",
+  "  if [ \"${line#SELECT :ROW_COUNT}\" != \"$line\" ]; then",
+  "    want=$(printf '%s' \"$line\" | sed -n 's/.*:ROW_COUNT = \\([0-9]*\\) AS csdb_rows_ok.*/\\1/p')",
+  "    if [ \"$rc\" != \"$want\" ]; then failing=1; fi",
+  "    continue",
+  "  fi",
+  "  if [ \"$failing\" = 1 ]; then",
+  "    case \"$line\" in",
+  "      *'echo csdb: '*) printf '%s\\n' \"$line\" | sed -e 's/^.echo //' -e \"s/:csdb_rows/$rc/\" ;;",
+  "      'DO '*)",
+  "        msg=$(printf '%s' \"$line\" | sed -n \"s/.*RAISE EXCEPTION '\\(.*\\)'; END.*/\\1/p\")",
+  "        echo \"psql:$script:9: ERROR:  P0001: $msg\" >&2",
+  "        exit 3 ;;",
+  "    esac",
+  "    continue",
+  "  fi",
+  "  case \"$line\" in",
+  "    *'(FORMAT CSV'*) ;;",
+  "    *) continue ;;",
+  "  esac",
   "  i=$((i + 1))",
   "  file=$(printf '%s' \"$line\" | sed -n \"s/.* from '\\(.*\\)' (FORMAT .*/\\1/p\" | sed \"s/''/'/g\")",
   "  rows=$(wc -l < \"$file\" | tr -d ' ')",
-  "  if [ \"$mode\" = short2 ] && [ $i -eq 2 ]; then rows=$((rows - 1)); fi",
+  "  rc=$rows",
+  "  if [ \"$mode\" = short2 ] && [ $i -eq 2 ]; then rc=$((rows - 1)); fi",
+  "  tag=$rc",
+  "  if [ \"$mode\" = tagshort2 ] && [ $i -eq 2 ]; then tag=$((rows - 1)); fi",
   "  if [ \"$mode\" = dupkey2 ] && [ $i -eq 2 ]; then",
-  "    echo \"psql:$script:$((i + 1)): ERROR:  23505: duplicate key value violates unique constraint \\\"pk_t2\\\"\" >&2",
+  "    echo \"psql:$script:9: ERROR:  23505: duplicate key value violates unique constraint \\\"pk_t2\\\"\" >&2",
   "    echo 'DETAIL:  Key (id)=(1) already exists.' >&2",
   "    exit 3",
   "  fi",
   "  if [ \"$mode\" = lock2 ] && [ $i -eq 2 ]; then",
-  "    echo \"psql:$script:$((i + 1)): ERROR:  55P03: canceling statement due to lock timeout\" >&2",
+  "    echo \"psql:$script:9: ERROR:  55P03: canceling statement due to lock timeout\" >&2",
   "    exit 3",
   "  fi",
-  "  echo \"COPY $rows\"",
+  "  echo \"COPY $tag\"",
   "done < \"$script\"",
   "exit 0"
 )
@@ -87,9 +127,27 @@ fake_psql_runs <- function(log) {
   return(Map(function(s, e) lines[(s + 1):(e - 1)], starts, ends))
 }
 
-# The script that psql run `n` received.
+# The arguments of psql run `n`, or character(0) when there was no such run.
+fake_psql_args <- function(log, n) {
+  runs <- fake_psql_runs(log)
+  if (length(runs) < n) {
+    return(character(0))
+  }
+  return(runs[[n]])
+}
+
+# The script that psql run `n` received, or character(0).
 fake_psql_script <- function(log, n) {
-  return(readLines(paste0(log, ".script.", n)))
+  f <- paste0(log, ".script.", n)
+  if (!file.exists(f)) {
+    return(character(0))
+  }
+  return(readLines(f))
+}
+
+# The \copy lines of a script, in order.
+copy_lines <- function(script) {
+  return(grep("(FORMAT CSV", script, fixed = TRUE, value = TRUE))
 }
 
 local_session_waits <- function(.local_envir = parent.frame()) {
@@ -127,17 +185,36 @@ capture_conditions <- function(expr) {
   ))
 }
 
-session_secret <- "s3cret-Pw"
+session_secret <- "s3cret-Pw-SENTINEL"
+
+# A subclass whose $insert_data() and $upsert_data() take one more argument,
+# `marker`, and record every value that they receive.
+Recording <- R6::R6Class(
+  "Recording",
+  inherit = DBTable_v9,
+  public = list(
+    seen_insert = character(),
+    seen_upsert = character(),
+    insert_data = function(newdata, ..., marker = "unset") {
+      self$seen_insert <- c(self$seen_insert, marker)
+      return(super$insert_data(newdata, ...))
+    },
+    upsert_data = function(newdata, ..., marker = "unset") {
+      self$seen_upsert <- c(self$seen_upsert, marker)
+      return(super$upsert_data(newdata, ...))
+    }
+  )
+)
 
 # Three SQLite tables t1, t2 and t3 on one shared connection. Each table
 # exists before the test starts, and the connection carries the settings that
 # the psql command line reads.
-three_tables <- function(.local_envir = parent.frame()) {
+three_tables <- function(class = DBTable_v9, .local_envir = parent.frame()) {
   cfg <- sqlite_dbconfig(.local_envir = .local_envir)
   conn <- sqlite_connection(cfg)
   withr::defer(conn$disconnect(), envir = .local_envir)
   tables <- lapply(c("t1", "t2", "t3"), function(name) {
-    tab <- DBTable_v9$new(
+    tab <- class$new(
       dbconfig = cfg,
       table_name = name,
       field_types = c(id = "INTEGER", x = "TEXT"),
@@ -184,6 +261,39 @@ insert_as_postgres <- function(tables, data, ...) {
   ))
 }
 
+# The first load of table t2 fails as the PostgreSQL load fails on a
+# duplicate key. Every other load is the real SQLite load. Returns the
+# environment whose `tables` lists every table that a load reached.
+local_t2_duplicate_once <- function(.local_envir = parent.frame()) {
+  real <- load_data_infile
+  per_table <- new.env()
+  per_table$tables <- character()
+  local_mocked_bindings(
+    load_data_infile = function(connection, dbconfig = NULL, table, ...) {
+      name <- if (methods::is(table, "Id")) table@name[["table"]] else table
+      per_table$tables <- c(per_table$tables, name)
+      if (identical(name, "t2") && sum(per_table$tables == "t2") == 1L) {
+        stop(errorCondition(
+          "Loading data into table t2 failed (mocked).",
+          class = c("csdb_load_duplicate_key", "csdb_load_error"),
+          table = "t2",
+          tool = "psql \\copy",
+          attempts = 1L,
+          failure_class = "duplicate key"
+        ))
+      }
+      return(real(
+        connection = connection,
+        dbconfig = dbconfig,
+        table = table,
+        ...
+      ))
+    },
+    .env = .local_envir
+  )
+  return(per_table)
+}
+
 test_that("insert_data_many() loads 3 tables with one psql run, one \\copy each, in order", {
   log <- local_fake_psql("ok")
   waits <- local_session_waits()
@@ -191,23 +301,59 @@ test_that("insert_data_many() loads 3 tables with one psql run, one \\copy each,
   got <- capture_conditions(insert_as_postgres(tables, three_data()))
   expect_null(got$error)
 
-  runs <- fake_psql_runs(log)
-  expect_length(runs, 1)
-  args <- runs[[1]]
+  expect_length(fake_psql_runs(log), 1)
+  args <- fake_psql_args(log, 1)
   expect_true("--single-transaction" %in% args || "-1" %in% args)
   at <- match(c("ON_ERROR_STOP=1", "VERBOSITY=verbose"), args)
   expect_false(anyNA(at))
   expect_identical(args[at - 1L], c("-v", "-v"))
   expect_true("-f" %in% args)
   expect_false("-c" %in% args)
-  expect_false(any(grepl(session_secret, args, fixed = TRUE)))
 
-  script <- fake_psql_script(log, 1)
-  expect_length(script, 4)
-  expect_match(script[[2]], "^\\\\copy `t1` \\(`id`, `x`\\) from '")
-  expect_match(script[[3]], "^\\\\copy `t2` \\(`id`, `x`\\) from '")
-  expect_match(script[[4]], "^\\\\copy `t3` \\(`id`, `x`\\) from '")
+  copies <- copy_lines(fake_psql_script(log, 1))
+  expect_length(copies, 3)
+  expect_match(copies, "^\\\\copy `t[123]` \\(`id`, `x`\\) from '")
+  expect_identical(substr(copies, 8, 9), c("t1", "t2", "t3"))
   expect_length(waits$waits, 0)
+})
+
+test_that("the session script checks the row count of each table inside the transaction", {
+  log <- local_fake_psql("ok")
+  tables <- three_tables()
+  data <- three_data()
+  data[[3]] <- data.table::data.table(id = 1:3, x = c("c1", "c2", "c3"))
+  got <- capture_conditions(insert_as_postgres(tables, data))
+  expect_null(got$error)
+  script <- fake_psql_script(log, 1)
+  at <- grep("(FORMAT CSV", script, fixed = TRUE)
+  expect_length(at, 3)
+  check <- function(n, k) {
+    return(c(
+      sprintf(
+        "SELECT :ROW_COUNT AS csdb_rows, :ROW_COUNT = %d AS csdb_rows_ok \\gset",
+        n
+      ),
+      "\\if :csdb_rows_ok",
+      "\\else",
+      sprintf(
+        "\\echo csdb: table number %d of the session stored :csdb_rows rows, and csdb sent %d rows.",
+        k,
+        n
+      ),
+      sprintf(
+        "DO $csdb$ BEGIN RAISE EXCEPTION 'csdb: table `t%d` did not store the %d rows that csdb sent. The server stored no row in any table.'; END $csdb$;",
+        k,
+        n
+      ),
+      "\\endif"
+    ))
+  }
+  # at[k] is NA when a \copy line is missing, so the check fails and does not
+  # error.
+  expect_identical(script[at[1] + 1:6], check(2L, 1L))
+  expect_identical(script[at[2] + 1:6], check(2L, 2L))
+  expect_identical(script[at[3] + 1:6], check(3L, 3L))
+  expect_length(script, 1 + 3 * 7)
 })
 
 test_that("the session script sets lock_timeout to 60 s on its first line", {
@@ -216,7 +362,10 @@ test_that("the session script sets lock_timeout to 60 s on its first line", {
   got <- capture_conditions(insert_as_postgres(tables, three_data()))
   expect_null(got$error)
   expect_identical(load_lock_timeout_seconds, 60)
-  expect_identical(fake_psql_script(log, 1)[[1]], "SET lock_timeout = '60s';")
+  expect_identical(
+    utils::head(fake_psql_script(log, 1), 1),
+    "SET lock_timeout = '60s';"
+  )
 })
 
 test_that("insert_data_many() runs the whole session again after a lock timeout", {
@@ -242,8 +391,28 @@ test_that("insert_data_many() runs the whole session again after a lock timeout"
   )
 })
 
-test_that("insert_data_many() stops when psql reports a wrong count for table 2", {
+test_that("a short row count of table 2 stops the session inside the transaction", {
   log <- local_fake_psql("short2")
+  waits <- local_session_waits()
+  tables <- three_tables()
+  got <- capture_conditions(insert_as_postgres(tables, three_data()))
+  expect_s3_class(got$error, "csdb_load_other")
+  expect_match(
+    got$message,
+    "ERROR:  P0001: csdb: table `t2` did not store the 2 rows that csdb sent. The server stored no row in any table.",
+    fixed = TRUE
+  )
+  expect_match(
+    got$message,
+    "csdb: table number 2 of the session stored 1 rows, and csdb sent 2 rows.",
+    fixed = TRUE
+  )
+  expect_length(fake_psql_runs(log), 1)
+  expect_length(waits$waits, 0)
+})
+
+test_that("a short COPY line of table 2 still stops the call after psql exits", {
+  log <- local_fake_psql("tagshort2")
   waits <- local_session_waits()
   tables <- three_tables()
   got <- capture_conditions(insert_as_postgres(tables, three_data()))
@@ -270,7 +439,7 @@ test_that("insert_data_many() runs the whole session again after a proxy refusal
   expect_null(got$error)
   expect_length(fake_psql_runs(log), 2)
   expect_identical(waits$waits, 2)
-  expect_length(fake_psql_script(log, 1), 4)
+  expect_length(copy_lines(fake_psql_script(log, 1)), 3)
   expect_identical(fake_psql_script(log, 1), fake_psql_script(log, 2))
   expect_match(
     got$messages,
@@ -278,6 +447,47 @@ test_that("insert_data_many() runs the whole session again after a proxy refusal
     fixed = TRUE,
     all = FALSE
   )
+})
+
+test_that("the password reaches psql through PGPASSWORD only, and no message or script holds it", {
+  log <- local_fake_psql("echo_secret")
+  waits <- local_session_waits()
+  tables <- three_tables()
+  got <- capture_conditions(insert_as_postgres(tables, three_data()))
+  # The echoed lines are connection errors that csdb does not retry.
+  expect_s3_class(got$error, "csdb_load_other")
+  expect_length(waits$waits, 0)
+  runs <- fake_psql_runs(log)
+  expect_length(runs, 1)
+  for (n in seq_along(runs)) {
+    expect_identical(readLines(paste0(log, ".pw.", n)), session_secret)
+    expect_false(any(grepl(session_secret, runs[[n]], fixed = TRUE)))
+    expect_false(any(grepl(
+      session_secret,
+      fake_psql_script(log, n),
+      fixed = TRUE
+    )))
+  }
+  expect_false(grepl(session_secret, got$message, fixed = TRUE))
+  expect_false(any(grepl(session_secret, got$messages, fixed = TRUE)))
+  # The fake printed the password, and the message holds its redacted line.
+  expect_match(got$message, "PGPASSWORD=***", fixed = TRUE)
+})
+
+test_that("load_timeout bounds the psql session", {
+  log <- local_fake_psql("sleep")
+  waits <- local_session_waits()
+  tables <- three_tables()
+  t0 <- Sys.time()
+  got <- capture_conditions(
+    insert_as_postgres(tables, three_data(), load_timeout = 1)
+  )
+  seconds <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
+  expect_s3_class(got$error, "csdb_load_ambiguous")
+  expect_match(got$message, "timed out after 1 s", fixed = TRUE)
+  expect_length(fake_psql_runs(log), 1)
+  expect_length(waits$waits, 0)
+  expect_lt(seconds, 4)
 })
 
 test_that("insert_data_many() skips a table whose data has no rows", {
@@ -288,10 +498,9 @@ test_that("insert_data_many() skips a table whose data has no rows", {
   got <- capture_conditions(insert_as_postgres(tables, data))
   expect_null(got$error)
   expect_length(fake_psql_runs(log), 1)
-  script <- fake_psql_script(log, 1)
-  expect_length(script, 3)
-  expect_match(script[[2]], "^\\\\copy `t1` ")
-  expect_match(script[[3]], "^\\\\copy `t3` ")
+  copies <- copy_lines(fake_psql_script(log, 1))
+  expect_length(copies, 2)
+  expect_identical(substr(copies, 8, 9), c("t1", "t3"))
 })
 
 test_that("insert_data_many() stops on a duplicate key without confirm_insert_via_nrow", {
@@ -314,33 +523,8 @@ test_that("insert_data_many(confirm_insert_via_nrow = TRUE) inserts table by tab
   data[[2]] <- data.table::data.table(id = c(1L, 3L), x = c("new1", "new3"))
 
   # The session goes to the fake psql. The per-table loads after it are the
-  # real SQLite loads, except the first load of t2, which fails as the
-  # PostgreSQL load fails on a duplicate key.
-  real <- load_data_infile
-  per_table <- new.env()
-  per_table$tables <- character()
-  local_mocked_bindings(
-    load_data_infile = function(connection, dbconfig = NULL, table, ...) {
-      name <- if (methods::is(table, "Id")) table@name[["table"]] else table
-      per_table$tables <- c(per_table$tables, name)
-      if (identical(name, "t2") && sum(per_table$tables == "t2") == 1L) {
-        stop(errorCondition(
-          "Loading data into table t2 failed (mocked).",
-          class = c("csdb_load_duplicate_key", "csdb_load_error"),
-          table = "t2",
-          tool = "psql \\copy",
-          attempts = 1L,
-          failure_class = "duplicate key"
-        ))
-      }
-      return(real(
-        connection = connection,
-        dbconfig = dbconfig,
-        table = table,
-        ...
-      ))
-    }
-  )
+  # real SQLite loads, except the first load of t2.
+  per_table <- local_t2_duplicate_once()
   got <- capture_conditions(with_mocked_bindings(
     insert_data_many(tables, data, confirm_insert_via_nrow = TRUE),
     loads_through_psql = function(connection) TRUE
@@ -350,7 +534,7 @@ test_that("insert_data_many(confirm_insert_via_nrow = TRUE) inserts table by tab
   # t1, then t2, then the staging table of the upsert of t2, then t3.
   expect_length(per_table$tables, 4)
   expect_identical(per_table$tables[c(1, 2, 4)], c("t1", "t2", "t3"))
-  expect_match(per_table$tables[[3]], "^tmp")
+  expect_match(per_table$tables[3], "^tmp")
   expect_identical(rows_of(tables[[1]]), c("1 a1", "2 a2"))
   expect_identical(rows_of(tables[[2]]), c("1 new1", "3 new3"))
   expect_identical(rows_of(tables[[3]]), c("1 c1", "2 c2"))
@@ -392,6 +576,60 @@ test_that("insert_data_many(confirm_insert_via_nrow = TRUE) upserts each table t
   )
 })
 
+test_that("on the session path, ... reaches the upsert of confirm_insert_via_nrow", {
+  log <- local_fake_psql("ok")
+  tables <- three_tables(Recording)
+  got <- capture_conditions(with_mocked_bindings(
+    insert_data_many(
+      tables,
+      three_data(),
+      confirm_insert_via_nrow = TRUE,
+      marker = "passed"
+    ),
+    loads_through_psql = function(connection) TRUE
+  ))
+  expect_null(got$error)
+  expect_length(fake_psql_runs(log), 1)
+  for (tab in tables) {
+    expect_identical(tab$seen_insert, character())
+    expect_identical(tab$seen_upsert, "passed")
+  }
+})
+
+test_that("on the session path, ... reaches each insert_data() after a duplicate key", {
+  log <- local_fake_psql("dupkey2")
+  tables <- three_tables(Recording)
+  per_table <- local_t2_duplicate_once()
+  got <- capture_conditions(with_mocked_bindings(
+    insert_data_many(
+      tables,
+      three_data(),
+      confirm_insert_via_nrow = TRUE,
+      marker = "passed"
+    ),
+    loads_through_psql = function(connection) TRUE
+  ))
+  expect_null(got$error)
+  expect_length(fake_psql_runs(log), 1)
+  for (tab in tables) {
+    expect_identical(tab$seen_insert, "passed")
+  }
+})
+
+test_that("an argument in ... that the methods do not take stops before any load", {
+  log <- local_fake_psql("ok")
+  tables <- three_tables()
+  got <- capture_conditions(
+    insert_as_postgres(tables, three_data(), nonsense = 1)
+  )
+  expect_match(
+    got$message,
+    "insert_data_many(): $insert_data() of table t1 takes no argument nonsense.",
+    fixed = TRUE
+  )
+  expect_length(fake_psql_runs(log), 0)
+})
+
 test_that("insert_data_many() inserts table by table on a driver without psql", {
   log <- local_fake_psql("ok")
   tables <- three_tables()
@@ -427,17 +665,6 @@ test_that("insert_data_many() inserts table by table when the tables differ in c
 # The remaining tests need no fake psql, so they also run on Windows.
 
 test_that("insert_data_many() passes ... to insert_data() of each table", {
-  Recording <- R6::R6Class(
-    "Recording",
-    inherit = DBTable_v9,
-    public = list(
-      seen = NULL,
-      insert_data = function(newdata, ..., marker = "unset") {
-        self$seen <- marker
-        return(super$insert_data(newdata, ...))
-      }
-    )
-  )
   cfg <- sqlite_dbconfig()
   conn <- sqlite_connection(cfg)
   withr::defer(conn$disconnect())
@@ -451,9 +678,10 @@ test_that("insert_data_many() passes ... to insert_data() of each table", {
     ))
   })
   data <- three_data()[1:2]
-  suppressMessages(insert_data_many(tables, data, marker = "passed"))
-  expect_identical(tables[[1]]$seen, "passed")
-  expect_identical(tables[[2]]$seen, "passed")
+  got <- capture_conditions(insert_data_many(tables, data, marker = "passed"))
+  expect_null(got$error)
+  expect_identical(tables[[1]]$seen_insert, "passed")
+  expect_identical(tables[[2]]$seen_insert, "passed")
   expect_identical(rows_of(tables[[2]]), c("1 b1", "2 b2"))
 })
 
@@ -474,6 +702,30 @@ test_that("insert_data_many() rejects tables and newdata that do not pair up", {
     "one data.table for each table"
   )
   expect_null(insert_data_many(list(), list()))
+})
+
+test_that("an unnamed argument in ... stops before any load", {
+  cfg <- sqlite_dbconfig()
+  tab <- DBTable_v9$new(
+    dbconfig = cfg,
+    table_name = "t1",
+    field_types = c(id = "INTEGER", x = "TEXT"),
+    keys = "id"
+  )
+  withr::defer(tab$disconnect())
+  got <- capture_conditions(
+    insert_data_many(list(tab), three_data()[1], FALSE, TRUE, 3600, 1)
+  )
+  expect_match(
+    got$message,
+    "insert_data_many(): every argument in ... MUST have a name.",
+    fixed = TRUE
+  )
+})
+
+test_that("csdb exports insert_data_many()", {
+  ns <- readLines(system.file("NAMESPACE", package = "csdb"))
+  expect_true("export(insert_data_many)" %in% ns)
 })
 
 test_that("loads_through_psql() is TRUE for the PostgreSQL class and FALSE for SQLite", {
@@ -503,4 +755,7 @@ test_that("classify_load_failure() reads the SQLSTATE after the prefix of a psql
   expect_identical(classify_load_failure("psql", lost), "ambiguous")
   refused <- "psql: error: connection to server at \"h\" (10.0.0.9), port 5432 failed: Connection refused"
   expect_identical(classify_load_failure("psql", refused), "transient")
+  # psql 14.24 against PostgreSQL 14.24, the row count check of a session.
+  check <- "psql:/tmp/s.sql:10: ERROR:  P0001: csdb: count check failed"
+  expect_identical(classify_load_failure("psql", check), "other")
 })

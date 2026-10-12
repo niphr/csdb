@@ -15,15 +15,23 @@
 #' @description
 #' Inserts one data.table into each table of a list. On PostgreSQL, one
 #' \code{psql} session loads every table in one transaction, so the call stores
-#' every row or no row.
+#' every row or no row. The one exception is a duplicate key with
+#' \code{confirm_insert_via_nrow = TRUE}: csdb then inserts table by table.
 #'
 #' @details
 #' On PostgreSQL, csdb writes one load file for each table and starts
 #' \code{psql} once. That \code{psql} runs a script of one \code{\\copy} for
 #' each table, with \code{--single-transaction} and \code{-v ON_ERROR_STOP=1}.
-#' The insert therefore needs one login. \code{$insert_data()} on each table
-#' needs one login for each table. csdb compares the \code{COPY <n>} that
-#' \code{psql} prints for each table with the rows that it sent to that table.
+#' The load therefore needs one \code{psql} login. \code{$insert_data()} on
+#' each table needs one \code{psql} login for each table. A caller that records
+#' the insert afterwards, as the last-updated bookkeeping of cs9 does, needs
+#' one more login for that write.
+#'
+#' After each \code{\\copy}, the script compares the row count that \code{psql}
+#' reports with the rows that csdb sent to that table. A difference raises an
+#' error before the commit, so the server stores no row in any table. After
+#' \code{psql} exits, csdb also compares each \code{COPY <n>} line with the
+#' rows that it sent.
 #'
 #' The whole call is one transaction. Each \code{\\copy} takes a ROW EXCLUSIVE
 #' lock on its table, and the transaction holds every one of these locks until
@@ -54,7 +62,9 @@
 #' error of class \code{csdb_load_duplicate_key}. With
 #' \code{confirm_insert_via_nrow = TRUE}, it calls
 #' \code{$insert_data(confirm_insert_via_nrow = TRUE)} on each table in turn.
-#' That call upserts the rows of a table that stops on a duplicate key.
+#' That call upserts the rows of a table that stops on a duplicate key. Each
+#' table then has its own transaction, so a later failure leaves the rows in
+#' the tables before it.
 #'
 #' After a session that succeeds with \code{confirm_insert_via_nrow = TRUE},
 #' csdb counts the rows of each table, as \code{$insert_data()} does. It
@@ -62,9 +72,9 @@
 #'
 #' Before the session, csdb runs the first steps of \code{$insert_data()} on
 #' every table, in order. It creates a table that does not exist. It skips a
-#' table whose data.table is \code{NULL} or has no rows. It runs the validator
-#' of the field contents on the other tables. A validator that fails stops the
-#' call before any load.
+#' table whose data.table is \code{NULL} or has no rows, so the script has no
+#' \code{\\copy} for that table. It runs the validator of the field contents on
+#' the other tables. A validator that fails stops the call before any load.
 #'
 #' The session needs every table to have the same connection configuration,
 #' and a driver whose loads use \code{psql}. Otherwise
@@ -83,9 +93,14 @@
 #'   MAY run. csdb then kills \code{psql} and stops with an error of class
 #'   \code{csdb_load_ambiguous}, and it does not run the session again. The
 #'   per-table path passes it to \code{$insert_data()}.
-#' @param ... More arguments to \code{$insert_data()} and
-#'   \code{$upsert_data()} of each table, for a subclass of \code{DBTable_v9}
-#'   whose methods take more arguments.
+#' @param ... Named arguments for a subclass of \code{DBTable_v9} whose
+#'   \code{$insert_data()} and \code{$upsert_data()} take more arguments. csdb
+#'   passes them to every call of these two methods that it makes. It makes
+#'   these calls on the per-table path, after a duplicate key, and for the
+#'   upsert of \code{confirm_insert_via_nrow}. The \code{psql} session calls neither
+#'   method, so an override of \code{$insert_data()} in a subclass does not run
+#'   for the rows that the session loads. csdb stops before any load when one
+#'   of the two methods of a table does not take an argument.
 #' @return \code{NULL}, invisibly.
 #' @examples
 #' \donttest{
@@ -121,6 +136,7 @@ insert_data_many <- function(
   ...
 ) {
   check_insert_many_arguments(tables, newdata)
+  check_method_arguments(tables, names(list(...)), length(list(...)))
   if (length(tables) == 0L) {
     return(invisible(NULL))
   }
@@ -221,6 +237,50 @@ check_insert_many_arguments <- function(tables, newdata) {
     )
   }
   return(invisible(NULL))
+}
+
+# Stop before any load unless $insert_data() and $upsert_data() of every table
+# take each argument in `...`. csdb passes `...` to every call of these two
+# methods that it makes, on both paths. On the session path csdb calls them
+# only after a duplicate key and for the upsert of confirm_insert_via_nrow, so
+# a misspelt argument would otherwise pass unnoticed there.
+check_method_arguments <- function(tables, extra, n) {
+  if (n == 0L) {
+    return(invisible(NULL))
+  }
+  if (is.null(extra) || any(!nzchar(extra))) {
+    stop(
+      "insert_data_many(): every argument in ... MUST have a name.",
+      call. = FALSE
+    )
+  }
+  for (tab in tables) {
+    for (method in c("insert_data", "upsert_data")) {
+      stop_on_unknown_arguments(tab, method, extra)
+    }
+  }
+  return(invisible(NULL))
+}
+
+# Stop when $<method>() of `tab` takes neither `...` nor every name in
+# `extra`.
+stop_on_unknown_arguments <- function(tab, method, extra) {
+  takes <- names(formals(tab[[method]]))
+  unknown <- setdiff(extra, takes)
+  if ("..." %in% takes || length(unknown) == 0) {
+    return(invisible(NULL))
+  }
+  stop(
+    "insert_data_many(): $",
+    method,
+    "() of table ",
+    tab$table_name,
+    " takes no argument ",
+    paste0(unknown, collapse = ", "),
+    ". csdb passes the arguments in ... to $insert_data() and ",
+    "$upsert_data() of each table, so both methods MUST take them.",
+    call. = FALSE
+  )
 }
 
 # The per-table path: $insert_data() on each table in turn. `...` goes to each
@@ -390,9 +450,12 @@ insert_confirm <- function(
 # single-table load, and one script with one \copy for each table, in order.
 # --single-transaction wraps the script in BEGIN and COMMIT, and
 # ON_ERROR_STOP=1 makes psql stop at the first error. The server then rolls
-# back every \copy before it. run_checked_load() checks one "COPY <n>" for
-# each table, and it classifies and retries the whole session as it does one
-# table.
+# back every \copy before it. After each \copy, pg_row_count_check() compares
+# the stored rows with the rows sent, inside the transaction. In the first
+# version of this function only run_checked_load() compared them, after psql
+# had committed, so a short count stopped the call with the rows stored.
+# run_checked_load() still checks one "COPY <n>" for each table, and it
+# classifies and retries the whole session as it does one table.
 #
 # The first line of the script sets lock_timeout to load_lock_timeout_seconds.
 # A longer wait for a lock fails with SQLSTATE 55P03, which
@@ -410,6 +473,14 @@ psql_load_session <- function(
 ) {
   files <- unlist(files)
   on.exit(unlink(files), add = TRUE)
+  table_text <- vapply(
+    tables,
+    function(x) {
+      return(as.character(DBI::dbQuoteIdentifier(connection, x)))
+    },
+    character(1)
+  )
+  rows_sent <- vapply(dts, nrow, integer(1))
   copies <- vapply(
     seq_along(tables),
     function(i) {
@@ -430,22 +501,62 @@ psql_load_session <- function(
   con <- file(script, open = "wb")
   lines <- c(
     sprintf("SET lock_timeout = '%ds';", as.integer(load_lock_timeout_seconds)),
-    copies
+    unlist(lapply(seq_along(copies), function(i) {
+      return(c(
+        copies[[i]],
+        pg_row_count_check(table_text[[i]], rows_sent[[i]], i)
+      ))
+    }))
   )
   tryCatch(writeLines(lines, con, sep = "\n"), finally = close(con))
 
   return(run_psql_load(
     dbconfig = dbconfig,
     command = c("-f", script),
-    table = vapply(
-      tables,
-      function(x) {
-        return(as.character(DBI::dbQuoteIdentifier(connection, x)))
-      },
-      character(1)
-    ),
-    rows_sent = vapply(dts, nrow, integer(1)),
+    table = table_text,
+    rows_sent = rows_sent,
     load_timeout = load_timeout,
     options = c("-v", "ON_ERROR_STOP=1", "--single-transaction")
+  ))
+}
+
+# The psql lines that check one table inside the transaction, after its \copy.
+#
+# psql sets ROW_COUNT to the number of rows that the \copy stored. psql 14.24
+# against PostgreSQL 14.24 printed "ROW_COUNT=2" after a \copy of 3 rows of
+# which a trigger skipped 1 (2026-10-12). \gset stores the comparison in
+# csdb_rows_ok, and \if runs the DO block only when the counts differ. Its
+# RAISE EXCEPTION stops the script under ON_ERROR_STOP=1 before COMMIT, so
+# the server rolls back every table. The error has SQLSTATE P0001, which
+# classify_psql_failure() classes as "other": csdb does not retry it.
+#
+# psql does not replace :csdb_rows inside the DO block, so \echo prints the
+# stored count first. A quote or a % in the table name is doubled, because
+# the name sits in a SQL string that RAISE reads as a format.
+pg_row_count_check <- function(table_text, rows_sent, i) {
+  name <- gsub(
+    "%",
+    "%%",
+    gsub("'", "''", table_text, fixed = TRUE),
+    fixed = TRUE
+  )
+  return(c(
+    sprintf(
+      "SELECT :ROW_COUNT AS csdb_rows, :ROW_COUNT = %d AS csdb_rows_ok \\gset",
+      as.integer(rows_sent)
+    ),
+    "\\if :csdb_rows_ok",
+    "\\else",
+    sprintf(
+      "\\echo csdb: table number %d of the session stored :csdb_rows rows, and csdb sent %d rows.",
+      as.integer(i),
+      as.integer(rows_sent)
+    ),
+    sprintf(
+      "DO $csdb$ BEGIN RAISE EXCEPTION 'csdb: table %s did not store the %d rows that csdb sent. The server stored no row in any table.'; END $csdb$;",
+      name,
+      as.integer(rows_sent)
+    ),
+    "\\endif"
   ))
 }
