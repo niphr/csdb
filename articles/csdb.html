@@ -23,7 +23,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.9</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.12</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -50,6 +50,7 @@
     <li><a class="external-link dropdown-item" href="https://niphr.github.io/csalert/">csalert — surveillance alerts</a></li>
     <li><a class="external-link dropdown-item" href="https://niphr.github.io/csdata/">csdata — structural data</a></li>
     <li><a class="dropdown-item" href="https://niphr.github.io/csdb/">csdb — database access</a></li>
+    <li><a class="external-link dropdown-item" href="https://niphr.github.io/csdocs/">csdocs — package documentation</a></li>
     <li><a class="external-link dropdown-item" href="https://niphr.github.io/csmaps/">csmaps — maps of Norway</a></li>
     <li><a class="external-link dropdown-item" href="https://niphr.github.io/csstyle/">csstyle — output styling</a></li>
     <li><a class="external-link dropdown-item" href="https://niphr.github.io/cstidy/">cstidy — tidy surveillance data</a></li>
@@ -259,11 +260,11 @@ index first, and then reports that it removed 0 rows.
 <span><span class="co">#&gt; <span style="color: #BBBBBB; background-color: #BB0000;">(disconnected)</span></span></span>
 <span><span class="co"><span style="color: #BBBBBB; background-color: #BB0000;">#&gt; </span></span></span>
 <span><span class="co"><span style="color: #BBBBBB; background-color: #BB0000;">#&gt; </span>Driver:              SQLite </span></span>
-<span><span class="co">#&gt; File:                /tmp/RtmpCRN1oy/file1e601b7c21df.sqlite</span></span>
+<span><span class="co">#&gt; File:                /tmp/RtmpuLkNuM/file1f044d3b4fcd.sqlite</span></span>
 <span><span class="va">dbconnection</span><span class="op">$</span><span class="fu">connect</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">dbconnection</span><span class="op">$</span><span class="va">connection</span></span>
 <span><span class="co">#&gt; &lt;SQLiteConnection&gt;</span></span>
-<span><span class="co">#&gt;   Path: /tmp/RtmpCRN1oy/file1e601b7c21df.sqlite</span></span>
+<span><span class="co">#&gt;   Path: /tmp/RtmpuLkNuM/file1f044d3b4fcd.sqlite</span></span>
 <span><span class="co">#&gt;   Extensions: TRUE</span></span>
 <span><span class="va">dbconnection</span><span class="op">$</span><span class="fu">disconnect</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">class</a></span><span class="op">(</span><span class="va">dbconnection</span><span class="op">$</span><span class="va">connection</span><span class="op">)</span></span>
@@ -318,7 +319,7 @@ index first, and then reports that it removed 0 rows.
 <span><span class="va">dbtable</span><span class="op">$</span><span class="fu">insert_data</span><span class="op">(</span><span class="fu">csdb</span><span class="fu">::</span><span class="va"><a href="../reference/nor_covid19_cases_by_time_location.html">nor_covid19_cases_by_time_location</a></span><span class="op">)</span></span>
 <span><span class="va">dbtable</span><span class="op">$</span><span class="fu">tbl</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A query:  ?? x 18</span></span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># Database: sqlite 3.53.3 [/tmp/RtmpCRN1oy/file1e601b7c21df.sqlite]</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># Database: sqlite 3.53.3 [/tmp/RtmpuLkNuM/file1f044d3b4fcd.sqlite]</span></span></span>
 <span><span class="co">#&gt;    granularity_time granularity_geo country_iso3 location_code border age  </span></span>
 <span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>           <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>        <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>          <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span></span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> day              county          nor          county_nor03    <span style="text-decoration: underline;">2</span>020 total</span></span>
@@ -664,7 +665,7 @@ leaves the table empty.</p>
 
     <footer><div class="pkgdown-footer-left">
   <p>Crafted by <a href="https://www.rwhite.no" class="external-link">Richard Aubrey White</a>, August Sørli Mathisen.
-<nav class="cs-family" aria-label="cs* family"><a class="external-link cs-family-label" href="https://niphr.github.io/">cs* family ↗</a> <a href="https://niphr.github.io/cs9/" class="external-link">cs9</a> <a href="https://niphr.github.io/csalert/" class="external-link">csalert</a> <a href="https://niphr.github.io/csdata/" class="external-link">csdata</a> <a href="https://niphr.github.io/csdb/">csdb</a> <a href="https://niphr.github.io/csmaps/" class="external-link">csmaps</a> <a href="https://niphr.github.io/csstyle/" class="external-link">csstyle</a> <a href="https://niphr.github.io/cstidy/" class="external-link">cstidy</a> <a href="https://niphr.github.io/cstime/" class="external-link">cstime</a> <a href="https://niphr.github.io/csutil/" class="external-link">csutil</a>
+<nav class="cs-family" aria-label="cs* family"><a class="external-link cs-family-label" href="https://niphr.github.io/">cs* family ↗</a> <a href="https://niphr.github.io/cs9/" class="external-link">cs9</a> <a href="https://niphr.github.io/csalert/" class="external-link">csalert</a> <a href="https://niphr.github.io/csdata/" class="external-link">csdata</a> <a href="https://niphr.github.io/csdb/">csdb</a> <a href="https://niphr.github.io/csdocs/" class="external-link">csdocs</a> <a href="https://niphr.github.io/csmaps/" class="external-link">csmaps</a> <a href="https://niphr.github.io/csstyle/" class="external-link">csstyle</a> <a href="https://niphr.github.io/cstidy/" class="external-link">cstidy</a> <a href="https://niphr.github.io/cstime/" class="external-link">cstime</a> <a href="https://niphr.github.io/csutil/" class="external-link">csutil</a>
 </nav></p>
 </div>
 

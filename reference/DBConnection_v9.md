@@ -203,15 +203,20 @@ Connect to the database.
 The method drops a connection that another process opened, and then
 opens a connection for the current process.
 
+The method tries again after any error, until it has made `attempts`
+attempts. It waits 2 s before attempt 2 and 10 s before each later
+attempt, as a psql or bcp load does. Each failed attempt emits a message
+with its number, the wait and the error.
+
 #### Usage
 
-    DBConnection_v9$connect(attempts = 2)
+    DBConnection_v9$connect(attempts = 3)
 
 #### Arguments
 
 - `attempts`:
 
-  Number of attempts to connect.
+  The number of attempts to connect.
 
 ------------------------------------------------------------------------
 

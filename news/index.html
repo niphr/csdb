@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.9</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.12</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -28,6 +28,7 @@
     <li><a class="external-link dropdown-item" href="https://niphr.github.io/csalert/">csalert — surveillance alerts</a></li>
     <li><a class="external-link dropdown-item" href="https://niphr.github.io/csdata/">csdata — structural data</a></li>
     <li><a class="dropdown-item" href="https://niphr.github.io/csdb/">csdb — database access</a></li>
+    <li><a class="external-link dropdown-item" href="https://niphr.github.io/csdocs/">csdocs — package documentation</a></li>
     <li><a class="external-link dropdown-item" href="https://niphr.github.io/csmaps/">csmaps — maps of Norway</a></li>
     <li><a class="external-link dropdown-item" href="https://niphr.github.io/csstyle/">csstyle — output styling</a></li>
     <li><a class="external-link dropdown-item" href="https://niphr.github.io/cstidy/">cstidy — tidy surveillance data</a></li>
@@ -50,6 +51,16 @@
       <small>Source: <a href="https://github.com/niphr/csdb/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="2026.10.12" id="version-20261012">Version 2026.10.12<a class="anchor" aria-label="anchor" href="#version-20261012"></a></h2>
+<div class="section level3">
+<h3 id="bug-fixes-2026-10-12">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-2026-10-12"></a></h3>
+<ul><li>A <code>psql</code> load retries a login that an Entra token proxy refuses with “internal proxy error”. The waits before attempts 2 and 3 are now 2 s and 10 s, not 1 s and 3 s.</li>
+<li>
+<code>DBConnection_v9$connect()</code> makes 3 attempts by default, not 2. Like a <code>psql</code> load, it waits 2 s before attempt 2 and 10 s before attempt 3. Until now it waited 1 s.</li>
+<li>The message of each failed <code>psql</code> or <code>bcp</code> attempt holds the output of the client, also for a failure that csdb does not retry.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="2026.10.9" id="version-2026109">Version 2026.10.9<a class="anchor" aria-label="anchor" href="#version-2026109"></a></h2>
 <div class="section level3">
@@ -573,7 +584,7 @@
 
     <footer><div class="pkgdown-footer-left">
   <p>Crafted by <a href="https://www.rwhite.no" class="external-link">Richard Aubrey White</a>, August Sørli Mathisen.
-<nav class="cs-family" aria-label="cs* family"><a class="external-link cs-family-label" href="https://niphr.github.io/">cs* family ↗</a> <a href="https://niphr.github.io/cs9/" class="external-link">cs9</a> <a href="https://niphr.github.io/csalert/" class="external-link">csalert</a> <a href="https://niphr.github.io/csdata/" class="external-link">csdata</a> <a href="https://niphr.github.io/csdb/">csdb</a> <a href="https://niphr.github.io/csmaps/" class="external-link">csmaps</a> <a href="https://niphr.github.io/csstyle/" class="external-link">csstyle</a> <a href="https://niphr.github.io/cstidy/" class="external-link">cstidy</a> <a href="https://niphr.github.io/cstime/" class="external-link">cstime</a> <a href="https://niphr.github.io/csutil/" class="external-link">csutil</a>
+<nav class="cs-family" aria-label="cs* family"><a class="external-link cs-family-label" href="https://niphr.github.io/">cs* family ↗</a> <a href="https://niphr.github.io/cs9/" class="external-link">cs9</a> <a href="https://niphr.github.io/csalert/" class="external-link">csalert</a> <a href="https://niphr.github.io/csdata/" class="external-link">csdata</a> <a href="https://niphr.github.io/csdb/">csdb</a> <a href="https://niphr.github.io/csdocs/" class="external-link">csdocs</a> <a href="https://niphr.github.io/csmaps/" class="external-link">csmaps</a> <a href="https://niphr.github.io/csstyle/" class="external-link">csstyle</a> <a href="https://niphr.github.io/cstidy/" class="external-link">cstidy</a> <a href="https://niphr.github.io/cstime/" class="external-link">cstime</a> <a href="https://niphr.github.io/csutil/" class="external-link">csutil</a>
 </nav></p>
 </div>
 
