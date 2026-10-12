@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.12</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.14</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -51,6 +51,26 @@
       <small>Source: <a href="https://github.com/niphr/csdb/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="2026.10.14" id="version-20261014">Version 2026.10.14<a class="anchor" aria-label="anchor" href="#version-20261014"></a></h2>
+<div class="section level3">
+<h3 id="bug-fixes-2026-10-14">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-2026-10-14"></a></h3>
+<ul><li>A SQLite connection waits up to 60 s for a lock that another connection holds. Until now a second writer, for example a forked cs9 plan, stopped at once with “database is locked”.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="development-2026-10-14">Development<a class="anchor" aria-label="anchor" href="#development-2026-10-14"></a></h3>
+<ul><li>
+<code>R/util_database_load.R</code> held 1007 code lines. Its failure classes, failure messages and their patterns moved unchanged into <code>R/util_database_load_failure.R</code>.</li>
+</ul></div>
+</div>
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="2026.10.13" id="version-20261013">Version 2026.10.13<a class="anchor" aria-label="anchor" href="#version-20261013"></a></h2>
+<div class="section level3">
+<h3 id="new-features-2026-10-13">New Features<a class="anchor" aria-label="anchor" href="#new-features-2026-10-13"></a></h3>
+<ul><li>New <code><a href="../reference/insert_data_many.html">insert_data_many()</a></code> inserts one data.table into each table of a list. On PostgreSQL one <code>psql</code> session loads every table in one transaction. So the load needs one <code>psql</code> login, and by default it stores every row or no row. The one exception is a duplicate key with <code>confirm_insert_via_nrow = TRUE</code>: csdb then inserts table by table. With another driver, or with tables that have different connection settings, it calls <code>$insert_data()</code> on each table in turn.</li>
+<li>The session skips a table with no rows, and checks the row count of each table before the commit. After a load exits without an error, a row count that differs stops with class <code>csdb_load_ambiguous</code>, and the error says to count the rows. It waits at most 60 s for one lock, and it runs again after a lock timeout, a deadlock or a refused login.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="2026.10.12" id="version-20261012">Version 2026.10.12<a class="anchor" aria-label="anchor" href="#version-20261012"></a></h2>
 <div class="section level3">

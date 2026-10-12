@@ -1,5 +1,38 @@
 # Changelog
 
+## Version 2026.10.14
+
+### Bug Fixes
+
+- A SQLite connection waits up to 60 s for a lock that another
+  connection holds. Until now a second writer, for example a forked cs9
+  plan, stopped at once with “database is locked”.
+
+### Development
+
+- `R/util_database_load.R` held 1007 code lines. Its failure classes,
+  failure messages and their patterns moved unchanged into
+  `R/util_database_load_failure.R`.
+
+## Version 2026.10.13
+
+### New Features
+
+- New
+  [`insert_data_many()`](https://niphr.github.io/csdb/reference/insert_data_many.md)
+  inserts one data.table into each table of a list. On PostgreSQL one
+  `psql` session loads every table in one transaction. So the load needs
+  one `psql` login, and by default it stores every row or no row. The
+  one exception is a duplicate key with
+  `confirm_insert_via_nrow = TRUE`: csdb then inserts table by table.
+  With another driver, or with tables that have different connection
+  settings, it calls `$insert_data()` on each table in turn.
+- The session skips a table with no rows, and checks the row count of
+  each table before the commit. After a load exits without an error, a
+  row count that differs stops with class `csdb_load_ambiguous`, and the
+  error says to count the rows. It waits at most 60 s for one lock, and
+  it runs again after a lock timeout, a deadlock or a refused login.
+
 ## Version 2026.10.12
 
 ### Bug Fixes

@@ -39,6 +39,8 @@ Helper functions for database operations and metadata
 
 - [`get_table_names_and_info()`](https://niphr.github.io/csdb/reference/get_table_names_and_info.md)
   : Get table names, number of rows, and size information
+- [`insert_data_many()`](https://niphr.github.io/csdb/reference/insert_data_many.md)
+  : Insert data into several tables in one transaction
 - [`csdb_set_auth_hook()`](https://niphr.github.io/csdb/reference/csdb_set_auth_hook.md)
   : Set authentication hook for database connections
 - [`csdb_get_auth_hook()`](https://niphr.github.io/csdb/reference/csdb_get_auth_hook.md)
