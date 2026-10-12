@@ -19,95 +19,35 @@
 #' \code{confirm_insert_via_nrow = TRUE}: csdb then inserts table by table.
 #'
 #' @details
-#' On PostgreSQL, csdb writes one load file for each table and starts
-#' \code{psql} once. That \code{psql} runs a script of one \code{\\copy} for
-#' each table, with \code{--single-transaction} and \code{-v ON_ERROR_STOP=1}.
-#' The load therefore needs one \code{psql} login. \code{$insert_data()} on
-#' each table needs one \code{psql} login for each table. The last-updated
-#' record of a table is a separate write. A cs9 partitioned insert passes
-#' \code{update_last_updated = FALSE} and records every partition in one
-#' write. So it needs one \code{psql} login for the load, plus one for the
-#' last-updated bookkeeping.
+#' On PostgreSQL, csdb starts \code{psql} once, with
+#' \code{--single-transaction}, and runs one \code{\\copy} for each table. A
+#' table whose data.table is \code{NULL} or has no rows gets no \code{\\copy}.
+#' After each \code{\\copy}, the script compares the stored rows with the rows
+#' sent. A difference raises an error before the commit, so the server stores
+#' no row in any table.
 #'
-#' After each \code{\\copy}, the script compares the row count that \code{psql}
-#' reports with the rows that csdb sent to that table. A difference raises an
-#' error before the commit, so the server stores no row in any table. After
-#' \code{psql} exits, csdb also compares each \code{COPY <n>} line with the
-#' rows that it sent.
+#' The transaction holds a lock on every table until it commits, so a
+#' \code{TRUNCATE} or an index change on one of them waits. The session waits
+#' at most 60 s for one lock. After a longer wait, a deadlock or a refused
+#' login, csdb runs the whole session again, at most 3 attempts in total. A
+#' connection that breaks after the load starts is not run again, and the error
+#' says to count the rows first.
 #'
-#' The whole call is one transaction. Each \code{\\copy} takes a ROW EXCLUSIVE
-#' lock on its table, and the transaction holds every one of these locks until
-#' it commits. Reads and inserts of other keys into the same tables do not
-#' wait. An insert of the same key from another connection waits until the
-#' commit, and then stops on the duplicate key. A \code{TRUNCATE}, a
-#' \code{DROP TABLE}, a \code{CREATE INDEX} or a \code{DROP INDEX} on one of
-#' the tables waits until the commit.
+#' A duplicate key stops the session. With
+#' \code{confirm_insert_via_nrow = TRUE}, csdb then calls
+#' \code{$insert_data(confirm_insert_via_nrow = TRUE)} on each table, which
+#' upserts a table that stops on the duplicate key.
 #'
-#' The script starts with \code{SET lock_timeout = '60s'}, so the session
-#' waits at most 60 s for one lock. A longer wait stops the session with
-#' SQLSTATE 55P03, which is the lock timeout below.
-#'
-#' The session uses the retry rules of \code{$insert_data()}:
-#' \itemize{
-#'   \item A failure while \code{psql} connects stores nothing, and csdb runs
-#'     the whole session again. So do a deadlock, a serialization failure and
-#'     a lock timeout, because the server rolls back the whole transaction.
-#'   \item A connection that breaks after the load starts stops with an error
-#'     of class \code{csdb_load_ambiguous}. csdb does not run the session
-#'     again.
-#'   \item Every other failure stops at once. The server stores no row in any
-#'     table.
-#' }
-#'
-#' A duplicate key also stops the whole session, and the server stores no row.
-#' With \code{confirm_insert_via_nrow = FALSE}, the function then stops with an
-#' error of class \code{csdb_load_duplicate_key}. With
-#' \code{confirm_insert_via_nrow = TRUE}, it calls
-#' \code{$insert_data(confirm_insert_via_nrow = TRUE)} on each table in turn.
-#' That call upserts the rows of a table that stops on a duplicate key. Each
-#' table then has its own transaction, so a later failure leaves the rows in
-#' the tables before it.
-#'
-#' After a session that succeeds with \code{confirm_insert_via_nrow = TRUE},
-#' csdb counts the rows of each table, as \code{$insert_data()} does. It
-#' upserts the rows of a table that holds fewer rows than its data.table.
-#'
-#' Before the session, csdb runs the first steps of \code{$insert_data()} on
-#' every table, in order. It creates a table that does not exist. It skips a
-#' table whose data.table is \code{NULL} or has no rows, so the script has no
-#' \code{\\copy} for that table. It runs the validator of the field contents on
-#' the other tables. A validator that fails stops the call before any load.
-#'
-#' The session needs every table to have the same connection configuration,
-#' and a driver whose loads use \code{psql}. Otherwise
-#' \code{insert_data_many()} calls \code{$insert_data()} on each table in turn.
-#' A failure then leaves the new rows in the tables that came before it.
+#' With another driver, or with tables that have different connection settings,
+#' csdb calls \code{$insert_data()} on each table in turn.
 #' @param tables A list of \code{DBTable_v9} objects.
 #' @param newdata A list of data.tables, one for each table, in the order of
 #'   \code{tables}.
-#' @param confirm_insert_via_nrow If TRUE, a duplicate key makes csdb insert
-#'   into each table on its own, and upsert a table that stops on the
-#'   duplicate key. After a session that succeeds, csdb upserts a table that
-#'   holds fewer rows than its data.table.
-#' @param verbose Boolean. csdb passes it to \code{$insert_data()} and
-#'   \code{$upsert_data()} of each table.
+#' @param confirm_insert_via_nrow See \code{DBTable_v9$insert_data()}.
+#' @param verbose See \code{DBTable_v9$insert_data()}.
 #' @param load_timeout The longest time in seconds that the \code{psql} session
-#'   MAY run. csdb then kills \code{psql} and stops with an error of class
-#'   \code{csdb_load_ambiguous}, and it does not run the session again. The
-#'   per-table path passes it to \code{$insert_data()}.
-#' @param update_last_updated TRUE or FALSE, for a subclass of
-#'   \code{DBTable_v9} whose \code{$insert_data()} and \code{$upsert_data()}
-#'   take an argument \code{update_last_updated}, as the cs9 tables do. csdb
-#'   passes it to every call of these two methods that it makes. It makes
-#'   these calls on the per-table path, after a duplicate key, and for the
-#'   upsert of \code{confirm_insert_via_nrow}. The \code{psql} session loads its rows
-#'   without \code{$insert_data()}. So when the session commits and
-#'   \code{update_last_updated} is TRUE, csdb calls \code{$insert_data()} with
-#'   zero rows and \code{update_last_updated = TRUE} on each such table. That
-#'   call loads nothing and writes the last-updated record of the table. With
-#'   FALSE, csdb writes no record. A table whose methods do not take the
-#'   argument, such as a plain \code{DBTable_v9}, has no record, and csdb does
-#'   not pass it.
+#'   MAY run. csdb then stops it with an error of class
+#'   \code{csdb_load_ambiguous}.
 #' @return \code{NULL}, invisibly.
 #' @examples
 #' \donttest{
@@ -139,8 +79,7 @@ insert_data_many <- function(
   newdata,
   confirm_insert_via_nrow = FALSE,
   verbose = TRUE,
-  load_timeout = 3600,
-  update_last_updated = TRUE
+  load_timeout = 3600
 ) {
   check_insert_many_arguments(tables, newdata)
   if (length(tables) == 0L) {
@@ -150,10 +89,9 @@ insert_data_many <- function(
     return(insert_each(
       tables,
       newdata,
-      confirm_insert_via_nrow = confirm_insert_via_nrow,
-      verbose = verbose,
-      load_timeout = load_timeout,
-      update_last_updated = update_last_updated
+      confirm_insert_via_nrow,
+      verbose,
+      load_timeout
     ))
   }
 
@@ -169,14 +107,13 @@ insert_data_many <- function(
     },
     logical(1)
   )
-  all_tables <- tables
-  all_newdata <- newdata
   tables <- tables[to_load]
   newdata <- newdata[to_load]
+  if (length(tables) == 0L) {
+    return(invisible(NULL))
+  }
 
-  duplicate <- if (length(tables) == 0L) {
-    NULL
-  } else if (confirm_insert_via_nrow) {
+  duplicate <- if (confirm_insert_via_nrow) {
     tryCatch(
       insert_session(tables, newdata, load_timeout),
       csdb_load_duplicate_key = function(e) e
@@ -196,30 +133,13 @@ insert_data_many <- function(
       " tables. It inserts into each table on its own instead, and upserts",
       " a table that stops on a duplicate key."
     )
-    return(insert_each(
-      all_tables,
-      all_newdata,
-      confirm_insert_via_nrow = TRUE,
-      verbose = verbose,
-      load_timeout = load_timeout,
-      update_last_updated = update_last_updated
-    ))
+    return(insert_each(tables, newdata, TRUE, verbose, load_timeout))
   }
 
   if (confirm_insert_via_nrow) {
     for (i in seq_along(tables)) {
-      insert_confirm(
-        tables[[i]],
-        newdata[[i]],
-        duplicate = NULL,
-        verbose = verbose,
-        load_timeout = load_timeout,
-        update_last_updated = update_last_updated
-      )
+      insert_confirm(tables[[i]], newdata[[i]], NULL, verbose, load_timeout)
     }
-  }
-  if (isTRUE(update_last_updated)) {
-    record_each(all_tables, all_newdata)
   }
   return(invisible(NULL))
 }
@@ -249,55 +169,21 @@ check_insert_many_arguments <- function(tables, newdata) {
   return(invisible(NULL))
 }
 
-# Call $<method>() of `tab` with the arguments in `args`. csdb adds
-# update_last_updated when it is not NULL and the method takes an argument of
-# that name, as the methods of the cs9 subclass DBTableExtended_v9 do.
-# DBTable_v9 keeps no last-updated record, and its methods do not take it.
-call_table_method <- function(tab, method, args, update_last_updated) {
-  takes <- names(formals(tab[[method]]))
-  if (!is.null(update_last_updated) && "update_last_updated" %in% takes) {
-    args$update_last_updated <- update_last_updated
-  }
-  return(do.call(tab[[method]], args))
-}
-
 # The per-table path: $insert_data() on each table in turn.
 insert_each <- function(
   tables,
   newdata,
   confirm_insert_via_nrow,
   verbose,
-  load_timeout,
-  update_last_updated
+  load_timeout
 ) {
   for (i in seq_along(tables)) {
-    call_table_method(
-      tables[[i]],
-      "insert_data",
-      list(
-        newdata[[i]],
-        confirm_insert_via_nrow = confirm_insert_via_nrow,
-        verbose = verbose,
-        load_timeout = load_timeout
-      ),
-      update_last_updated
+    tables[[i]]$insert_data(
+      newdata[[i]],
+      confirm_insert_via_nrow = confirm_insert_via_nrow,
+      verbose = verbose,
+      load_timeout = load_timeout
     )
-  }
-  return(invisible(NULL))
-}
-
-# The last-updated record of each table after a session that committed. The
-# session loads no row through $insert_data(), so a subclass that records
-# the last update inside $insert_data() did not record it. csdb therefore
-# calls $insert_data() with zero rows and update_last_updated = TRUE on each
-# table whose $insert_data() takes that argument. A zero-row insert loads
-# nothing. A table whose data.table is NULL is left out.
-record_each <- function(tables, newdata) {
-  for (i in seq_along(tables)) {
-    takes <- names(formals(tables[[i]][["insert_data"]]))
-    if ("update_last_updated" %in% takes && !is.null(newdata[[i]])) {
-      tables[[i]]$insert_data(newdata[[i]][0, ], update_last_updated = TRUE)
-    }
   }
   return(invisible(NULL))
 }
@@ -383,16 +269,13 @@ insert_load_file <- function(private, newdata) {
 # The steps of $insert_data(confirm_insert_via_nrow = TRUE) after the load.
 # `duplicate` is the csdb_load_duplicate_key error of the load, or NULL. After
 # a duplicate key, the rows are upserted once. Otherwise the rows are upserted
-# when the table holds fewer rows than `newdata`. update_last_updated goes to
-# upsert_data() through call_table_method(); NULL leaves the default of the
-# method, as $insert_data() itself does.
+# when the table holds fewer rows than `newdata`.
 insert_confirm <- function(
   self,
   newdata,
   duplicate,
   verbose,
-  load_timeout,
-  update_last_updated = NULL
+  load_timeout
 ) {
   if (is.null(duplicate)) {
     nrow_after <- self$nrow(use_count = TRUE)
@@ -421,16 +304,11 @@ insert_confirm <- function(
     )
   }
   if (upsert) {
-    call_table_method(
-      self,
-      "upsert_data",
-      list(
-        newdata = newdata,
-        drop_indexes = NULL,
-        verbose = verbose,
-        load_timeout = load_timeout
-      ),
-      update_last_updated
+    self$upsert_data(
+      newdata = newdata,
+      drop_indexes = NULL,
+      verbose = verbose,
+      load_timeout = load_timeout
     )
     nrow_after <- self$nrow(use_count = TRUE)
     if (nrow_after < nrow(newdata)) {

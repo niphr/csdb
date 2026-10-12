@@ -626,74 +626,11 @@ test_that("insert_data_many(confirm_insert_via_nrow = TRUE) upserts each table t
   )
 })
 
-test_that("on the session path, update_last_updated reaches the upsert of confirm_insert_via_nrow", {
-  # The fake psql stores nothing, so each table holds 0 rows after the
-  # session, and confirm_insert_via_nrow upserts every table.
+test_that("csdb writes no last-updated record after a session that commits", {
   log <- local_fake_psql("ok")
   tables <- three_tables(Recording)
   got <- capture_conditions(with_mocked_bindings(
-    insert_data_many(
-      tables,
-      three_data(),
-      confirm_insert_via_nrow = TRUE,
-      update_last_updated = FALSE
-    ),
-    loads_through_psql = function(connection) TRUE
-  ))
-  expect_null(got$error)
-  expect_length(fake_psql_runs(log), 1)
-  for (tab in tables) {
-    expect_identical(tab$seen_upsert, "FALSE")
-  }
-  expect_identical(records_of(tables), c(0L, 0L, 0L))
-})
-
-test_that("on the session path, update_last_updated reaches each insert_data() after a duplicate key", {
-  log <- local_fake_psql("dupkey2")
-  tables <- three_tables(Recording)
-  per_table <- local_t2_duplicate_once()
-  got <- capture_conditions(with_mocked_bindings(
-    insert_data_many(
-      tables,
-      three_data(),
-      confirm_insert_via_nrow = TRUE,
-      update_last_updated = FALSE
-    ),
-    loads_through_psql = function(connection) TRUE
-  ))
-  expect_null(got$error)
-  expect_length(fake_psql_runs(log), 1)
-  for (tab in tables) {
-    expect_identical(tab$seen_insert, "FALSE")
-  }
-  expect_identical(rows_of(tables[[2]]), c("1 b1", "2 b2"))
-})
-
-test_that("after a session that commits, update_last_updated = TRUE writes one record for each table", {
-  log <- local_fake_psql("ok")
-  tables <- three_tables(Recording)
-  data <- three_data()
-  got <- capture_conditions(with_mocked_bindings(
-    insert_data_many(tables, data, update_last_updated = TRUE),
-    loads_through_psql = function(connection) TRUE
-  ))
-  expect_null(got$error)
-  expect_length(fake_psql_runs(log), 1)
-  expect_identical(records_of(tables), c(1L, 1L, 1L))
-  # The record is a $insert_data() call with zero rows: it loads nothing.
-  for (tab in tables) {
-    expect_identical(tab$seen_insert, "TRUE")
-    expect_identical(rows_of(tab), character(0))
-  }
-  # The caller's data.tables keep their rows.
-  expect_identical(vapply(data, nrow, integer(1)), c(2L, 2L, 2L))
-})
-
-test_that("after a session that commits, update_last_updated = FALSE writes no record", {
-  log <- local_fake_psql("ok")
-  tables <- three_tables(Recording)
-  got <- capture_conditions(with_mocked_bindings(
-    insert_data_many(tables, three_data(), update_last_updated = FALSE),
+    insert_data_many(tables, three_data()),
     loads_through_psql = function(connection) TRUE
   ))
   expect_null(got$error)
@@ -701,18 +638,8 @@ test_that("after a session that commits, update_last_updated = FALSE writes no r
   expect_identical(records_of(tables), c(0L, 0L, 0L))
   for (tab in tables) {
     expect_identical(tab$seen_insert, character(0))
+    expect_identical(tab$seen_upsert, character(0))
   }
-})
-
-test_that("a session that fails writes no last-updated record", {
-  log <- local_fake_psql("short2")
-  tables <- three_tables(Recording)
-  got <- capture_conditions(with_mocked_bindings(
-    insert_data_many(tables, three_data(), update_last_updated = TRUE),
-    loads_through_psql = function(connection) TRUE
-  ))
-  expect_s3_class(got$error, "csdb_load_other")
-  expect_identical(records_of(tables), c(0L, 0L, 0L))
 })
 
 test_that("a session that loses its connection after the load starts is not retried", {
@@ -733,29 +660,6 @@ test_that("a session that loses its connection after the load starts is not retr
     "server closed the connection unexpectedly",
     fixed = TRUE
   )
-})
-
-test_that("on the per-table path, update_last_updated reaches insert_data() of each table", {
-  cfg <- sqlite_dbconfig()
-  conn <- sqlite_connection(cfg)
-  withr::defer(conn$disconnect())
-  tables <- lapply(c("r1", "r2"), function(name) {
-    return(Recording$new(
-      dbconfig = cfg,
-      table_name = name,
-      field_types = c(id = "INTEGER", x = "TEXT"),
-      keys = "id",
-      dbconnection = conn
-    ))
-  })
-  got <- capture_conditions(
-    insert_data_many(tables, three_data()[1:2], update_last_updated = FALSE)
-  )
-  expect_null(got$error)
-  expect_identical(tables[[1]]$seen_insert, "FALSE")
-  expect_identical(tables[[2]]$seen_insert, "FALSE")
-  expect_identical(records_of(tables), c(0L, 0L))
-  expect_identical(rows_of(tables[[2]]), c("1 b1", "2 b2"))
 })
 
 # The phrases that the installed help and NEWS.md MUST hold. The help is read
@@ -785,9 +689,9 @@ news_text <- function() {
 test_that("the help of insert_data_many() states the rules of the session", {
   help <- rendered_help()
   phrases <- c(
-    lock_timeout = "so the session waits at most 60 s for one lock",
-    empty_skip = "or has no rows, so the script has no '\\copy' for that table",
-    fallback = "and a driver whose loads use 'psql'. Otherwise 'insert_data_many()' calls '$insert_data()' on each table in turn.",
+    lock_timeout = "The session waits at most 60 s for one lock.",
+    empty_skip = "table whose data.table is 'NULL' or has no rows gets no '\\copy'.",
+    fallback = "With another driver, or with tables that have different connection settings, csdb calls '$insert_data()' on each table in turn.",
     row_count = "A difference raises an error before the commit, so the server stores no row in any table.",
     exception = "The one exception is a duplicate key with 'confirm_insert_via_nrow = TRUE': csdb then inserts table by table."
   )
@@ -802,11 +706,11 @@ test_that("the help of insert_data_many() states the rules of the session", {
 test_that("NEWS.md states the rules of the session", {
   news <- news_text()
   phrases <- c(
-    lock_timeout = "The session waits at most 60 s for one lock.",
-    empty_skip = "A table whose data.table is `NULL` or has no rows gets no `\\copy` in the session.",
-    fallback = "With another driver, or with tables that have different connection settings, `insert_data_many()` calls `$insert_data()` on each table in turn.",
-    row_count = "A difference raises an error before the commit, so no table keeps a row.",
-    exception = "The one exception to every row or no row is a duplicate key with `confirm_insert_via_nrow = TRUE`."
+    lock_timeout = "It waits at most 60 s for one lock",
+    empty_skip = "The session skips a table with no rows",
+    fallback = "With another driver, or with tables that have different connection settings, it calls `$insert_data()` on each table in turn.",
+    row_count = "checks the row count of each table before the commit",
+    exception = "The one exception is a duplicate key with `confirm_insert_via_nrow = TRUE`: csdb then inserts table by table."
   )
   for (p in names(phrases)) {
     expect_true(
