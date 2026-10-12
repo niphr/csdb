@@ -1107,7 +1107,8 @@ load_output_excerpt <- function(
 #   * `rows_sent` is set and the number that `rows_pattern` captures differs
 #     from it. psql prints "COPY <n>" and bcp prints "<n> rows copied.".
 #
-# The last two print no error, so the failure class is always "other".
+# The last two come after the client exited with 0, so the server may have
+# committed rows. Their failure class is "ambiguous", and csdb does not retry.
 #
 # A psql session of insert_data_many() loads several tables. `rows_sent` and
 # `tables` then hold one element for each table, in the order of the \copy
@@ -1145,7 +1146,8 @@ load_failure_reason <- function(
         paste0(rows_sent, collapse = ", "),
         " rows"
       ),
-      classify = FALSE
+      classify = FALSE,
+      exited_ok = TRUE
     ))
   }
   rows_stored <- as.numeric(utils::tail(hits, n_tables))
@@ -1164,7 +1166,8 @@ load_failure_reason <- function(
         rows_sent[[i]],
         " rows"
       ),
-      classify = FALSE
+      classify = FALSE,
+      exited_ok = TRUE
     ))
   }
   return(NULL)
@@ -1248,6 +1251,25 @@ load_target_words <- function(table) {
   ))
 }
 
+# Why the server may have committed the rows of an ambiguous load, and the
+# instruction to count them before the caller loads the rows again.
+count_the_rows_text <- function(timed_out, reason, tool, where) {
+  why <- if (timed_out) {
+    " csdb killed the client, so the server may or may not have committed the rows to "
+  } else if (isTRUE(reason$exited_ok)) {
+    paste0(" ", tool, " exited without an error, so the server may have committed rows to ")
+  } else {
+    " The connection broke after the load started, so the server may or may not have committed the rows to "
+  }
+  return(paste0(
+    why,
+    where,
+    ". Count the rows in ",
+    where,
+    " before you load these rows again."
+  ))
+}
+
 # Run a load client, check it, and retry a transient failure.
 #
 # Each failed attempt emits a message() that names the table, the client, the
@@ -1307,10 +1329,12 @@ run_checked_load <- function(
       if (is.null(reason)) {
         break
       }
+      # A row count that differs after the client exited with 0: the server
+      # may have committed rows, so the load is ambiguous, not retried.
       failure_class <- if (reason$classify) {
         classify_load_failure(command, result$output)
       } else {
-        "other"
+        "ambiguous"
       }
     }
     printed <- load_output_excerpt(result$output, secrets)
@@ -1349,24 +1373,8 @@ run_checked_load <- function(
           attempt,
           if (attempt == 1L) " attempt" else " attempts",
           ".",
-          if (timed_out) {
-            paste0(
-              " csdb killed the client, so the server may or may not have",
-              " committed the rows to ",
-              where,
-              ". Count the rows in ",
-              where,
-              " before you load these rows again."
-            )
-          } else if (failure_class == "ambiguous") {
-            paste0(
-              " The connection broke after the load started, so the server",
-              " may or may not have committed the rows to ",
-              where,
-              ". Count the rows in ",
-              where,
-              " before you load these rows again."
-            )
+          if (failure_class == "ambiguous") {
+            count_the_rows_text(timed_out, reason, tool, where)
           },
           if (failure_class == "ambiguous") {
             paste0(

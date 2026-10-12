@@ -461,12 +461,19 @@ test_that("a short row count of table 2 stops the session inside the transaction
   expect_length(waits$waits, 0)
 })
 
-test_that("a short COPY line of table 2 still stops the call after psql exits", {
+# psql exited with 0, so the session committed. A COPY line that then shows
+# a different count is ambiguous: the rows may be stored.
+test_that("a short COPY line of table 2 after psql exits is ambiguous, and csdb does not retry it", {
   log <- local_fake_psql("tagshort2")
   waits <- local_session_waits()
   tables <- three_tables()
   got <- capture_conditions(insert_as_postgres(tables, three_data()))
-  expect_s3_class(got$error, "csdb_load_other")
+  expect_s3_class(got$error, "csdb_load_ambiguous")
+  expect_match(
+    got$message,
+    "psql \\copy exited without an error, so the server may have committed rows to tables `t1`, `t2`, `t3`. Count the rows in tables `t1`, `t2`, `t3` before you load these rows again.",
+    fixed = TRUE
+  )
   expect_match(
     got$message,
     "stored 1 rows into table `t2`, and csdb sent 2 rows",

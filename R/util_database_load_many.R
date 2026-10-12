@@ -14,8 +14,8 @@
 #'
 #' @description
 #' Inserts one data.table into each table of a list. On PostgreSQL, one
-#' \code{psql} session loads every table in one transaction, so the call stores
-#' every row or no row. The one exception is a duplicate key with
+#' \code{psql} session loads every table in one transaction, so by default the
+#' call stores every row or no row. The one exception is a duplicate key with
 #' \code{confirm_insert_via_nrow = TRUE}: csdb then inserts table by table.
 #'
 #' @details
@@ -31,7 +31,8 @@
 #' at most 60 s for one lock. After a longer wait, a deadlock or a refused
 #' login, csdb runs the whole session again, at most 3 attempts in total. A
 #' connection that breaks after the load starts is not run again, and the error
-#' says to count the rows first.
+#' says to count the rows first. So is a row count that differs after \code{psql}
+#' exits.
 #'
 #' A duplicate key stops the session. With
 #' \code{confirm_insert_via_nrow = TRUE}, csdb then calls

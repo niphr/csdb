@@ -1,8 +1,8 @@
 # Version 2026.10.13
 
 ## New Features
-* New `insert_data_many()` inserts one data.table into each table of a list. On PostgreSQL one `psql` session loads every table in one transaction, so the load needs one `psql` login and stores every row or no row. The one exception is a duplicate key with `confirm_insert_via_nrow = TRUE`: csdb then inserts table by table. With another driver, or with tables that have different connection settings, it calls `$insert_data()` on each table in turn.
-* The session skips a table with no rows, and checks the row count of each table before the commit. It waits at most 60 s for one lock, and it runs again after a lock timeout, a deadlock or a refused login.
+* New `insert_data_many()` inserts one data.table into each table of a list. On PostgreSQL one `psql` session loads every table in one transaction. So the load needs one `psql` login, and by default it stores every row or no row. The one exception is a duplicate key with `confirm_insert_via_nrow = TRUE`: csdb then inserts table by table. With another driver, or with tables that have different connection settings, it calls `$insert_data()` on each table in turn.
+* The session skips a table with no rows, and checks the row count of each table before the commit. After a load exits without an error, a row count that differs stops with class `csdb_load_ambiguous`, and the error says to count the rows. It waits at most 60 s for one lock, and it runs again after a lock timeout, a deadlock or a refused login.
 
 # Version 2026.10.12
 
