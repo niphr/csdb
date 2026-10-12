@@ -1,3 +1,10 @@
+# Version 2026.10.12
+
+## Bug Fixes
+* A `psql` load retries a login that an Entra token proxy refuses with "internal proxy error". The waits before attempts 2 and 3 are now 2 s and 10 s, not 1 s and 3 s.
+* `DBConnection_v9$connect()` makes 3 attempts by default, not 2. Like a `psql` load, it waits 2 s before attempt 2 and 10 s before attempt 3. Until now it waited 1 s.
+* The message of each failed `psql` or `bcp` attempt holds the output of the client, also for a failure that csdb does not retry.
+
 # Version 2026.10.9
 
 ## Bug Fixes

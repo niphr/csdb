@@ -528,20 +528,37 @@ DBConnection_v9 <- R6::R6Class(
     #'
     #' The method drops a connection that another process opened, and then
     #' opens a connection for the current process.
-    #' @param attempts Number of attempts to connect.
-    connect = function(attempts = 2) {
+    #'
+    #' The method tries again after any error, until it has made
+    #' \code{attempts} attempts. It waits 2 s before attempt 2 and 10 s
+    #' before each later attempt, as a psql or bcp load does. Each failed
+    #' attempt emits a message with its number, the wait and the error.
+    #' @param attempts The number of attempts to connect.
+    connect = function(attempts = 3) {
       private$discard_inherited_connection()
       success <- FALSE
       auth_hook_called <- FALSE
 
       for (i in 1:attempts) {
+        # The wait before attempt i + 1. retry_waits is shared with the psql
+        # and bcp loads. From attempt 4 on, the wait repeats its last value.
+        wait <- retry_waits[[min(i, length(retry_waits))]]
         tryCatch(
           {
             private$connect_once()
             success <- TRUE
           },
           error = function(e) {
-            return(message("Attempt ", i, ": ", e))
+            return(message(
+              "Attempt ",
+              i,
+              " of ",
+              attempts,
+              " to connect failed",
+              if (i != attempts) paste0(". Retrying in ", wait, " s"),
+              ": ",
+              conditionMessage(e)
+            ))
           }
         )
         if (success) {
@@ -565,9 +582,11 @@ DBConnection_v9 <- R6::R6Class(
           }
         }
 
-        # sleep to give the db time to recover
-        # don't need to sleep on the last failed run
-        if (i != attempts) Sys.sleep(i)
+        # Give the server or the proxy time to recover. The last failed
+        # attempt needs no wait.
+        if (i != attempts) {
+          retry_wait(wait)
+        }
       }
       if (!success) {
         stop(

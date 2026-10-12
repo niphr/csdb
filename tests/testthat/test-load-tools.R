@@ -114,6 +114,9 @@ fake_tool_script <- c(
   "    connclosed)",
   "      echo 'psql: error: connection to server at \"fakehost\" (10.0.0.9), port 5432 failed: server closed the connection unexpectedly' >&2",
   "      exit 2 ;;",
+  "    proxy)",
+  "      echo 'psql: error: connection to server at \"norsyss-pg-auth\" (10.98.244.63), port 5432 failed: ERROR:  internal proxy error' >&2",
+  "      exit 2 ;;",
   "    toomany_code) err 'FATAL:  53300: beklager, for mange klienter allerede'; exit 2 ;;",
   "    toomany)",
   "      echo 'psql: error: connection to server at \"fakehost\" (10.0.0.9), port 5432 failed: FATAL:  sorry, too many clients already' >&2",
@@ -296,15 +299,15 @@ fake_calls_of <- function(log, kind) {
 }
 
 # Record every wait between attempts instead of sleeping. A csdb without
-# retries has no load_retry_wait(), and there the mock is left out, so a test
+# retries has no retry_wait(), and there the mock is left out, so a test
 # fails on the missing retry and not on a missing function.
 local_recorded_waits <- function(.local_envir = parent.frame()) {
   rec <- new.env()
   rec$waits <- numeric()
   ns <- asNamespace("csdb")
-  if (exists("load_retry_wait", envir = ns, inherits = FALSE)) {
+  if (exists("retry_wait", envir = ns, inherits = FALSE)) {
     local_mocked_bindings(
-      load_retry_wait = function(seconds) {
+      retry_wait = function(seconds) {
         rec$waits <- c(rec$waits, seconds)
         return(invisible(NULL))
       },
@@ -440,10 +443,10 @@ test_that("psql: a refused connection is retried, and attempt 2 succeeds", {
   got <- capture_load_conditions(run_pg_load(con))
   expect_null(got$error)
   expect_length(fake_calls_of(fake$log, "psql"), 2)
-  expect_identical(rec$waits, 1)
+  expect_identical(rec$waits, 2)
   expect_match(
     got$messages,
-    "table \"tab\" with psql \\copy failed on attempt 1 of at most 3 (transient). Retrying in 1 s.",
+    "table \"tab\" with psql \\copy failed on attempt 1 of at most 3 (transient). Retrying in 2 s.",
     fixed = TRUE,
     all = FALSE
   )
@@ -469,8 +472,8 @@ test_that("psql: three transient failures stop after exactly 3 attempts", {
   )
   expect_match(got$message, "Connection refused", fixed = TRUE)
   expect_length(fake_calls_of(fake$log, "psql"), 3)
-  expect_identical(rec$waits, c(1, 3))
-  expect_identical(sum(rec$waits), 4)
+  expect_identical(rec$waits, c(2, 10))
+  expect_identical(sum(rec$waits), 12)
   expect_length(grep("failed on attempt", got$messages, fixed = TRUE), 3)
 })
 
@@ -481,7 +484,7 @@ test_that("psql: a lock timeout (SQLSTATE 55P03) is transient", {
   got <- capture_load_conditions(run_pg_load(con))
   expect_null(got$error)
   expect_length(fake_calls_of(fake$log, "psql"), 2)
-  expect_identical(rec$waits, 1)
+  expect_identical(rec$waits, 2)
 })
 
 test_that("psql: too many connections (SQLSTATE 53300) is transient", {
@@ -492,7 +495,7 @@ test_that("psql: too many connections (SQLSTATE 53300) is transient", {
   got <- capture_load_conditions(run_pg_load(con))
   expect_s3_class(got$error, "csdb_load_transient")
   expect_length(fake_calls_of(fake$log, "psql"), 3)
-  expect_identical(rec$waits, c(1, 3))
+  expect_identical(rec$waits, c(2, 10))
 })
 
 test_that("psql: 'sorry, too many clients already' at connection is transient", {
@@ -564,7 +567,44 @@ test_that("psql: a connection closed while it starts is retried", {
   got <- capture_load_conditions(run_pg_load(con))
   expect_null(got$error)
   expect_length(fake_calls_of(fake$log, "psql"), 2)
-  expect_identical(rec$waits, 1)
+  expect_identical(rec$waits, 2)
+})
+
+test_that("psql: a login the token proxy refuses is retried, and attempt 2 succeeds", {
+  fake <- local_fake_tools("proxy,ok")
+  rec <- local_recorded_waits()
+  con <- load_tools_connection()
+  got <- capture_load_conditions(run_pg_load(con))
+  expect_null(got$error)
+  expect_length(fake_calls_of(fake$log, "psql"), 2)
+  expect_identical(rec$waits, 2)
+  expect_match(
+    got$messages,
+    "failed on attempt 1 of at most 3 (transient). Retrying in 2 s.",
+    fixed = TRUE,
+    all = FALSE
+  )
+  expect_match(got$messages, "internal proxy error", fixed = TRUE, all = FALSE)
+})
+
+test_that("psql: the message of a duplicate key holds psql's output", {
+  fake <- local_fake_tools("dupkey")
+  rec <- local_recorded_waits()
+  con <- load_tools_connection()
+  got <- capture_load_conditions(run_pg_load(con))
+  expect_s3_class(got$error, "csdb_load_duplicate_key")
+  expect_match(
+    got$messages,
+    "(duplicate key). csdb does not retry it. It printed:\nERROR:  23505: duplicate key value",
+    fixed = TRUE,
+    all = FALSE
+  )
+  expect_match(
+    got$messages,
+    "Key (id)=(1) already exists.",
+    fixed = TRUE,
+    all = FALSE
+  )
 })
 
 test_that("psql: a password equal to the row count does not hide the count", {
@@ -768,7 +808,7 @@ test_that("bcp: a refused connection on the format call is retried", {
   expect_length(fake_calls_of(fake$log, "format"), 2)
   expect_length(fake_calls_of(fake$log, "in"), 1)
   expect_identical(readLines(fake$store), "2")
-  expect_identical(rec$waits, 1)
+  expect_identical(rec$waits, 2)
   expect_match(
     got$messages,
     "table tab with bcp format failed on attempt 1 of at most 3 (transient)",
@@ -785,7 +825,7 @@ test_that("bcp: a refused connection on the load is retried, and attempt 2 succe
   expect_null(got$error)
   expect_length(fake_calls_of(fake$log, "in"), 2)
   expect_identical(readLines(fake$store), "2")
-  expect_identical(rec$waits, 1)
+  expect_identical(rec$waits, 2)
   expect_match(
     got$messages,
     "table tab with bcp in succeeded on attempt 2 of at most 3.",
@@ -807,7 +847,7 @@ test_that("bcp: three deadlocks stop after exactly 3 attempts", {
   )
   expect_match(got$message, "deadlocked on lock resources", fixed = TRUE)
   expect_length(fake_calls_of(fake$log, "in"), 3)
-  expect_identical(rec$waits, c(1, 3))
+  expect_identical(rec$waits, c(2, 10))
 })
 
 test_that("bcp: a query timeout (HYT00) after Starting copy is ambiguous", {
@@ -931,6 +971,18 @@ test_that("bcp: a failed login is not retried", {
   got <- capture_load_conditions(run_ms_load(con))
   expect_s3_class(got$error, "csdb_load_other")
   expect_length(fake_calls_of(fake$log, "in"), 1)
+  expect_match(
+    got$messages,
+    "(other). csdb does not retry it. It printed:\nSQLState = 28000",
+    fixed = TRUE,
+    all = FALSE
+  )
+  expect_match(
+    got$messages,
+    "Login failed for user 'fakeuser'.",
+    fixed = TRUE,
+    all = FALSE
+  )
 })
 
 test_that("bcp: an error line stops the load when bcp exits with 0", {
@@ -1093,7 +1145,114 @@ test_that("mocked psql: a transient failure, then success, is retried once", {
     all = FALSE
   )
   expect_identical(n, 2L)
-  expect_identical(rec$waits, 1)
+  expect_identical(rec$waits, 2)
+})
+
+# The line psql printed on 2026-10-12 when the Entra token proxy
+# norsyss-pg-auth refused a login. psql exited with status 2.
+proxy_refusal <- paste0(
+  "psql: error: connection to server at \"norsyss-pg-auth\" (10.98.244.63), ",
+  "port 5432 failed: ERROR:  internal proxy error"
+)
+
+test_that("classify_load_failure(): a login the token proxy refuses is transient", {
+  expect_identical(classify_load_failure("psql", proxy_refusal), "transient")
+})
+
+test_that("mocked psql: a login the token proxy refuses, then success, is retried once", {
+  local_stand_in_tools()
+  rec <- local_recorded_waits()
+  con <- load_tools_connection()
+  n <- 0L
+  local_mocked_bindings(
+    run_load_tool = function(command, args, timeout = 0, env = NULL) {
+      n <<- n + 1L
+      if (n == 1L) {
+        return(list(status = 2L, output = proxy_refusal))
+      }
+      return(list(status = 0L, output = "COPY 2"))
+    }
+  )
+  got <- capture_load_conditions(run_pg_load(con))
+  expect_null(got$error)
+  expect_identical(n, 2L)
+  expect_identical(rec$waits, 2)
+  expect_match(
+    got$messages,
+    paste0(
+      "failed on attempt 1 of at most 3 (transient). Retrying in 2 s.",
+      " It printed:\n",
+      proxy_refusal
+    ),
+    fixed = TRUE,
+    all = FALSE
+  )
+  expect_match(
+    got$messages,
+    "succeeded on attempt 2 of at most 3.",
+    fixed = TRUE,
+    all = FALSE
+  )
+})
+
+test_that("mocked psql: 3 proxy refusals wait 2 s and 10 s, and the last message holds the output", {
+  local_stand_in_tools()
+  rec <- local_recorded_waits()
+  con <- load_tools_connection()
+  n <- 0L
+  local_mocked_bindings(
+    run_load_tool = function(command, args, timeout = 0, env = NULL) {
+      n <<- n + 1L
+      return(list(status = 2L, output = proxy_refusal))
+    }
+  )
+  got <- capture_load_conditions(run_pg_load(con))
+  expect_s3_class(got$error, "csdb_load_transient")
+  expect_identical(n, 3L)
+  expect_identical(rec$waits, c(2, 10))
+  expect_match(
+    got$messages,
+    paste0(
+      "failed on attempt 3 of at most 3 (transient). csdb does not retry it.",
+      " It printed:\n",
+      proxy_refusal
+    ),
+    fixed = TRUE,
+    all = FALSE
+  )
+})
+
+test_that("mocked psql: the message of every class that csdb does not retry holds the output", {
+  local_stand_in_tools()
+  rec <- local_recorded_waits()
+  con <- load_tools_connection()
+  cases <- list(
+    "duplicate key" = "ERROR:  23505: duplicate key value violates unique constraint \"pk_tab\"",
+    ambiguous = "FATAL:  57P01: terminating connection due to administrator command",
+    other = "psql: error: connection to server at \"fakehost\" (10.0.0.9), port 5432 failed: FATAL:  password authentication failed for user \"fakeuser\""
+  )
+  for (failure_class in names(cases)) {
+    printed <- cases[[failure_class]]
+    local_mocked_bindings(
+      run_load_tool = function(command, args, timeout = 0, env = NULL) {
+        return(list(status = 2L, output = printed))
+      }
+    )
+    got <- capture_load_conditions(run_pg_load(con))
+    expect_identical(got$error$failure_class, failure_class)
+    expect_match(
+      got$messages,
+      paste0(
+        "failed on attempt 1 of at most 3 (",
+        failure_class,
+        "). csdb does not retry it. It printed:\n",
+        printed
+      ),
+      fixed = TRUE,
+      all = FALSE
+    )
+  }
+  expect_identical(rec$waits, numeric())
 })
 
 test_that("mocked bcp: a short row count stops, and a full one does not", {

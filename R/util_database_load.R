@@ -825,8 +825,12 @@ S7::method(upsert_load_data_infile, db_sqlite) <- function(
 # A line that bcp starts with "Error = " reports a refused row or batch.
 bcp_error_pattern <- "^\\s*Error = "
 
-# The waits before the second and the third attempt, in seconds.
-load_retry_waits <- c(1, 3)
+# The waits before the second and the third attempt, in seconds. A psql or
+# bcp load and DBConnection_v9$connect() all use them. Until 2026.10.12 the
+# loads waited 1 s and 3 s, and connect() made 2 attempts 1 s apart by
+# default. A proxy that refuses logins, such as norsyss-pg-auth below, needs
+# seconds to recover, not 1 s.
+retry_waits <- c(2, 10)
 
 # psql prints the SQLSTATE because the load passes -v VERBOSITY=verbose, as
 # "ERROR:  23505: duplicate key value ...". The SQLSTATE does not depend on
@@ -840,6 +844,15 @@ pg_sqlstate_pattern <- "(^|\\s)\\S+:\\s+([0-9A-Z]{5}):\\s"
 # No row is sent then, so a failed connection is safe to retry. Any other
 # error came while \copy ran. A broken connection there is ambiguous: the
 # server may have committed the COPY before the client heard the result.
+#
+# The Entra token proxy norsyss-pg-auth:5432 refuses some logins when many
+# psql clients connect at once. On 2026-10-12 psql printed this line for a
+# refused login and exited with status 2:
+#
+# psql: error: connection to server at "norsyss-pg-auth" (10.98.244.63), port 5432 failed: ERROR:  internal proxy error
+#
+# The line starts with "psql: error: ", so the refusal came while psql
+# connected. psql sent no row, so a retry is safe.
 pg_connect_phase <- "^psql: error: "
 pg_connect_retry_text <- paste0(
   "Connection refused|Connection timed out|Connection reset by peer|",
@@ -847,7 +860,8 @@ pg_connect_retry_text <- paste0(
   "Temporary failure in name resolution|timeout expired|",
   "server closed the connection unexpectedly|",
   "the database system is (starting up|shutting down|in recovery mode)|",
-  "sorry, too many clients already|remaining connection slots are reserved"
+  "sorry, too many clients already|remaining connection slots are reserved|",
+  "internal proxy error"
 )
 # The server rolls the statement back for these: serialization failure,
 # deadlock, too many connections, lock timeout, and cannot connect now.
@@ -948,7 +962,7 @@ run_load_tool <- function(command, args, timeout = 0, env = NULL) {
 
 # Wait between two attempts. A test replaces this function, so the unit tests
 # do not sleep.
-load_retry_wait <- function(seconds) {
+retry_wait <- function(seconds) {
   Sys.sleep(seconds)
   return(invisible(NULL))
 }
@@ -1156,11 +1170,14 @@ classify_bcp_failure <- function(output, states, natives) {
 # Run a load client, check it, and retry a transient failure.
 #
 # Each failed attempt emits a message() that names the table, the client, the
-# attempt and the failure class. A load that succeeds on a later attempt
-# emits one more. These are messages and not warnings, because a message never
-# changes control flow. options(warn = 2) or a warning handler would turn a
-# load that succeeded into a failure. message() also writes to stderr at once,
-# so the line reaches the task log when it happens.
+# attempt and the failure class. The message also holds the output of the
+# client after load_output_excerpt(), for every class. So the log shows the
+# output also when a caller catches the final error. A load that succeeds on
+# a later attempt emits one more. These are messages and not warnings,
+# because a message never changes control flow. options(warn = 2) or a
+# warning handler would turn a load that succeeded into a failure. message()
+# also writes to stderr at once, so the line reaches the task log when it
+# happens.
 #
 # The final failure stops with an error of class csdb_load_<class> and
 # csdb_load_error. Its message holds the output of the client after
@@ -1178,7 +1195,7 @@ run_checked_load <- function(
   timeout = 0,
   env = NULL
 ) {
-  max_attempts <- length(load_retry_waits) + 1L
+  max_attempts <- length(retry_waits) + 1L
   attempt <- 0L
   repeat {
     attempt <- attempt + 1L
@@ -1217,16 +1234,15 @@ run_checked_load <- function(
       attempt,
       max_attempts,
       failure_class,
-      if (retry) {
-        paste0(
-          "Retrying in ",
-          load_retry_waits[[attempt]],
-          " s. It printed:\n",
-          printed
-        )
-      } else {
-        "csdb does not retry it."
-      }
+      paste0(
+        if (retry) {
+          paste0("Retrying in ", retry_waits[[attempt]], " s.")
+        } else {
+          "csdb does not retry it."
+        },
+        " It printed:\n",
+        printed
+      )
     ))
     if (!retry) {
       stop(errorCondition(
@@ -1285,7 +1301,7 @@ run_checked_load <- function(
         failure_class = failure_class
       ))
     }
-    load_retry_wait(load_retry_waits[[attempt]])
+    retry_wait(retry_waits[[attempt]])
   }
   if (attempt > 1L) {
     message(sprintf(

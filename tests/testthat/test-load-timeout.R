@@ -21,7 +21,7 @@ timeout_recorded_waits <- function(.local_envir = parent.frame()) {
   rec <- new.env()
   rec$waits <- numeric()
   local_mocked_bindings(
-    load_retry_wait = function(seconds) {
+    retry_wait = function(seconds) {
       rec$waits <- c(rec$waits, seconds)
       return(invisible(NULL))
     },

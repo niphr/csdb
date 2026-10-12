@@ -210,15 +210,20 @@ drops that connection first, and then reports FALSE.
 
 The method drops a connection that another process opened, and then
 opens a connection for the current process.
+
+The method tries again after any error, until it has made
+\code{attempts} attempts. It waits 2 s before attempt 2 and 10 s
+before each later attempt, as a psql or bcp load does. Each failed
+attempt emits a message with its number, the wait and the error.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
-    \preformatted{DBConnection_v9$connect(attempts = 2)}
+    \preformatted{DBConnection_v9$connect(attempts = 3)}
     \if{html}{\out{</div>}}
   }
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
-      \item{\code{attempts}}{Number of attempts to connect.}
+      \item{\code{attempts}}{The number of attempts to connect.}
     }
     \if{html}{\out{</div>}}
   }
