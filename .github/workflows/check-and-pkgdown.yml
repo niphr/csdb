@@ -11,7 +11,7 @@ jobs:
   r-package:
     permissions:
       contents: write
-    uses: niphr/cstemplate/.github/workflows/r-package.yml@5a1cbd0eecf53fa75193d5cda0320dabdcdec41f
+    uses: niphr/cstemplate/.github/workflows/r-package.yml@main
     with:
       lint-allowlist: |
         R/r6_DBConnection_v9.R:cyclocomp_linter
