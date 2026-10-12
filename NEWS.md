@@ -3,6 +3,9 @@
 ## Bug Fixes
 * A SQLite connection waits up to 60 s for a lock that another connection holds. Until now a second writer, for example a forked cs9 plan, stopped at once with "database is locked".
 
+## Development
+* `R/util_database_load.R` held 1007 code lines. Its failure classes, failure messages and their patterns moved unchanged into `R/util_database_load_failure.R`.
+
 # Version 2026.10.13
 
 ## New Features
