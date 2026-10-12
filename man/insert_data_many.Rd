@@ -10,7 +10,7 @@ insert_data_many(
   confirm_insert_via_nrow = FALSE,
   verbose = TRUE,
   load_timeout = 3600,
-  ...
+  update_last_updated = TRUE
 )
 }
 \arguments{
@@ -32,14 +32,19 @@ MAY run. csdb then kills \code{psql} and stops with an error of class
 \code{csdb_load_ambiguous}, and it does not run the session again. The
 per-table path passes it to \code{$insert_data()}.}
 
-\item{...}{Named arguments for a subclass of \code{DBTable_v9} whose
-\code{$insert_data()} and \code{$upsert_data()} take more arguments. csdb
-passes them to every call of these two methods that it makes. It makes
+\item{update_last_updated}{TRUE or FALSE, for a subclass of
+\code{DBTable_v9} whose \code{$insert_data()} and \code{$upsert_data()}
+take an argument \code{update_last_updated}, as the cs9 tables do. csdb
+passes it to every call of these two methods that it makes. It makes
 these calls on the per-table path, after a duplicate key, and for the
-upsert of \code{confirm_insert_via_nrow}. The \code{psql} session calls neither
-method, so an override of \code{$insert_data()} in a subclass does not run
-for the rows that the session loads. csdb stops before any load when one
-of the two methods of a table does not take an argument.}
+upsert of \code{confirm_insert_via_nrow}. The \code{psql} session loads its rows
+without \code{$insert_data()}. So when the session commits and
+\code{update_last_updated} is TRUE, csdb calls \code{$insert_data()} with
+zero rows and \code{update_last_updated = TRUE} on each such table. That
+call loads nothing and writes the last-updated record of the table. With
+FALSE, csdb writes no record. A table whose methods do not take the
+argument, such as a plain \code{DBTable_v9}, has no record, and csdb does
+not pass it.}
 }
 \value{
 \code{NULL}, invisibly.
@@ -55,9 +60,11 @@ On PostgreSQL, csdb writes one load file for each table and starts
 \code{psql} once. That \code{psql} runs a script of one \code{\\copy} for
 each table, with \code{--single-transaction} and \code{-v ON_ERROR_STOP=1}.
 The load therefore needs one \code{psql} login. \code{$insert_data()} on
-each table needs one \code{psql} login for each table. A caller that records
-the insert afterwards, as the last-updated bookkeeping of cs9 does, needs
-one more login for that write.
+each table needs one \code{psql} login for each table. The last-updated
+record of a table is a separate write. A cs9 partitioned insert passes
+\code{update_last_updated = FALSE} and records every partition in one
+write. So it needs one \code{psql} login for the load, plus one for the
+last-updated bookkeeping.
 
 After each \code{\\copy}, the script compares the row count that \code{psql}
 reports with the rows that csdb sent to that table. A difference raises an

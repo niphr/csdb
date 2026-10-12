@@ -24,6 +24,10 @@
 #                session against PostgreSQL 14.24 on 2026-10-12, and exit 3.
 #   lock2        as dupkey2, with the error of a lock wait longer than
 #                lock_timeout, SQLSTATE 55P03.
+#   lost2        "COPY <rows>" for the first \copy, then the lines of a
+#                connection that broke after the load started, as psql 14.24
+#                printed them in test-load-tools.R, and exit 2. They have no
+#                "psql: error: " prefix, so the class is ambiguous.
 #   proxy        the error line of a login that a token proxy refuses.
 #   echo_secret  prints every argument and PGPASSWORD as connection errors.
 #   sleep        waits 5 s, then runs as ok.
@@ -95,6 +99,13 @@ fake_psql_session <- c(
   "  if [ \"$mode\" = lock2 ] && [ $i -eq 2 ]; then",
   "    echo \"psql:$script:9: ERROR:  55P03: canceling statement due to lock timeout\" >&2",
   "    exit 3",
+  "  fi",
+  "  if [ \"$mode\" = lost2 ] && [ $i -eq 2 ]; then",
+  "    echo 'server closed the connection unexpectedly' >&2",
+  "    echo '        This probably means the server terminated abnormally' >&2",
+  "    echo '        before or while processing the request.' >&2",
+  "    echo 'connection to server was lost' >&2",
+  "    exit 2",
   "  fi",
   "  echo \"COPY $tag\"",
   "done < \"$script\"",
@@ -187,24 +198,63 @@ capture_conditions <- function(expr) {
 
 session_secret <- "s3cret-Pw-SENTINEL"
 
-# A subclass whose $insert_data() and $upsert_data() take one more argument,
-# `marker`, and record every value that they receive.
+# A subclass whose $insert_data() and $upsert_data() take update_last_updated,
+# as the cs9 tables do. Each call records the value it received. A call with
+# update_last_updated = TRUE writes one last-updated record: here a count in
+# `records`, in cs9 a row of config_tables_last_updated. The methods call
+# their parent with the arguments that the parent takes.
 Recording <- R6::R6Class(
   "Recording",
   inherit = DBTable_v9,
   public = list(
     seen_insert = character(),
     seen_upsert = character(),
-    insert_data = function(newdata, ..., marker = "unset") {
-      self$seen_insert <- c(self$seen_insert, marker)
-      return(super$insert_data(newdata, ...))
+    records = 0L,
+    insert_data = function(
+      newdata,
+      confirm_insert_via_nrow = FALSE,
+      verbose = TRUE,
+      load_timeout = 3600,
+      update_last_updated = TRUE
+    ) {
+      self$seen_insert <- c(self$seen_insert, as.character(update_last_updated))
+      super$insert_data(
+        newdata,
+        confirm_insert_via_nrow = confirm_insert_via_nrow,
+        verbose = verbose,
+        load_timeout = load_timeout
+      )
+      if (update_last_updated) {
+        self$records <- self$records + 1L
+      }
+      return(invisible(NULL))
     },
-    upsert_data = function(newdata, ..., marker = "unset") {
-      self$seen_upsert <- c(self$seen_upsert, marker)
-      return(super$upsert_data(newdata, ...))
+    upsert_data = function(
+      newdata,
+      drop_indexes = names(self$indexes),
+      verbose = TRUE,
+      load_timeout = 3600,
+      update_last_updated = TRUE
+    ) {
+      self$seen_upsert <- c(self$seen_upsert, as.character(update_last_updated))
+      super$upsert_data(
+        newdata,
+        drop_indexes = drop_indexes,
+        verbose = verbose,
+        load_timeout = load_timeout
+      )
+      if (update_last_updated) {
+        self$records <- self$records + 1L
+      }
+      return(invisible(NULL))
     }
   )
 )
+
+# The number of last-updated records that each table wrote.
+records_of <- function(tables) {
+  return(vapply(tables, function(t) t$records, integer(1)))
+}
 
 # Three SQLite tables t1, t2 and t3 on one shared connection. Each table
 # exists before the test starts, and the connection carries the settings that
@@ -576,7 +626,9 @@ test_that("insert_data_many(confirm_insert_via_nrow = TRUE) upserts each table t
   )
 })
 
-test_that("on the session path, ... reaches the upsert of confirm_insert_via_nrow", {
+test_that("on the session path, update_last_updated reaches the upsert of confirm_insert_via_nrow", {
+  # The fake psql stores nothing, so each table holds 0 rows after the
+  # session, and confirm_insert_via_nrow upserts every table.
   log <- local_fake_psql("ok")
   tables <- three_tables(Recording)
   got <- capture_conditions(with_mocked_bindings(
@@ -584,19 +636,19 @@ test_that("on the session path, ... reaches the upsert of confirm_insert_via_nro
       tables,
       three_data(),
       confirm_insert_via_nrow = TRUE,
-      marker = "passed"
+      update_last_updated = FALSE
     ),
     loads_through_psql = function(connection) TRUE
   ))
   expect_null(got$error)
   expect_length(fake_psql_runs(log), 1)
   for (tab in tables) {
-    expect_identical(tab$seen_insert, character())
-    expect_identical(tab$seen_upsert, "passed")
+    expect_identical(tab$seen_upsert, "FALSE")
   }
+  expect_identical(records_of(tables), c(0L, 0L, 0L))
 })
 
-test_that("on the session path, ... reaches each insert_data() after a duplicate key", {
+test_that("on the session path, update_last_updated reaches each insert_data() after a duplicate key", {
   log <- local_fake_psql("dupkey2")
   tables <- three_tables(Recording)
   per_table <- local_t2_duplicate_once()
@@ -605,29 +657,163 @@ test_that("on the session path, ... reaches each insert_data() after a duplicate
       tables,
       three_data(),
       confirm_insert_via_nrow = TRUE,
-      marker = "passed"
+      update_last_updated = FALSE
     ),
     loads_through_psql = function(connection) TRUE
   ))
   expect_null(got$error)
   expect_length(fake_psql_runs(log), 1)
   for (tab in tables) {
-    expect_identical(tab$seen_insert, "passed")
+    expect_identical(tab$seen_insert, "FALSE")
+  }
+  expect_identical(rows_of(tables[[2]]), c("1 b1", "2 b2"))
+})
+
+test_that("after a session that commits, update_last_updated = TRUE writes one record for each table", {
+  log <- local_fake_psql("ok")
+  tables <- three_tables(Recording)
+  data <- three_data()
+  got <- capture_conditions(with_mocked_bindings(
+    insert_data_many(tables, data, update_last_updated = TRUE),
+    loads_through_psql = function(connection) TRUE
+  ))
+  expect_null(got$error)
+  expect_length(fake_psql_runs(log), 1)
+  expect_identical(records_of(tables), c(1L, 1L, 1L))
+  # The record is a $insert_data() call with zero rows: it loads nothing.
+  for (tab in tables) {
+    expect_identical(tab$seen_insert, "TRUE")
+    expect_identical(rows_of(tab), character(0))
+  }
+  # The caller's data.tables keep their rows.
+  expect_identical(vapply(data, nrow, integer(1)), c(2L, 2L, 2L))
+})
+
+test_that("after a session that commits, update_last_updated = FALSE writes no record", {
+  log <- local_fake_psql("ok")
+  tables <- three_tables(Recording)
+  got <- capture_conditions(with_mocked_bindings(
+    insert_data_many(tables, three_data(), update_last_updated = FALSE),
+    loads_through_psql = function(connection) TRUE
+  ))
+  expect_null(got$error)
+  expect_length(fake_psql_runs(log), 1)
+  expect_identical(records_of(tables), c(0L, 0L, 0L))
+  for (tab in tables) {
+    expect_identical(tab$seen_insert, character(0))
   }
 })
 
-test_that("an argument in ... that the methods do not take stops before any load", {
-  log <- local_fake_psql("ok")
+test_that("a session that fails writes no last-updated record", {
+  log <- local_fake_psql("short2")
+  tables <- three_tables(Recording)
+  got <- capture_conditions(with_mocked_bindings(
+    insert_data_many(tables, three_data(), update_last_updated = TRUE),
+    loads_through_psql = function(connection) TRUE
+  ))
+  expect_s3_class(got$error, "csdb_load_other")
+  expect_identical(records_of(tables), c(0L, 0L, 0L))
+})
+
+test_that("a session that loses its connection after the load starts is not retried", {
+  log <- local_fake_psql("lost2")
+  waits <- local_session_waits()
   tables <- three_tables()
-  got <- capture_conditions(
-    insert_as_postgres(tables, three_data(), nonsense = 1)
+  got <- capture_conditions(insert_as_postgres(tables, three_data()))
+  expect_s3_class(got$error, "csdb_load_ambiguous")
+  expect_length(fake_psql_runs(log), 1)
+  expect_length(waits$waits, 0)
+  expect_match(
+    got$message,
+    "The failure class is ambiguous, after 1 attempt.",
+    fixed = TRUE
   )
   expect_match(
     got$message,
-    "insert_data_many(): $insert_data() of table t1 takes no argument nonsense.",
+    "server closed the connection unexpectedly",
     fixed = TRUE
   )
-  expect_length(fake_psql_runs(log), 0)
+})
+
+test_that("on the per-table path, update_last_updated reaches insert_data() of each table", {
+  cfg <- sqlite_dbconfig()
+  conn <- sqlite_connection(cfg)
+  withr::defer(conn$disconnect())
+  tables <- lapply(c("r1", "r2"), function(name) {
+    return(Recording$new(
+      dbconfig = cfg,
+      table_name = name,
+      field_types = c(id = "INTEGER", x = "TEXT"),
+      keys = "id",
+      dbconnection = conn
+    ))
+  })
+  got <- capture_conditions(
+    insert_data_many(tables, three_data()[1:2], update_last_updated = FALSE)
+  )
+  expect_null(got$error)
+  expect_identical(tables[[1]]$seen_insert, "FALSE")
+  expect_identical(tables[[2]]$seen_insert, "FALSE")
+  expect_identical(records_of(tables), c(0L, 0L))
+  expect_identical(rows_of(tables[[2]]), c("1 b1", "2 b2"))
+})
+
+# The phrases that the installed help and NEWS.md MUST hold. The help is read
+# from man/insert_data_many.Rd in the source tree, or from the installed
+# package when the tests run from a built package.
+rendered_help <- function() {
+  src <- test_path("..", "..", "man", "insert_data_many.Rd")
+  rd <- if (file.exists(src)) {
+    tools::parse_Rd(src)
+  } else {
+    tools::Rd_db("csdb")[["insert_data_many.Rd"]]
+  }
+  withr::local_options(useFancyQuotes = FALSE)
+  out <- utils::capture.output(tools::Rd2txt(
+    rd,
+    options = list(underline_titles = FALSE)
+  ))
+  return(gsub("\\s+", " ", paste(out, collapse = " ")))
+}
+
+news_text <- function() {
+  src <- test_path("..", "..", "NEWS.md")
+  f <- if (file.exists(src)) src else system.file("NEWS.md", package = "csdb")
+  return(gsub("\\s+", " ", paste(readLines(f), collapse = " ")))
+}
+
+test_that("the help of insert_data_many() states the rules of the session", {
+  help <- rendered_help()
+  phrases <- c(
+    lock_timeout = "so the session waits at most 60 s for one lock",
+    empty_skip = "or has no rows, so the script has no '\\copy' for that table",
+    fallback = "and a driver whose loads use 'psql'. Otherwise 'insert_data_many()' calls '$insert_data()' on each table in turn.",
+    row_count = "A difference raises an error before the commit, so the server stores no row in any table.",
+    exception = "The one exception is a duplicate key with 'confirm_insert_via_nrow = TRUE': csdb then inserts table by table."
+  )
+  for (p in names(phrases)) {
+    expect_true(
+      grepl(phrases[[p]], help, fixed = TRUE),
+      label = paste0("the help holds the ", p, " phrase \"", phrases[[p]], "\"")
+    )
+  }
+})
+
+test_that("NEWS.md states the rules of the session", {
+  news <- news_text()
+  phrases <- c(
+    lock_timeout = "The session waits at most 60 s for one lock.",
+    empty_skip = "A table whose data.table is `NULL` or has no rows gets no `\\copy` in the session.",
+    fallback = "With another driver, or with tables that have different connection settings, `insert_data_many()` calls `$insert_data()` on each table in turn.",
+    row_count = "A difference raises an error before the commit, so no table keeps a row.",
+    exception = "The one exception to every row or no row is a duplicate key with `confirm_insert_via_nrow = TRUE`."
+  )
+  for (p in names(phrases)) {
+    expect_true(
+      grepl(phrases[[p]], news, fixed = TRUE),
+      label = paste0("NEWS.md holds the ", p, " phrase \"", phrases[[p]], "\"")
+    )
+  }
 })
 
 test_that("insert_data_many() inserts table by table on a driver without psql", {
@@ -664,27 +850,6 @@ test_that("insert_data_many() inserts table by table when the tables differ in c
 
 # The remaining tests need no fake psql, so they also run on Windows.
 
-test_that("insert_data_many() passes ... to insert_data() of each table", {
-  cfg <- sqlite_dbconfig()
-  conn <- sqlite_connection(cfg)
-  withr::defer(conn$disconnect())
-  tables <- lapply(c("r1", "r2"), function(name) {
-    return(Recording$new(
-      dbconfig = cfg,
-      table_name = name,
-      field_types = c(id = "INTEGER", x = "TEXT"),
-      keys = "id",
-      dbconnection = conn
-    ))
-  })
-  data <- three_data()[1:2]
-  got <- capture_conditions(insert_data_many(tables, data, marker = "passed"))
-  expect_null(got$error)
-  expect_identical(tables[[1]]$seen_insert, "passed")
-  expect_identical(tables[[2]]$seen_insert, "passed")
-  expect_identical(rows_of(tables[[2]]), c("1 b1", "2 b2"))
-})
-
 test_that("insert_data_many() rejects tables and newdata that do not pair up", {
   cfg <- sqlite_dbconfig()
   tab <- DBTable_v9$new(
@@ -702,25 +867,6 @@ test_that("insert_data_many() rejects tables and newdata that do not pair up", {
     "one data.table for each table"
   )
   expect_null(insert_data_many(list(), list()))
-})
-
-test_that("an unnamed argument in ... stops before any load", {
-  cfg <- sqlite_dbconfig()
-  tab <- DBTable_v9$new(
-    dbconfig = cfg,
-    table_name = "t1",
-    field_types = c(id = "INTEGER", x = "TEXT"),
-    keys = "id"
-  )
-  withr::defer(tab$disconnect())
-  got <- capture_conditions(
-    insert_data_many(list(tab), three_data()[1], FALSE, TRUE, 3600, 1)
-  )
-  expect_match(
-    got$message,
-    "insert_data_many(): every argument in ... MUST have a name.",
-    fixed = TRUE
-  )
 })
 
 test_that("csdb exports insert_data_many()", {

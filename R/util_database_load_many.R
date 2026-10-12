@@ -6,9 +6,9 @@
 #
 # Until 2026.10.13 a caller that filled several tables called $insert_data()
 # once for each table. On PostgreSQL each call started its own psql process,
-# and so its own login. A cs9 partitioned table therefore made one login for
-# each partition in one insert. On 2026-10-12 parallel workers that did this
-# used up the 100 connections of a token proxy.
+# and so its own psql login. A cs9 partitioned table therefore made one psql
+# login for each partition in one insert. On 2026-10-12 parallel workers that
+# did this used up the 100 connections of a token proxy.
 
 #' Insert data into several tables in one transaction
 #'
@@ -23,9 +23,11 @@
 #' \code{psql} once. That \code{psql} runs a script of one \code{\\copy} for
 #' each table, with \code{--single-transaction} and \code{-v ON_ERROR_STOP=1}.
 #' The load therefore needs one \code{psql} login. \code{$insert_data()} on
-#' each table needs one \code{psql} login for each table. A caller that records
-#' the insert afterwards, as the last-updated bookkeeping of cs9 does, needs
-#' one more login for that write.
+#' each table needs one \code{psql} login for each table. The last-updated
+#' record of a table is a separate write. A cs9 partitioned insert passes
+#' \code{update_last_updated = FALSE} and records every partition in one
+#' write. So it needs one \code{psql} login for the load, plus one for the
+#' last-updated bookkeeping.
 #'
 #' After each \code{\\copy}, the script compares the row count that \code{psql}
 #' reports with the rows that csdb sent to that table. A difference raises an
@@ -93,14 +95,19 @@
 #'   MAY run. csdb then kills \code{psql} and stops with an error of class
 #'   \code{csdb_load_ambiguous}, and it does not run the session again. The
 #'   per-table path passes it to \code{$insert_data()}.
-#' @param ... Named arguments for a subclass of \code{DBTable_v9} whose
-#'   \code{$insert_data()} and \code{$upsert_data()} take more arguments. csdb
-#'   passes them to every call of these two methods that it makes. It makes
+#' @param update_last_updated TRUE or FALSE, for a subclass of
+#'   \code{DBTable_v9} whose \code{$insert_data()} and \code{$upsert_data()}
+#'   take an argument \code{update_last_updated}, as the cs9 tables do. csdb
+#'   passes it to every call of these two methods that it makes. It makes
 #'   these calls on the per-table path, after a duplicate key, and for the
-#'   upsert of \code{confirm_insert_via_nrow}. The \code{psql} session calls neither
-#'   method, so an override of \code{$insert_data()} in a subclass does not run
-#'   for the rows that the session loads. csdb stops before any load when one
-#'   of the two methods of a table does not take an argument.
+#'   upsert of \code{confirm_insert_via_nrow}. The \code{psql} session loads its rows
+#'   without \code{$insert_data()}. So when the session commits and
+#'   \code{update_last_updated} is TRUE, csdb calls \code{$insert_data()} with
+#'   zero rows and \code{update_last_updated = TRUE} on each such table. That
+#'   call loads nothing and writes the last-updated record of the table. With
+#'   FALSE, csdb writes no record. A table whose methods do not take the
+#'   argument, such as a plain \code{DBTable_v9}, has no record, and csdb does
+#'   not pass it.
 #' @return \code{NULL}, invisibly.
 #' @examples
 #' \donttest{
@@ -133,10 +140,9 @@ insert_data_many <- function(
   confirm_insert_via_nrow = FALSE,
   verbose = TRUE,
   load_timeout = 3600,
-  ...
+  update_last_updated = TRUE
 ) {
   check_insert_many_arguments(tables, newdata)
-  check_method_arguments(tables, names(list(...)), length(list(...)))
   if (length(tables) == 0L) {
     return(invisible(NULL))
   }
@@ -147,7 +153,7 @@ insert_data_many <- function(
       confirm_insert_via_nrow = confirm_insert_via_nrow,
       verbose = verbose,
       load_timeout = load_timeout,
-      ...
+      update_last_updated = update_last_updated
     ))
   }
 
@@ -163,13 +169,14 @@ insert_data_many <- function(
     },
     logical(1)
   )
+  all_tables <- tables
+  all_newdata <- newdata
   tables <- tables[to_load]
   newdata <- newdata[to_load]
-  if (length(tables) == 0L) {
-    return(invisible(NULL))
-  }
 
-  duplicate <- if (confirm_insert_via_nrow) {
+  duplicate <- if (length(tables) == 0L) {
+    NULL
+  } else if (confirm_insert_via_nrow) {
     tryCatch(
       insert_session(tables, newdata, load_timeout),
       csdb_load_duplicate_key = function(e) e
@@ -190,12 +197,12 @@ insert_data_many <- function(
       " a table that stops on a duplicate key."
     )
     return(insert_each(
-      tables,
-      newdata,
+      all_tables,
+      all_newdata,
       confirm_insert_via_nrow = TRUE,
       verbose = verbose,
       load_timeout = load_timeout,
-      ...
+      update_last_updated = update_last_updated
     ))
   }
 
@@ -207,9 +214,12 @@ insert_data_many <- function(
         duplicate = NULL,
         verbose = verbose,
         load_timeout = load_timeout,
-        ...
+        update_last_updated = update_last_updated
       )
     }
+  }
+  if (isTRUE(update_last_updated)) {
+    record_each(all_tables, all_newdata)
   }
   return(invisible(NULL))
 }
@@ -239,68 +249,55 @@ check_insert_many_arguments <- function(tables, newdata) {
   return(invisible(NULL))
 }
 
-# Stop before any load unless $insert_data() and $upsert_data() of every table
-# take each argument in `...`. csdb passes `...` to every call of these two
-# methods that it makes, on both paths. On the session path csdb calls them
-# only after a duplicate key and for the upsert of confirm_insert_via_nrow, so
-# a misspelt argument would otherwise pass unnoticed there.
-check_method_arguments <- function(tables, extra, n) {
-  if (n == 0L) {
-    return(invisible(NULL))
-  }
-  if (is.null(extra) || any(!nzchar(extra))) {
-    stop(
-      "insert_data_many(): every argument in ... MUST have a name.",
-      call. = FALSE
-    )
-  }
-  for (tab in tables) {
-    for (method in c("insert_data", "upsert_data")) {
-      stop_on_unknown_arguments(tab, method, extra)
-    }
-  }
-  return(invisible(NULL))
-}
-
-# Stop when $<method>() of `tab` takes neither `...` nor every name in
-# `extra`.
-stop_on_unknown_arguments <- function(tab, method, extra) {
+# Call $<method>() of `tab` with the arguments in `args`. csdb adds
+# update_last_updated when it is not NULL and the method takes an argument of
+# that name, as the methods of the cs9 subclass DBTableExtended_v9 do.
+# DBTable_v9 keeps no last-updated record, and its methods do not take it.
+call_table_method <- function(tab, method, args, update_last_updated) {
   takes <- names(formals(tab[[method]]))
-  unknown <- setdiff(extra, takes)
-  if ("..." %in% takes || length(unknown) == 0) {
-    return(invisible(NULL))
+  if (!is.null(update_last_updated) && "update_last_updated" %in% takes) {
+    args$update_last_updated <- update_last_updated
   }
-  stop(
-    "insert_data_many(): $",
-    method,
-    "() of table ",
-    tab$table_name,
-    " takes no argument ",
-    paste0(unknown, collapse = ", "),
-    ". csdb passes the arguments in ... to $insert_data() and ",
-    "$upsert_data() of each table, so both methods MUST take them.",
-    call. = FALSE
-  )
+  return(do.call(tab[[method]], args))
 }
 
-# The per-table path: $insert_data() on each table in turn. `...` goes to each
-# $insert_data().
+# The per-table path: $insert_data() on each table in turn.
 insert_each <- function(
   tables,
   newdata,
   confirm_insert_via_nrow,
   verbose,
   load_timeout,
-  ...
+  update_last_updated
 ) {
   for (i in seq_along(tables)) {
-    tables[[i]]$insert_data(
-      newdata[[i]],
-      confirm_insert_via_nrow = confirm_insert_via_nrow,
-      verbose = verbose,
-      load_timeout = load_timeout,
-      ...
+    call_table_method(
+      tables[[i]],
+      "insert_data",
+      list(
+        newdata[[i]],
+        confirm_insert_via_nrow = confirm_insert_via_nrow,
+        verbose = verbose,
+        load_timeout = load_timeout
+      ),
+      update_last_updated
     )
+  }
+  return(invisible(NULL))
+}
+
+# The last-updated record of each table after a session that committed. The
+# session loads no row through $insert_data(), so a subclass that records
+# the last update inside $insert_data() did not record it. csdb therefore
+# calls $insert_data() with zero rows and update_last_updated = TRUE on each
+# table whose $insert_data() takes that argument. A zero-row insert loads
+# nothing. A table whose data.table is NULL is left out.
+record_each <- function(tables, newdata) {
+  for (i in seq_along(tables)) {
+    takes <- names(formals(tables[[i]][["insert_data"]]))
+    if ("update_last_updated" %in% takes && !is.null(newdata[[i]])) {
+      tables[[i]]$insert_data(newdata[[i]][0, ], update_last_updated = TRUE)
+    }
   }
   return(invisible(NULL))
 }
@@ -386,14 +383,16 @@ insert_load_file <- function(private, newdata) {
 # The steps of $insert_data(confirm_insert_via_nrow = TRUE) after the load.
 # `duplicate` is the csdb_load_duplicate_key error of the load, or NULL. After
 # a duplicate key, the rows are upserted once. Otherwise the rows are upserted
-# when the table holds fewer rows than `newdata`. `...` goes to upsert_data().
+# when the table holds fewer rows than `newdata`. update_last_updated goes to
+# upsert_data() through call_table_method(); NULL leaves the default of the
+# method, as $insert_data() itself does.
 insert_confirm <- function(
   self,
   newdata,
   duplicate,
   verbose,
   load_timeout,
-  ...
+  update_last_updated = NULL
 ) {
   if (is.null(duplicate)) {
     nrow_after <- self$nrow(use_count = TRUE)
@@ -422,12 +421,16 @@ insert_confirm <- function(
     )
   }
   if (upsert) {
-    self$upsert_data(
-      newdata = newdata,
-      drop_indexes = NULL,
-      verbose = verbose,
-      load_timeout = load_timeout,
-      ...
+    call_table_method(
+      self,
+      "upsert_data",
+      list(
+        newdata = newdata,
+        drop_indexes = NULL,
+        verbose = verbose,
+        load_timeout = load_timeout
+      ),
+      update_last_updated
     )
     nrow_after <- self$nrow(use_count = TRUE)
     if (nrow_after < nrow(newdata)) {
