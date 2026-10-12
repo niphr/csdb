@@ -140,11 +140,11 @@ dbconnection
 #> (disconnected)
 #> 
 #> Driver:              SQLite 
-#> File:                /tmp/RtmpWS7Lwk/file1d92647814a5.sqlite
+#> File:                /tmp/RtmpCRN1oy/file1e601b7c21df.sqlite
 dbconnection$connect()
 dbconnection$connection
 #> <SQLiteConnection>
-#>   Path: /tmp/RtmpWS7Lwk/file1d92647814a5.sqlite
+#>   Path: /tmp/RtmpCRN1oy/file1e601b7c21df.sqlite
 #>   Extensions: TRUE
 dbconnection$disconnect()
 class(dbconnection$connection)
@@ -199,7 +199,7 @@ dbtable$drop_all_rows()
 dbtable$insert_data(csdb::nor_covid19_cases_by_time_location)
 dbtable$tbl()
 #> # A query:  ?? x 18
-#> # Database: sqlite 3.53.3 [/tmp/RtmpWS7Lwk/file1d92647814a5.sqlite]
+#> # Database: sqlite 3.53.3 [/tmp/RtmpCRN1oy/file1e601b7c21df.sqlite]
 #>    granularity_time granularity_geo country_iso3 location_code border age  
 #>    <chr>            <chr>           <chr>        <chr>          <int> <chr>
 #>  1 day              county          nor          county_nor03    2020 total
