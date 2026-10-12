@@ -697,6 +697,10 @@ DBConnection_v9 <- R6::R6Class(
               dbname = self$config$db,
               extended_types = TRUE
             )
+            DBI::dbExecute(
+              private$pconnection,
+              paste0("PRAGMA busy_timeout = ", sqlite_busy_timeout_ms)
+            )
           } else {
             # odbc_connect_args() holds the five ODBC branches, and it quotes
             # the password.

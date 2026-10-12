@@ -863,6 +863,13 @@ bcp_error_pattern <- "^\\s*Error = "
 # seconds to recover, not 1 s.
 retry_waits <- c(2, 10)
 
+# The longest time in milliseconds that a SQLite connection waits for a lock
+# that another connection holds. DBConnection_v9$connect() sets it with PRAGMA
+# busy_timeout. SQLite allows one writer, and without this wait a second
+# writer, for example a forked cs9 plan, stops at once with "database is
+# locked".
+sqlite_busy_timeout_ms <- 60000L
+
 # The longest time in seconds that the psql session of insert_data_many() waits
 # for one lock. The session script starts with SET lock_timeout. A longer wait
 # stops the session with SQLSTATE 55P03, the server rolls back the whole

@@ -1,3 +1,8 @@
+# Version 2026.10.14
+
+## Bug Fixes
+* A SQLite connection waits up to 60 s for a lock that another connection holds. Until now a second writer, for example a forked cs9 plan, stopped at once with "database is locked".
+
 # Version 2026.10.13
 
 ## New Features
