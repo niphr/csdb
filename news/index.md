@@ -1,5 +1,21 @@
 # Changelog
 
+## Version 2026.10.15
+
+### New Features
+
+- New
+  [`csdb_set_context()`](https://niphr.github.io/csdb/reference/csdb_set_context.md)
+  and
+  [`csdb_get_context()`](https://niphr.github.io/csdb/reference/csdb_get_context.md).
+  With a non-empty context, each PostgreSQL connection of
+  `DBConnection_v9` and each `psql` load run `SET application_name`, so
+  `pg_stat_activity` names the caller. The name keeps only the
+  characters `A-Z a-z 0-9 _ | . : -` of the context, at most 63. After a
+  failed SET, a connection that answers `SELECT 1` stays open, and one
+  that does not counts as a failed connect attempt. A failed SET stops a
+  `psql` load.
+
 ## Version 2026.10.14
 
 ### Bug Fixes
