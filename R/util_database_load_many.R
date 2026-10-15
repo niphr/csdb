@@ -41,6 +41,15 @@
 #'
 #' With another driver, or with tables that have different connection settings,
 #' csdb calls \code{$insert_data()} on each table in turn.
+#'
+#' A connection with \code{pg_load = "json"} (see
+#' \code{\link{DBConnection_v9}}) starts no \code{psql}. One transaction on
+#' the connection of the first table then loads every table. It sends the rows
+#' as JSON text, at most 500,000 rows in one statement. Before the commit,
+#' csdb compares the rows that each statement stored with the rows sent. The
+#' 60 s lock limit and the duplicate-key rule stay the same. After a lock
+#' timeout, a deadlock or a serialization failure, csdb runs the whole load
+#' again, at most 3 attempts in total.
 #' @param tables A list of \code{DBTable_v9} objects.
 #' @param newdata A list of data.tables, one for each table, in the order of
 #'   \code{tables}.
@@ -48,7 +57,9 @@
 #' @param verbose See \code{DBTable_v9$insert_data()}.
 #' @param load_timeout The longest time in seconds that the \code{psql} session
 #'   MAY run. csdb then stops it with an error of class
-#'   \code{csdb_load_ambiguous}.
+#'   \code{csdb_load_ambiguous}. With \code{pg_load = "json"}, the server
+#'   cancels the statement that runs past this time, and the error has class
+#'   \code{csdb_load_other}.
 #' @return \code{NULL}, invisibly.
 #' @examples
 #' \donttest{
@@ -190,9 +201,27 @@ insert_each <- function(
 }
 
 # One psql session that loads every table, through the connection of the
-# first table. The tables share one connection configuration.
+# first table. The tables share one connection configuration. With
+# pg_load = "json", one transaction on that connection loads every table
+# instead, with the lock_timeout of the psql session.
 insert_session <- function(tables, newdata, load_timeout) {
   first <- tables[[1]]
+  if (identical(first$dbconnection$config$pg_load, "json")) {
+    json_load_tables(
+      connection = load_connection(
+        first$dbconnection,
+        first$table_name_short_for_mssql_fully_specified_for_postgres
+      ),
+      dbconfig = first$dbconnection$config,
+      tables = lapply(tables, function(x) {
+        return(x$table_name_short_for_mssql_fully_specified_for_postgres)
+      }),
+      dts = newdata,
+      load_timeout = load_timeout,
+      lock_timeout = load_lock_timeout_seconds
+    )
+    return(NULL)
+  }
   psql_load_session(
     connection = first$dbconnection$autoconnection,
     dbconfig = first$dbconnection$config,
@@ -224,7 +253,14 @@ loads_through_psql <- function(connection) {
 insert_session_possible <- function(tables) {
   configs <- lapply(tables, function(x) x$dbconnection$config)
   same <- all(vapply(configs, identical, logical(1), configs[[1]]))
-  return(same && loads_through_psql(tables[[1]]$dbconnection$autoconnection))
+  first <- tables[[1]]
+  return(
+    same &&
+      loads_through_psql(load_connection(
+        first$dbconnection,
+        first$table_name_short_for_mssql_fully_specified_for_postgres
+      ))
+  )
 }
 
 # The private environment of a DBTable_v9 object. insert_data_many() runs the

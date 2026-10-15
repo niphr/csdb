@@ -46,6 +46,58 @@ Both parts are needed. A close, by \code{DBI::dbDisconnect()} or by the
 garbage collector, would close the other process's socket.
 }
 
+\section{PostgreSQL loads}{
+
+\code{pg_load} selects how \code{DBTable_v9$insert_data()},
+\code{$upsert_data()} and \code{\link{insert_data_many}} send rows to
+PostgreSQL. Other drivers ignore it.
+\describe{
+  \item{\code{"psql"}, the default}{csdb writes a load file and starts
+    \code{psql}. Each \code{psql} process logs in again.}
+  \item{\code{"json"}}{csdb sends the rows as JSON text over this
+    connection, and starts no \code{psql}. A load therefore makes no new
+    login. One statement sends at most 500,000 rows, and every statement
+    of one load runs in one transaction.}
+}
+
+The two methods store different values in three cases:
+\itemize{
+  \item An empty string stays an empty string with \code{"json"}. The
+    \code{psql} load stores \code{NULL}.
+  \item A text with a quote, a tab or a line break is stored unchanged with
+    \code{"json"}. The \code{psql} load stops with an error on some of these
+    texts, and it removes the quotes around a text such as \code{"abc"}.
+  \item A double reaches the server with the digits that read back as the
+    same double with \code{"json"}. The \code{psql} load sends 15
+    significant digits.
+}
+
+With \code{"json"}, csdb finds the failure class in the English error text
+of the server. Each new connection warns once when the \code{lc_messages}
+of the server is not C, POSIX or English. A failed load is
+\code{csdb_load_ambiguous} unless its ROLLBACK succeeded and the connection
+then answered \code{SELECT 1}. Only then can a known English text give
+\code{csdb_load_duplicate_key} or \code{csdb_load_transient}. Any other
+text gives \code{csdb_load_other}. The COMMIT and a broken connection also
+give \code{csdb_load_ambiguous}.
+
+The classes differ from those of \code{psql} in three cases:
+\itemize{
+  \item A statement that runs past \code{load_timeout} stops on the server,
+    which stores no row. The error has class \code{csdb_load_other}, not
+    \code{csdb_load_ambiguous}.
+  \item A statement that stores fewer rows than csdb sent stops the load
+    before the commit. The error has class \code{csdb_load_other}, and the
+    server stores no row.
+  \item A connection that cannot open before the load gives
+    \code{csdb_load_transient}, with the error of \code{connect()} in its
+    message.
+}
+A row with more than 900 MB of JSON text stops the load before csdb sends
+it. PostgreSQL refuses a value of 1 GB or more. The error has class
+\code{csdb_load_other}.
+}
+
 \examples{
 # Creating the object stores the settings. It opens no connection,
 # so this runs without a database server.
@@ -140,7 +192,8 @@ possible. After a fork it opens a connection for the current process.}
   password = NULL,
   trusted_connection = NULL,
   sslmode = NULL,
-  role_create_table = NULL
+  role_create_table = NULL,
+  pg_load = "psql"
 )}
     \if{html}{\out{</div>}}
   }
@@ -157,6 +210,9 @@ possible. After a fork it opens a connection for the current process.}
       \item{\code{trusted_connection}}{NULL or "yes".}
       \item{\code{sslmode}}{NULL or "require".}
       \item{\code{role_create_table}}{NULL or the role to take when creating tables.}
+      \item{\code{pg_load}}{How a PostgreSQL load sends its rows, \code{"psql"} or
+\code{"json"}. NULL means \code{"psql"}. See the section
+"PostgreSQL loads".}
     }
     \if{html}{\out{</div>}}
   }

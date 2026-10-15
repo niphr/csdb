@@ -334,6 +334,56 @@ odbc_connect_args <- function(config) {
 #' Both parts are needed. A close, by \code{DBI::dbDisconnect()} or by the
 #' garbage collector, would close the other process's socket.
 #'
+#' @section PostgreSQL loads:
+#' \code{pg_load} selects how \code{DBTable_v9$insert_data()},
+#' \code{$upsert_data()} and \code{\link{insert_data_many}} send rows to
+#' PostgreSQL. Other drivers ignore it.
+#' \describe{
+#'   \item{\code{"psql"}, the default}{csdb writes a load file and starts
+#'     \code{psql}. Each \code{psql} process logs in again.}
+#'   \item{\code{"json"}}{csdb sends the rows as JSON text over this
+#'     connection, and starts no \code{psql}. A load therefore makes no new
+#'     login. One statement sends at most 500,000 rows, and every statement
+#'     of one load runs in one transaction.}
+#' }
+#'
+#' The two methods store different values in three cases:
+#' \itemize{
+#'   \item An empty string stays an empty string with \code{"json"}. The
+#'     \code{psql} load stores \code{NULL}.
+#'   \item A text with a quote, a tab or a line break is stored unchanged with
+#'     \code{"json"}. The \code{psql} load stops with an error on some of these
+#'     texts, and it removes the quotes around a text such as \code{"abc"}.
+#'   \item A double reaches the server with the digits that read back as the
+#'     same double with \code{"json"}. The \code{psql} load sends 15
+#'     significant digits.
+#' }
+#'
+#' With \code{"json"}, csdb finds the failure class in the English error text
+#' of the server. Each new connection warns once when the \code{lc_messages}
+#' of the server is not C, POSIX or English. A failed load is
+#' \code{csdb_load_ambiguous} unless its ROLLBACK succeeded and the connection
+#' then answered \code{SELECT 1}. Only then can a known English text give
+#' \code{csdb_load_duplicate_key} or \code{csdb_load_transient}. Any other
+#' text gives \code{csdb_load_other}. The COMMIT and a broken connection also
+#' give \code{csdb_load_ambiguous}.
+#'
+#' The classes differ from those of \code{psql} in three cases:
+#' \itemize{
+#'   \item A statement that runs past \code{load_timeout} stops on the server,
+#'     which stores no row. The error has class \code{csdb_load_other}, not
+#'     \code{csdb_load_ambiguous}.
+#'   \item A statement that stores fewer rows than csdb sent stops the load
+#'     before the commit. The error has class \code{csdb_load_other}, and the
+#'     server stores no row.
+#'   \item A connection that cannot open before the load gives
+#'     \code{csdb_load_transient}, with the error of \code{connect()} in its
+#'     message.
+#' }
+#' A row with more than 900 MB of JSON text stops the load before csdb sends
+#' it. PostgreSQL refuses a value of 1 GB or more. The error has class
+#' \code{csdb_load_other}.
+#'
 #' @import data.table
 #' @import R6
 #' @export DBConnection_v9
@@ -400,6 +450,9 @@ DBConnection_v9 <- R6::R6Class(
     #' @param trusted_connection NULL or "yes".
     #' @param sslmode NULL or "require".
     #' @param role_create_table NULL or the role to take when creating tables.
+    #' @param pg_load How a PostgreSQL load sends its rows, \code{"psql"} or
+    #'   \code{"json"}. NULL means \code{"psql"}. See the section
+    #'   "PostgreSQL loads".
     #' @return A new `DBConnection_v9` object.
     initialize = function(
       driver = NULL,
@@ -411,7 +464,8 @@ DBConnection_v9 <- R6::R6Class(
       password = NULL,
       trusted_connection = NULL,
       sslmode = NULL,
-      role_create_table = NULL
+      role_create_table = NULL,
+      pg_load = "psql"
     ) {
       force(driver)
       force(server)
@@ -423,7 +477,18 @@ DBConnection_v9 <- R6::R6Class(
       force(trusted_connection)
       force(sslmode)
       force(role_create_table)
+      force(pg_load)
 
+      if (is.null(pg_load)) {
+        pg_load <- "psql"
+      }
+      if (
+        !is.character(pg_load) ||
+          length(pg_load) != 1L ||
+          !(pg_load %in% c("psql", "json"))
+      ) {
+        stop('pg_load MUST be "psql" or "json".', call. = FALSE)
+      }
       if (is.null(trusted_connection)) {
         trusted_connection <- "x"
       }
@@ -445,7 +510,8 @@ DBConnection_v9 <- R6::R6Class(
           password = password,
           trusted_connection = trusted_connection,
           sslmode = sslmode,
-          role_create_table = role_create_table
+          role_create_table = role_create_table,
+          pg_load = pg_load
         )
       )
     },
@@ -748,6 +814,16 @@ DBConnection_v9 <- R6::R6Class(
           DBI::dbExecute(private$pconnection, app_sql),
           error = function(e) probe_connection(private$pconnection)
         )
+      }
+
+      # A JSON load reads its failure classes from the English error text of
+      # the server. Once for each new connection, csdb warns when the server
+      # sends its messages in another language.
+      if (
+        identical(self$config$pg_load, "json") &&
+          isTRUE(self$config$driver == "PostgreSQL Unicode")
+      ) {
+        json_load_check_locale(private$pconnection)
       }
 
       # use db if available

@@ -24,7 +24,9 @@ insert_data_many(
 
 \item{load_timeout}{The longest time in seconds that the \code{psql} session
 MAY run. csdb then stops it with an error of class
-\code{csdb_load_ambiguous}.}
+\code{csdb_load_ambiguous}. With \code{pg_load = "json"}, the server
+cancels the statement that runs past this time, and the error has class
+\code{csdb_load_other}.}
 }
 \value{
 \code{NULL}, invisibly.
@@ -58,6 +60,15 @@ upserts a table that stops on the duplicate key.
 
 With another driver, or with tables that have different connection settings,
 csdb calls \code{$insert_data()} on each table in turn.
+
+A connection with \code{pg_load = "json"} (see
+\code{\link{DBConnection_v9}}) starts no \code{psql}. One transaction on
+the connection of the first table then loads every table. It sends the rows
+as JSON text, at most 500,000 rows in one statement. Before the commit,
+csdb compares the rows that each statement stored with the rows sent. The
+60 s lock limit and the duplicate-key rule stay the same. After a lock
+timeout, a deadlock or a serialization failure, csdb runs the whole load
+again, at most 3 attempts in total.
 }
 \examples{
 \donttest{

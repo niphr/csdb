@@ -249,6 +249,20 @@ S7::method(load_data_infile, db_postgres) <- function(
     return()
   }
 
+  # pg_load = "json" sends the rows over `connection` and starts no psql. See
+  # util_database_load_json.R. The upsert method below loads its staging
+  # table through this method, so it follows the same setting. The upsert
+  # method has no default for `dbconfig`, so it can pass one that is missing.
+  if (!missing(dbconfig) && identical(dbconfig$pg_load, "json")) {
+    return(json_load_tables(
+      connection = connection,
+      dbconfig = dbconfig,
+      tables = list(table),
+      dts = list(dt),
+      load_timeout = load_timeout
+    ))
+  }
+
   a <- Sys.time()
 
   table_text <- DBI::dbQuoteIdentifier(connection, table)

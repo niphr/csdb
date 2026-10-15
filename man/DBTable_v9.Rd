@@ -259,7 +259,7 @@ Other database classes:
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
-      \item{\code{dbconfig}}{Configuration details of the database (driver, server, port, db, schema, user, password, trusted_connection, sslmode, role_create_table).}
+      \item{\code{dbconfig}}{Configuration details of the database (driver, server, port, db, schema, user, password, trusted_connection, sslmode, role_create_table, pg_load). \code{pg_load} is \code{"psql"} or \code{"json"}, as in \code{\link{DBConnection_v9}}. It applies when this object creates its connection.}
       \item{\code{table_name}}{Name of the table in the database.}
       \item{\code{field_types}}{The types of each column in the database table (INTEGER, DOUBLE, TEXT, BOOLEAN, DATE, DATETIME).}
       \item{\code{keys}}{The combination of these variables uniquely identifies each row of data in the table.}
@@ -397,7 +397,7 @@ exists".
       \item{\code{newdata}}{The data to insert.}
       \item{\code{confirm_insert_via_nrow}}{If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key is upserted once instead. Otherwise the method counts the rows after the insert, and upserts when the table holds fewer rows than \code{newdata}. It stops when the table still holds fewer rows than \code{newdata} after the upsert.}
       \item{\code{verbose}}{Boolean.}
-      \item{\code{load_timeout}}{The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.}
+      \item{\code{load_timeout}}{The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task. For a connection with \code{pg_load = "json"}, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}.}
     }
     \if{html}{\out{</div>}}
   }
@@ -431,7 +431,7 @@ They delete that default file in every case, also after a write that fails partw
       \item{\code{newdata}}{The data to insert.}
       \item{\code{drop_indexes}}{A vector of the indexes to drop before the upsert (can increase performance).}
       \item{\code{verbose}}{Boolean.}
-      \item{\code{load_timeout}}{The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.}
+      \item{\code{load_timeout}}{The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task. For a connection with \code{pg_load = "json"}, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}.}
     }
     \if{html}{\out{</div>}}
   }
@@ -541,7 +541,7 @@ change can therefore start from an empty table.
       \item{\code{newdata}}{The data to insert.}
       \item{\code{drop_indexes}}{A vector of the indexes to drop before the upsert (can increase performance).}
       \item{\code{verbose}}{Boolean.}
-      \item{\code{load_timeout}}{The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.}
+      \item{\code{load_timeout}}{The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task. For a connection with \code{pg_load = "json"}, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}.}
     }
     \if{html}{\out{</div>}}
   }
@@ -568,7 +568,7 @@ change can therefore start from an empty table.
       \item{\code{newdata}}{The data to insert.}
       \item{\code{confirm_insert_via_nrow}}{If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key is upserted once instead. Otherwise the method counts the rows after the insert, and upserts when the table holds fewer rows than \code{newdata}. It stops when the table still holds fewer rows than \code{newdata} after the upsert.}
       \item{\code{verbose}}{Boolean.}
-      \item{\code{load_timeout}}{The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.}
+      \item{\code{load_timeout}}{The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task. For a connection with \code{pg_load = "json"}, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}.}
     }
     \if{html}{\out{</div>}}
   }
