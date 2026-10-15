@@ -13,7 +13,7 @@ confirm_insert_via_nrow = TRUE: csdb then inserts table by table."><meta propert
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.15</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.16</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -100,7 +100,9 @@ call stores every row or no row. The one exception is a duplicate key with
 <dt id="arg-load-timeout">load_timeout<a class="anchor" aria-label="anchor" href="#arg-load-timeout"></a></dt>
 <dd><p>The longest time in seconds that the <code>psql</code> session
 MAY run. csdb then stops it with an error of class
-<code>csdb_load_ambiguous</code>.</p></dd>
+<code>csdb_load_ambiguous</code>. With <code>pg_load = "json"</code>, the server
+cancels the statement that runs past this time, and the error has class
+<code>csdb_load_other</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -128,6 +130,14 @@ exits.</p>
 upserts a table that stops on the duplicate key.</p>
 <p>With another driver, or with tables that have different connection settings,
 csdb calls <code>$insert_data()</code> on each table in turn.</p>
+<p>A connection with <code>pg_load = "json"</code> (see
+<code><a href="DBConnection_v9.html">DBConnection_v9</a></code>) starts no <code>psql</code>. One transaction on
+the connection of the first table then loads every table. It sends the rows
+as JSON text, at most 500,000 rows in one statement. Before the commit,
+csdb compares the rows that each statement stored with the rows sent. The
+60 s lock limit and the duplicate-key rule stay the same. After a lock
+timeout, a deadlock or a serialization failure, csdb runs the whole load
+again, at most 3 attempts in total.</p>
     </div>
 
     <div class="section level2">

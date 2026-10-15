@@ -49,6 +49,62 @@ it. Both parts are needed. A close, by
 [`DBI::dbDisconnect()`](https://dbi.r-dbi.org/reference/dbDisconnect.html)
 or by the garbage collector, would close the other process's socket.
 
+## PostgreSQL loads
+
+`pg_load` selects how `DBTable_v9$insert_data()`, `$upsert_data()` and
+[`insert_data_many`](https://niphr.github.io/csdb/reference/insert_data_many.md)
+send rows to PostgreSQL. Other drivers ignore it.
+
+- `"psql"`, the default:
+
+  csdb writes a load file and starts `psql`. Each `psql` process logs in
+  again.
+
+- `"json"`:
+
+  csdb sends the rows as JSON text over this connection, and starts no
+  `psql`. A load therefore makes no new login. One statement sends at
+  most 500,000 rows, and every statement of one load runs in one
+  transaction.
+
+The two methods store different values in three cases:
+
+- An empty string stays an empty string with `"json"`. The `psql` load
+  stores `NULL`.
+
+- A text with a quote, a tab or a line break is stored unchanged with
+  `"json"`. The `psql` load stops with an error on some of these texts,
+  and it removes the quotes around a text such as `"abc"`.
+
+- A double reaches the server with the digits that read back as the same
+  double with `"json"`. The `psql` load sends 15 significant digits.
+
+With `"json"`, csdb finds the failure class in the English error text of
+the server. Each new connection warns once when the `lc_messages` of the
+server is not C, POSIX or English. A failed load is
+`csdb_load_ambiguous` unless its ROLLBACK succeeded and the connection
+then answered `SELECT 1`. Only then can a known English text give
+`csdb_load_duplicate_key` or `csdb_load_transient`. Any other text gives
+`csdb_load_other`. The COMMIT and a broken connection also give
+`csdb_load_ambiguous`.
+
+The classes differ from those of `psql` in three cases:
+
+- A statement that runs past `load_timeout` stops on the server, which
+  stores no row. The error has class `csdb_load_other`, not
+  `csdb_load_ambiguous`.
+
+- A statement that stores fewer rows than csdb sent stops the load
+  before the commit. The error has class `csdb_load_other`, and the
+  server stores no row.
+
+- A connection that cannot open before the load gives
+  `csdb_load_transient`, with the error of `connect()` in its message.
+
+A row with more than 900 MB of JSON text stops the load before csdb
+sends it. PostgreSQL refuses a value of 1 GB or more. The error has
+class `csdb_load_other`.
+
 ## See also
 
 The introduction vignette,
@@ -112,7 +168,8 @@ Create a new DBConnection_v9 object.
       password = NULL,
       trusted_connection = NULL,
       sslmode = NULL,
-      role_create_table = NULL
+      role_create_table = NULL,
+      pg_load = "psql"
     )
 
 #### Arguments
@@ -156,6 +213,11 @@ Create a new DBConnection_v9 object.
 - `role_create_table`:
 
   NULL or the role to take when creating tables.
+
+- `pg_load`:
+
+  How a PostgreSQL load sends its rows, `"psql"` or `"json"`. NULL means
+  `"psql"`. See the section "PostgreSQL loads".
 
 #### Returns
 

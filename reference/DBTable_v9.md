@@ -261,7 +261,9 @@ Create a new DBTable_v9 object.
 
   Configuration details of the database (driver, server, port, db,
   schema, user, password, trusted_connection, sslmode,
-  role_create_table).
+  role_create_table, pg_load). `pg_load` is `"psql"` or `"json"`, as in
+  [`DBConnection_v9`](https://niphr.github.io/csdb/reference/DBConnection_v9.md).
+  It applies when this object creates its connection.
 
 - `table_name`:
 
@@ -425,7 +427,10 @@ Inserts data into the database table.
   The longest time in seconds that one psql or bcp call MAY run. csdb
   then kills the client and stops with an error of class
   `csdb_load_ambiguous`, and it does not retry the load. The default of
-  3600 s is the 60 minutes after which Airflow kills a norsyss task.
+  3600 s is the 60 minutes after which Airflow kills a norsyss task. For
+  a connection with `pg_load = "json"`, see the section "PostgreSQL
+  loads" of
+  [`DBConnection_v9`](https://niphr.github.io/csdb/reference/DBConnection_v9.md).
 
 #### Details
 
@@ -474,7 +479,10 @@ Upserts data into the database table.
   The longest time in seconds that one psql or bcp call MAY run. csdb
   then kills the client and stops with an error of class
   `csdb_load_ambiguous`, and it does not retry the load. The default of
-  3600 s is the 60 minutes after which Airflow kills a norsyss task.
+  3600 s is the 60 minutes after which Airflow kills a norsyss task. For
+  a connection with `pg_load = "json"`, see the section "PostgreSQL
+  loads" of
+  [`DBConnection_v9`](https://niphr.github.io/csdb/reference/DBConnection_v9.md).
 
 #### Details
 
@@ -586,7 +594,10 @@ Drops all rows in the database table and then upserts data.
   The longest time in seconds that one psql or bcp call MAY run. csdb
   then kills the client and stops with an error of class
   `csdb_load_ambiguous`, and it does not retry the load. The default of
-  3600 s is the 60 minutes after which Airflow kills a norsyss task.
+  3600 s is the 60 minutes after which Airflow kills a norsyss task. For
+  a connection with `pg_load = "json"`, see the section "PostgreSQL
+  loads" of
+  [`DBConnection_v9`](https://niphr.github.io/csdb/reference/DBConnection_v9.md).
 
 ------------------------------------------------------------------------
 
@@ -626,7 +637,10 @@ Drops all rows in the database table and then inserts data.
   The longest time in seconds that one psql or bcp call MAY run. csdb
   then kills the client and stops with an error of class
   `csdb_load_ambiguous`, and it does not retry the load. The default of
-  3600 s is the 60 minutes after which Airflow kills a norsyss task.
+  3600 s is the 60 minutes after which Airflow kills a norsyss task. For
+  a connection with `pg_load = "json"`, see the section "PostgreSQL
+  loads" of
+  [`DBConnection_v9`](https://niphr.github.io/csdb/reference/DBConnection_v9.md).
 
 ------------------------------------------------------------------------
 

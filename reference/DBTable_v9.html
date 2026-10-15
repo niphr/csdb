@@ -11,7 +11,7 @@ combines database connectivity with data validation and bulk operations."><meta 
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.15</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.16</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -267,7 +267,7 @@ the index when it is absent. On any other backend csdb checks nothing.</p>
 </div><p></p><div class="section">
 <h4 id="arguments">Arguments<a class="anchor" aria-label="anchor" href="#arguments"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>dbconfig</code></dt>
-<dd><p>Configuration details of the database (driver, server, port, db, schema, user, password, trusted_connection, sslmode, role_create_table).</p></dd>
+<dd><p>Configuration details of the database (driver, server, port, db, schema, user, password, trusted_connection, sslmode, role_create_table, pg_load). <code>pg_load</code> is <code>"psql"</code> or <code>"json"</code>, as in <code><a href="DBConnection_v9.html">DBConnection_v9</a></code>. It applies when this object creates its connection.</p></dd>
 
       <dt><code>table_name</code></dt>
 <dd><p>Name of the table in the database.</p></dd>
@@ -401,7 +401,7 @@ exists".</p><div class="section">
 <dd><p>Boolean.</p></dd>
 
       <dt><code>load_timeout</code></dt>
-<dd><p>The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class <code>csdb_load_ambiguous</code>, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.</p></dd>
+<dd><p>The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class <code>csdb_load_ambiguous</code>, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task. For a connection with <code>pg_load = "json"</code>, see the section "PostgreSQL loads" of <code><a href="DBConnection_v9.html">DBConnection_v9</a></code>.</p></dd>
 
 
 </dl><p></p></div>
@@ -438,7 +438,7 @@ They delete that default file in every case, also after a write that fails partw
 <dd><p>Boolean.</p></dd>
 
       <dt><code>load_timeout</code></dt>
-<dd><p>The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class <code>csdb_load_ambiguous</code>, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.</p></dd>
+<dd><p>The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class <code>csdb_load_ambiguous</code>, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task. For a connection with <code>pg_load = "json"</code>, see the section "PostgreSQL loads" of <code><a href="DBConnection_v9.html">DBConnection_v9</a></code>.</p></dd>
 
 
 </dl><p></p></div>
@@ -536,7 +536,7 @@ change can therefore start from an empty table.</p><div class="section">
 <dd><p>Boolean.</p></dd>
 
       <dt><code>load_timeout</code></dt>
-<dd><p>The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class <code>csdb_load_ambiguous</code>, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.</p></dd>
+<dd><p>The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class <code>csdb_load_ambiguous</code>, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task. For a connection with <code>pg_load = "json"</code>, see the section "PostgreSQL loads" of <code><a href="DBConnection_v9.html">DBConnection_v9</a></code>.</p></dd>
 
 
 </dl><p></p></div>
@@ -566,7 +566,7 @@ change can therefore start from an empty table.</p><div class="section">
 <dd><p>Boolean.</p></dd>
 
       <dt><code>load_timeout</code></dt>
-<dd><p>The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class <code>csdb_load_ambiguous</code>, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.</p></dd>
+<dd><p>The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class <code>csdb_load_ambiguous</code>, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task. For a connection with <code>pg_load = "json"</code>, see the section "PostgreSQL loads" of <code><a href="DBConnection_v9.html">DBConnection_v9</a></code>.</p></dd>
 
 
 </dl><p></p></div>

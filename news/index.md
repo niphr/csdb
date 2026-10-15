@@ -1,5 +1,17 @@
 # Changelog
 
+## Version 2026.10.16
+
+### New Features
+
+- New argument `pg_load` of `DBConnection_v9$new()`, which
+  `DBTable_v9$new()` also reads from `dbconfig`. With
+  `pg_load = "json"`, a PostgreSQL insert, upsert or
+  [`insert_data_many()`](https://niphr.github.io/csdb/reference/insert_data_many.md)
+  sends its rows as JSON text over the connection that csdb holds. It
+  starts no `psql`, so it makes no new login. The default stays
+  `"psql"`.
+
 ## Version 2026.10.15
 
 ### New Features
