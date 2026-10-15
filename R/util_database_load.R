@@ -261,9 +261,15 @@ S7::method(load_data_infile, db_postgres) <- function(
   sql <- pg_write_copy_command(connection, table, dt, file)
   on.exit(unlink(file), add = TRUE)
 
+  # application_name shows the caller in pg_stat_activity. The SET runs in
+  # the session, after the login, so the login carries no extra parameter.
+  # ON_ERROR_STOP=1 makes a failed SET stop psql before the copy, as in the
+  # session of insert_data_many().
+  app_sql <- pg_application_name_sql()
   run_psql_load(
     dbconfig = dbconfig,
-    command = c("-c", sql),
+    command = c(if (!is.null(app_sql)) c("-c", app_sql), "-c", sql),
+    options = if (!is.null(app_sql)) c("-v", "ON_ERROR_STOP=1"),
     table = as.character(table_text),
     rows_sent = nrow(dt),
     load_timeout = load_timeout

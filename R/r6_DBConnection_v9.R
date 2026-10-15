@@ -738,6 +738,18 @@ DBConnection_v9 <- R6::R6Class(
         }
       )
 
+      # application_name shows the caller in pg_stat_activity. It is best
+      # effort: after a failed SET, a connection that answers SELECT 1 stays
+      # open and reports nothing. A connection that does not answer stops
+      # this attempt, and connect() retries it.
+      app_sql <- connection_application_name_sql(self$config$driver)
+      if (!is.null(app_sql)) {
+        tryCatch(
+          DBI::dbExecute(private$pconnection, app_sql),
+          error = function(e) probe_connection(private$pconnection)
+        )
+      }
+
       # use db if available
       # SQLite is excluded because the file is already the database: it has no
       # USE statement, and issuing one is a syntax error.

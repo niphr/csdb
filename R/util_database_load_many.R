@@ -339,9 +339,10 @@ insert_confirm <- function(
 # run_checked_load() still checks one "COPY <n>" for each table, and it
 # classifies and retries the whole session as it does one table.
 #
-# The first line of the script sets lock_timeout to load_lock_timeout_seconds.
+# The script sets lock_timeout to load_lock_timeout_seconds before any \copy.
 # A longer wait for a lock fails with SQLSTATE 55P03, which
-# classify_psql_failure() classes as transient.
+# classify_psql_failure() classes as transient. With a context, a SET
+# application_name comes first.
 #
 # The function deletes every load file and the script when it returns, also
 # after a write that fails partway.
@@ -381,7 +382,11 @@ psql_load_session <- function(
   script <- tempfile(fileext = ".sql")
   on.exit(unlink(script), add = TRUE)
   con <- file(script, open = "wb")
+  # application_name shows the caller in pg_stat_activity. The SET runs in
+  # the session, after the login, so the login carries no extra parameter.
+  app_sql <- pg_application_name_sql()
   lines <- c(
+    if (!is.null(app_sql)) paste0(app_sql, ";"),
     sprintf("SET lock_timeout = '%ds';", as.integer(load_lock_timeout_seconds)),
     unlist(lapply(seq_along(copies), function(i) {
       return(c(
