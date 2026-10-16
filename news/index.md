@@ -1,5 +1,15 @@
 # Changelog
 
+## Version 2026.10.18
+
+### New Features
+
+- A PostgreSQL load MAY omit a table column whose value PostgreSQL
+  generates: an identity column, or a column whose default calls
+  `nextval()`, such as a serial. The INSERT then leaves it out, so
+  PostgreSQL fills it. Any other table column that the data lacks still
+  stops the load before csdb sends a row.
+
 ## Version 2026.10.17
 
 ### Breaking Changes

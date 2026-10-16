@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.17</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.18</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -51,6 +51,13 @@
       <small>Source: <a href="https://github.com/niphr/csdb/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="2026.10.18" id="version-20261018">Version 2026.10.18<a class="anchor" aria-label="anchor" href="#version-20261018"></a></h2>
+<div class="section level3">
+<h3 id="new-features-2026-10-18">New Features<a class="anchor" aria-label="anchor" href="#new-features-2026-10-18"></a></h3>
+<ul><li>A PostgreSQL load MAY omit a table column whose value PostgreSQL generates: an identity column, or a column whose default calls <code>nextval()</code>, such as a serial. The INSERT then leaves it out, so PostgreSQL fills it. Any other table column that the data lacks still stops the load before csdb sends a row.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="2026.10.17" id="version-20261017">Version 2026.10.17<a class="anchor" aria-label="anchor" href="#version-20261017"></a></h2>
 <div class="section level3">
