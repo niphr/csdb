@@ -72,7 +72,10 @@ S7::method(create_table, db_postgres) <- function(
 ) {
   fields_new <- fields
   fields_new[fields == "TEXT"] <- "VARCHAR"
-  fields_new[fields == "DOUBLE"] <- "REAL"
+  # Until 2026.10.16 this was REAL, which keeps about 7 significant digits.
+  # widen_declared_doubles() below changes such a column of a table that
+  # exists, but only with pg_widen_doubles = TRUE.
+  fields_new[fields == "DOUBLE"] <- "DOUBLE PRECISION"
   fields_new[fields == "BOOLEAN"] <- "BIT"
   fields_new[fields == "DATETIME"] <- "TIMESTAMP"
 
@@ -107,6 +110,164 @@ S7::method(create_table, db_postgres) <- function(
   }
 
   return(DBI::dbExecute(connection, sql))
+}
+
+# What DBTable_v9$create_table() does with a table that exists.
+#
+# "recreate" when the column names or their order differ from `declared`:
+# the table is dropped and created again. "widen" when the names match and
+# a column declared DOUBLE is real: `columns` names those columns. Only with
+# pg_widen_doubles = TRUE does each become double precision in place, and
+# "widen" otherwise also keeps the table. "keep" in every other case. The
+# decision compares no other type, so a different type of another column is
+# "keep", as it was before 2026.10.16.
+#
+# declared    The named field types of the DBTable_v9.
+# live_names  The column names of the table, in table order.
+# live_types  NULL, or the PostgreSQL type of each column of live_names, as
+#             format_type() gives it.
+# returns     A list: `action` and `columns`.
+table_fields_decision <- function(declared, live_names, live_types = NULL) {
+  if (!identical(live_names, names(declared))) {
+    return(list(action = "recreate", columns = character(0)))
+  }
+  # With live_types NULL the comparison has length 0, so no column widens.
+  real <- live_names[declared[live_names] == "DOUBLE" & live_types == "real"]
+  if (length(real) > 0) {
+    return(list(action = "widen", columns = real))
+  }
+  return(list(action = "keep", columns = character(0)))
+}
+
+# The ALTER TABLE statement that makes each of `columns` double precision.
+#
+# One statement rewrites the table once for all the columns. The cast from
+# real to double precision is exact, so every stored value stays the same.
+pg_widen_doubles_sql <- function(connection, table, columns) {
+  alters <- paste0(
+    "ALTER COLUMN ",
+    DBI::dbQuoteIdentifier(connection, columns),
+    " TYPE DOUBLE PRECISION",
+    collapse = ", "
+  )
+  return(paste0(
+    "ALTER TABLE ",
+    quote_table_identity(connection, table),
+    " ",
+    alters
+  ))
+}
+
+# widen_declared_doubles methods
+#
+# With widen = TRUE, make each real column that `field_types` declares DOUBLE
+# double precision. The value is the names of the columns that changed. Only
+# PostgreSQL can have such a column. SQLite REAL and SQL Server FLOAT already
+# hold a double.
+#
+# With widen = FALSE, the default, such a column stays real and counts as
+# matching. A message names the table and its real columns, once per table
+# in each R session.
+S7::method(widen_declared_doubles, db_default) <- function(
+  connection,
+  table,
+  field_types,
+  role_create_table = NULL,
+  widen = FALSE,
+  table_name = NULL,
+  ...
+) {
+  return(character(0))
+}
+
+# The tables that have had their message about real columns in this session.
+pg_real_doubles_noted <- new.env(parent = emptyenv())
+
+S7::method(widen_declared_doubles, db_postgres) <- function(
+  connection,
+  table,
+  field_types,
+  role_create_table = NULL,
+  widen = FALSE,
+  table_name = NULL,
+  ...
+) {
+  table_text <- quote_table_identity(connection, table)
+  if (is.null(table_name)) {
+    table_name <- table_text
+  }
+  live <- DBI::dbGetQuery(
+    connection,
+    paste0(
+      "SELECT a.attname AS name, ",
+      "format_type(a.atttypid, a.atttypmod) AS type ",
+      "FROM pg_catalog.pg_attribute a ",
+      "WHERE a.attrelid = ",
+      DBI::dbQuoteString(connection, table_text),
+      "::regclass AND a.attnum > 0 AND NOT a.attisdropped ",
+      "ORDER BY a.attnum"
+    )
+  )
+  decision <- table_fields_decision(field_types, live$name, live$type)
+  if (!identical(decision$action, "widen")) {
+    return(character(0))
+  }
+  columns <- paste(decision$columns, collapse = ", ")
+  if (!widen) {
+    if (is.null(pg_real_doubles_noted[[table_text]])) {
+      assign(table_text, TRUE, envir = pg_real_doubles_noted)
+      message(
+        "Table ",
+        table_name,
+        ": the column(s) ",
+        columns,
+        " are declared ",
+        "DOUBLE but are real, which keeps about 7 significant digits. ",
+        "csdb leaves them real. To change them to double precision with one ",
+        "ALTER TABLE, which rewrites the table, set pg_widen_doubles = TRUE ",
+        "in the dbconfig or in DBConnection_v9$new()."
+      )
+    }
+    return(character(0))
+  }
+  # The ALTER takes an ACCESS EXCLUSIVE lock. lock_timeout stops it when
+  # another session holds a lock for longer, so later queries on a busy
+  # table do not queue behind it. The rollback keeps the columns real. The
+  # table owner MAY be the role that created it, as in create_table().
+  tryCatch(
+    DBI::dbWithTransaction(connection, {
+      DBI::dbExecute(
+        connection,
+        sprintf(
+          "SET LOCAL lock_timeout = '%ds'",
+          as.integer(load_lock_timeout_seconds)
+        )
+      )
+      DBI::dbExecute(
+        connection,
+        postgres_with_create_role(
+          connection,
+          pg_widen_doubles_sql(connection, table, decision$columns),
+          role_create_table
+        )
+      )
+    }),
+    error = function(e) {
+      stop(
+        "csdb could not change the real column(s) ",
+        columns,
+        " of table ",
+        table_name,
+        " to double precision, and they stay real. ",
+        "The ALTER TABLE waits at most ",
+        load_lock_timeout_seconds,
+        " s for its lock. The error was: ",
+        conditionMessage(e),
+        call. = FALSE
+      )
+    }
+  )
+  return(decision$columns)
 }
 
 #' The csdb field types that SQLite accepts, and what each becomes

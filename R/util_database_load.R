@@ -298,13 +298,39 @@ S7::method(load_data_infile, db_postgres) <- function(
 # Write `dt` to `file` in the format that psql \copy reads, and return the
 # \copy command for it. The PostgreSQL load of one table and the psql session
 # of insert_data_many() both use it.
+#
+# The file is in PostgreSQL's text format, and the command names each of its
+# options. A tab ends a field and a line end ends a row. NA is \N, which
+# PostgreSQL reads as NULL, and an empty string is an empty field.
+# pg_text_escape() writes a backslash, a tab, a line end and a carriage
+# return in a value as \\, \t, \n and \r. Until 2026.10.16 the file was
+# unquoted CSV. A value with a double quote then stopped the load, and an
+# empty string was stored as NULL.
+#
+# Quoted CSV was the other choice, and it fails in one case. psql 14 reads
+# the file line by line, and a line "\." ends the data even inside a quoted
+# value. In the text format a line end in a value is \n, so no line of the
+# file is "\.".
 pg_write_copy_command <- function(connection, table, dt, file) {
   table_text <- DBI::dbQuoteIdentifier(connection, table)
 
   correct_order <- DBI::dbListFields(connection, table)
 
+  # Always a new data.table, so the text columns below leave the caller's
+  # data.table unchanged.
   if (length(correct_order) > 0) {
     dt <- dt[, correct_order, with = FALSE]
+  } else {
+    dt <- dt[, names(dt), with = FALSE]
+  }
+  # enc2utf8() makes each text value UTF-8, which ENCODING 'UTF8' names.
+  for (j in seq_along(dt)) {
+    x <- dt[[j]]
+    if (is.character(x) || is.factor(x)) {
+      set(dt, j = j, value = pg_text_escape(enc2utf8(as.character(x))))
+    } else if (is.double(x) && !is.object(x)) {
+      set(dt, j = j, value = pg_double_text(x))
+    }
   }
 
   write_data_infile(
@@ -313,7 +339,7 @@ pg_write_copy_command <- function(connection, table, dt, file) {
     colnames = FALSE,
     eol = "\n",
     quote = FALSE,
-    na = "",
+    na = "\\N",
     sep = "\t"
   )
 
@@ -321,11 +347,66 @@ pg_write_copy_command <- function(connection, table, dt, file) {
   # unchanged. psql reads the file name between single quotes, and a single
   # quote inside it is written twice.
   return(sprintf(
-    "\\copy %s (%s) from '%s' (FORMAT CSV, DELIMITER '\t')",
+    paste0(
+      "\\copy %s (%s) from '%s' ",
+      "(FORMAT TEXT, DELIMITER '\t', NULL '\\N', ENCODING 'UTF8')"
+    ),
     table_text,
     paste(DBI::dbQuoteIdentifier(connection, correct_order), collapse = ", "),
     gsub("'", "''", file, fixed = TRUE)
   ))
+}
+
+# The text of each double, which PostgreSQL reads back as the same double.
+#
+# fwrite() writes at most 15 significant digits, so 0.1 + 0.2 arrived as 0.3.
+# yyjsonr writes the shortest text that reads back as the same double, as
+# the JSON load does. On 2026-10-16 PostgreSQL 18 read that text and the
+# text of sprintf("%.17g") as the same float8 for each of 201,003 doubles.
+# For 600,000 doubles this function took 0.36 s, and sprintf() 0.77 s.
+#
+# yyjsonr writes a whole value as 5.0, and an INTEGER column refuses that.
+# So a whole value below 2^53 loses its ".0", and a whole value below 2^63
+# is written in full. Inf, -Inf, NaN and NA become NA, which the load stores
+# as NULL.
+pg_double_text <- function(x) {
+  out <- rep(NA_character_, length(x))
+  finite <- which(is.finite(x))
+  if (length(finite) == 0L) {
+    return(out)
+  }
+  json <- yyjsonr::write_json_str(
+    unname(x[finite]),
+    opts = yyjsonr::opts_write_json(digits = -1)
+  )
+  out[finite] <- strsplit(
+    substr(json, 2L, nchar(json) - 1L),
+    ",",
+    fixed = TRUE
+  )[[1]]
+  whole <- is.finite(x) & x == trunc(x)
+  small <- which(whole & abs(x) < 2^53)
+  out[small] <- sub(".0", "", out[small], fixed = TRUE)
+  large <- which(whole & abs(x) >= 2^53 & abs(x) < 2^63)
+  out[large] <- sprintf("%.0f", x[large])
+  return(out)
+}
+
+# Escape each text value for PostgreSQL's text format. A backslash becomes
+# \\, a tab \t, a line end \n and a carriage return \r. The backslash goes
+# first, so the other escapes keep their one backslash. NA stays NA.
+pg_text_escape <- function(x) {
+  special <- which(grepl("[\\\\\t\n\r]", x, perl = TRUE))
+  if (length(special) == 0L) {
+    return(x)
+  }
+  y <- x[special]
+  y <- gsub("\\", "\\\\", y, fixed = TRUE)
+  y <- gsub("\t", "\\t", y, fixed = TRUE)
+  y <- gsub("\n", "\\n", y, fixed = TRUE)
+  y <- gsub("\r", "\\r", y, fixed = TRUE)
+  x[special] <- y
+  return(x)
 }
 
 # Run psql once against the database of `dbconfig`, and check it with

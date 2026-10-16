@@ -81,7 +81,7 @@ fake_psql_session <- c(
   "    continue",
   "  fi",
   "  case \"$line\" in",
-  "    *'(FORMAT CSV'*) ;;",
+  "    *'(FORMAT TEXT'*) ;;",
   "    *) continue ;;",
   "  esac",
   "  i=$((i + 1))",
@@ -158,7 +158,7 @@ fake_psql_script <- function(log, n) {
 
 # The \copy lines of a script, in order.
 copy_lines <- function(script) {
-  return(grep("(FORMAT CSV", script, fixed = TRUE, value = TRUE))
+  return(grep("(FORMAT TEXT", script, fixed = TRUE, value = TRUE))
 }
 
 local_session_waits <- function(.local_envir = parent.frame()) {
@@ -375,7 +375,7 @@ test_that("the session script checks the row count of each table inside the tran
   got <- capture_conditions(insert_as_postgres(tables, data))
   expect_null(got$error)
   script <- fake_psql_script(log, 1)
-  at <- grep("(FORMAT CSV", script, fixed = TRUE)
+  at <- grep("(FORMAT TEXT", script, fixed = TRUE)
   expect_length(at, 3)
   check <- function(n, k) {
     return(c(

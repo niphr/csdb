@@ -685,7 +685,10 @@ test_that("psql: the arguments hold the copy command as one element and no passw
   calls <- fake_calls_of(fake$log, "psql")
   expect_length(calls, 1)
   copy <- sprintf(
-    "\\copy \"tab\" (\"id\", \"x\") from '%s' (FORMAT CSV, DELIMITER '\t')",
+    paste0(
+      "\\copy \"tab\" (\"id\", \"x\") from '%s' (FORMAT TEXT, DELIMITER '\t', ",
+      "NULL '\\N', ENCODING 'UTF8')"
+    ),
     gsub("'", "''", file, fixed = TRUE)
   )
   expect_identical(
@@ -1358,11 +1361,14 @@ test_that("mocked psql: the copy command quotes the columns and the path, and th
   expect_false(startsWith(copy, "\""))
   expect_false(endsWith(copy, "\""))
   expect_match(copy, "(\"id\", \"a b\")", fixed = TRUE)
-  expect_match(copy, "/it''s.tsv' (FORMAT CSV", fixed = TRUE)
+  expect_match(copy, "/it''s.tsv' (FORMAT TEXT", fixed = TRUE)
   expect_identical(
     copy,
     sprintf(
-      "\\copy \"tab\" (\"id\", \"a b\") from '%s' (FORMAT CSV, DELIMITER '\t')",
+      paste0(
+        "\\copy \"tab\" (\"id\", \"a b\") from '%s' (FORMAT TEXT, ",
+        "DELIMITER '\t', NULL '\\N', ENCODING 'UTF8')"
+      ),
       gsub("'", "''", file, fixed = TRUE)
     )
   )

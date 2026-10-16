@@ -688,7 +688,7 @@ DBTable_v9 <- R6::R6Class(
     #' @description
     #' Create a new DBTable_v9 object.
     #'
-    #' @param dbconfig Configuration details of the database (driver, server, port, db, schema, user, password, trusted_connection, sslmode, role_create_table, pg_load). \code{pg_load} is \code{"psql"} or \code{"json"}, as in \code{\link{DBConnection_v9}}. It applies when this object creates its connection.
+    #' @param dbconfig Configuration details of the database (driver, server, port, db, schema, user, password, trusted_connection, sslmode, role_create_table, pg_load, pg_widen_doubles). \code{pg_load} is \code{"psql"} or \code{"json"}, and \code{pg_widen_doubles} is TRUE or FALSE, as in \code{\link{DBConnection_v9}}. They apply when this object creates its connection.
     #' @param table_name Name of the table in the database.
     #' @param field_types The types of each column in the database table (INTEGER, DOUBLE, TEXT, BOOLEAN, DATE, DATETIME).
     #' @param keys The combination of these variables uniquely identifies each row of data in the table.
@@ -725,6 +725,7 @@ DBTable_v9 <- R6::R6Class(
       self$dbconfig$sslmode <- dbconfig$sslmode
       self$dbconfig$role_create_table <- dbconfig$role_create_table
       self$dbconfig$pg_load <- dbconfig$pg_load
+      self$dbconfig$pg_widen_doubles <- dbconfig$pg_widen_doubles
 
       # PostgreSQL silently truncates an identifier longer than 63 bytes.
       # table_exists() would then miss the truncated table, and
@@ -754,7 +755,8 @@ DBTable_v9 <- R6::R6Class(
           trusted_connection = self$dbconfig$trusted_connection,
           sslmode = self$dbconfig$sslmode,
           role_create_table = self$dbconfig$role_create_table,
-          pg_load = self$dbconfig$pg_load
+          pg_load = self$dbconfig$pg_load,
+          pg_widen_doubles = self$dbconfig$pg_widen_doubles
         )
         private$owns_dbconnection <- TRUE
       } else {
@@ -961,6 +963,13 @@ DBTable_v9 <- R6::R6Class(
     #' When the table exists and its fields match, this creates each declared
     #' index that is missing. See the section "Indexes on a table that
     #' exists".
+    #'
+    #' On PostgreSQL, a field type DOUBLE creates a \code{double precision}
+    #' column. A \code{real} column declared DOUBLE in a table that exists
+    #' counts as matching. With \code{pg_widen_doubles = TRUE}, it becomes
+    #' \code{double precision} with one \code{ALTER TABLE}, and the table
+    #' keeps its rows. See the section "PostgreSQL double precision" of
+    #' \code{\link{DBConnection_v9}}.
     create_table = function() {
       # self$connect calls self$create_table.
       # cannot have infinite loop
@@ -973,6 +982,18 @@ DBTable_v9 <- R6::R6Class(
           self$remove_table()
         } else {
           create_tab <- FALSE
+          # widen_declared_doubles() is in util_database_table.R. A real
+          # column declared DOUBLE counts as matching, so the table is never
+          # dropped for it. It becomes double precision only with
+          # pg_widen_doubles = TRUE.
+          widen_declared_doubles(
+            connection = self$dbconnection$autoconnection,
+            table = self$table_name_short_for_mssql_fully_specified_for_postgres,
+            field_types = self$field_types,
+            role_create_table = self$dbconnection$config$role_create_table,
+            widen = isTRUE(self$dbconnection$config$pg_widen_doubles),
+            table_name = self$table_name
+          )
           # Until 2026.10.6 this branch did no index work, so a table that
           # existed never got its declared indexes. A failure here is a
           # warning. See ensure_declared_indexes() in util_database_index.R.
@@ -1703,7 +1724,11 @@ DBTable_v9 <- R6::R6Class(
         self$dbconnection$autoconnection,
         self$table_name_short_for_mssql_fully_specified_for_postgres
       )
-      retval <- identical(fields, names(self$field_types))
+      # table_fields_decision() is in util_database_table.R.
+      retval <- !identical(
+        table_fields_decision(self$field_types, fields)$action,
+        "recreate"
+      )
       if (retval == FALSE) {
         message(glue::glue(
           "given fields: {paste0(names(self$field_types),collapse=', ')}\n",

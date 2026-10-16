@@ -347,16 +347,12 @@ odbc_connect_args <- function(config) {
 #'     of one load runs in one transaction.}
 #' }
 #'
-#' The two methods store different values in three cases:
+#' Until 2026.10.16 the \code{psql} load differed from \code{"json"} in three
+#' cases, and it now stores these values unchanged too:
 #' \itemize{
-#'   \item An empty string stays an empty string with \code{"json"}. The
-#'     \code{psql} load stores \code{NULL}.
-#'   \item A text with a quote, a tab or a line break is stored unchanged with
-#'     \code{"json"}. The \code{psql} load stops with an error on some of these
-#'     texts, and it removes the quotes around a text such as \code{"abc"}.
-#'   \item A double reaches the server with the digits that read back as the
-#'     same double with \code{"json"}. The \code{psql} load sends 15
-#'     significant digits.
+#'   \item It stored an empty string as \code{NULL}.
+#'   \item It stopped on some texts with a quote, a tab or a line break.
+#'   \item It sent 15 significant digits of a double.
 #' }
 #'
 #' With \code{"json"}, csdb finds the failure class in the English error text
@@ -383,6 +379,20 @@ odbc_connect_args <- function(config) {
 #' A row with more than 900 MB of JSON text stops the load before csdb sends
 #' it. PostgreSQL refuses a value of 1 GB or more. The error has class
 #' \code{csdb_load_other}.
+#'
+#' @section PostgreSQL double precision:
+#' The field type DOUBLE creates a \code{double precision} column. Until
+#' 2026.10.16 it created \code{real}, which keeps about 7 significant digits.
+#' A \code{real} column declared DOUBLE in a table that exists counts as
+#' matching, and csdb leaves it as it is. Each session gives one message for
+#' each such table.
+#'
+#' With \code{pg_widen_doubles = TRUE}, \code{DBTable_v9$create_table()}
+#' changes each such column to \code{double precision} with one
+#' \code{ALTER TABLE}. PostgreSQL rewrites the table and its indexes, and
+#' blocks every other access to the table until the rewrite ends. The
+#' \code{ALTER} waits at most 60 s for its lock, and then stops with an error.
+#' The table then stays as it was.
 #'
 #' @import data.table
 #' @import R6
@@ -453,6 +463,9 @@ DBConnection_v9 <- R6::R6Class(
     #' @param pg_load How a PostgreSQL load sends its rows, \code{"psql"} or
     #'   \code{"json"}. NULL means \code{"psql"}. See the section
     #'   "PostgreSQL loads".
+    #' @param pg_widen_doubles TRUE or FALSE. TRUE changes each \code{real}
+    #'   column that a table declares DOUBLE to \code{double precision}. NULL
+    #'   means FALSE. See the section "PostgreSQL double precision".
     #' @return A new `DBConnection_v9` object.
     initialize = function(
       driver = NULL,
@@ -465,7 +478,8 @@ DBConnection_v9 <- R6::R6Class(
       trusted_connection = NULL,
       sslmode = NULL,
       role_create_table = NULL,
-      pg_load = "psql"
+      pg_load = "psql",
+      pg_widen_doubles = FALSE
     ) {
       force(driver)
       force(server)
@@ -478,6 +492,7 @@ DBConnection_v9 <- R6::R6Class(
       force(sslmode)
       force(role_create_table)
       force(pg_load)
+      force(pg_widen_doubles)
 
       if (is.null(pg_load)) {
         pg_load <- "psql"
@@ -488,6 +503,12 @@ DBConnection_v9 <- R6::R6Class(
           !(pg_load %in% c("psql", "json"))
       ) {
         stop('pg_load MUST be "psql" or "json".', call. = FALSE)
+      }
+      if (is.null(pg_widen_doubles)) {
+        pg_widen_doubles <- FALSE
+      }
+      if (!isTRUE(pg_widen_doubles) && !isFALSE(pg_widen_doubles)) {
+        stop("pg_widen_doubles MUST be TRUE or FALSE.", call. = FALSE)
       }
       if (is.null(trusted_connection)) {
         trusted_connection <- "x"
@@ -511,7 +532,8 @@ DBConnection_v9 <- R6::R6Class(
           trusted_connection = trusted_connection,
           sslmode = sslmode,
           role_create_table = role_create_table,
-          pg_load = pg_load
+          pg_load = pg_load,
+          pg_widen_doubles = pg_widen_doubles
         )
       )
     },

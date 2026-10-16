@@ -259,7 +259,7 @@ Other database classes:
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
-      \item{\code{dbconfig}}{Configuration details of the database (driver, server, port, db, schema, user, password, trusted_connection, sslmode, role_create_table, pg_load). \code{pg_load} is \code{"psql"} or \code{"json"}, as in \code{\link{DBConnection_v9}}. It applies when this object creates its connection.}
+      \item{\code{dbconfig}}{Configuration details of the database (driver, server, port, db, schema, user, password, trusted_connection, sslmode, role_create_table, pg_load, pg_widen_doubles). \code{pg_load} is \code{"psql"} or \code{"json"}, and \code{pg_widen_doubles} is TRUE or FALSE, as in \code{\link{DBConnection_v9}}. They apply when this object creates its connection.}
       \item{\code{table_name}}{Name of the table in the database.}
       \item{\code{field_types}}{The types of each column in the database table (INTEGER, DOUBLE, TEXT, BOOLEAN, DATE, DATETIME).}
       \item{\code{keys}}{The combination of these variables uniquely identifies each row of data in the table.}
@@ -357,6 +357,13 @@ therefore can drop the table.
 When the table exists and its fields match, this creates each declared
 index that is missing. See the section "Indexes on a table that
 exists".
+
+On PostgreSQL, a field type DOUBLE creates a \code{double precision}
+column. A \code{real} column declared DOUBLE in a table that exists
+counts as matching. With \code{pg_widen_doubles = TRUE}, it becomes
+\code{double precision} with one \code{ALTER TABLE}, and the table
+keeps its rows. See the section "PostgreSQL double precision" of
+\code{\link{DBConnection_v9}}.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$create_table()}

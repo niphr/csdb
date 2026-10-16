@@ -390,7 +390,7 @@ json_load_values <- function(dt) {
 # Inf, -Inf and NaN become NA, and a POSIXt becomes as.character(), as
 # write_data_infile() does for the psql load. So a TIMESTAMP column stores
 # the same value from both loads. This function does not call
-# scrub_non_finite(), which fails on a column named "i".
+# scrub_non_finite(), which changes a whole data.table by reference.
 #
 # A character value is sent unchanged, so an empty string stays an empty
 # string. A logical becomes 1 or 0, as fwrite(logical01 = TRUE) writes it for
@@ -640,7 +640,10 @@ json_load_lc_messages <- function(connection) {
 # The warning text for an lc_messages in which csdb cannot read the error
 # classes of a JSON load, or NULL for C, POSIX and English.
 json_load_locale_text <- function(lc) {
-  if (!is.na(lc) && (lc %in% c("C", "POSIX") || startsWith(lc, "C.") || startsWith(lc, "en"))) {
+  if (
+    !is.na(lc) &&
+      (lc %in% c("C", "POSIX") || startsWith(lc, "C.") || startsWith(lc, "en"))
+  ) {
     return(NULL)
   }
   return(paste0(

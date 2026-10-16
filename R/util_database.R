@@ -22,14 +22,23 @@
 #' stay a `POSIXct`. A connection opened with `extended_types = TRUE`
 #' round-trips a `POSIXct` through a `DATETIME` column correctly.
 #'
+#' Every column name works. Until 2026.10.16 `get(i)` read a column named
+#' `i` in place of the loop variable, so such a table failed with "invalid
+#' first argument". `set()` takes the column by its position.
+#'
 #' @param dt data.table to scrub.
 #' @return `dt`, invisibly. The function changes `dt` by reference.
 #' @keywords internal
 #' @noRd
 scrub_non_finite <- function(dt) {
-  for (i in names(dt)) {
-    dt[is.infinite(get(i)), (i) := NA]
-    dt[is.nan(get(i)), (i) := NA]
+  for (j in seq_along(dt)) {
+    x <- dt[[j]]
+    if (is.double(x) || is.complex(x)) {
+      bad <- which(is.infinite(x) | is.nan(x))
+      if (length(bad) > 0L) {
+        set(dt, i = bad, j = j, value = NA)
+      }
+    }
   }
   return(invisible(dt))
 }
@@ -63,8 +72,10 @@ write_data_infile <- function(
   # which destroys the upload
   # we need to set them to NA
   scrub_non_finite(dt)
-  for (i in names(dt)) {
-    if (inherits(dt[[i]], "POSIXt")) dt[, (i) := as.character(get(i))]
+  for (j in seq_along(dt)) {
+    if (inherits(dt[[j]], "POSIXt")) {
+      set(dt, j = j, value = as.character(dt[[j]]))
+    }
   }
   return(fwrite(
     dt,
@@ -389,6 +400,10 @@ upsert_load_data_infile <- S7::new_generic(
   "connection"
 )
 create_table <- S7::new_generic("create_table", "connection")
+widen_declared_doubles <- S7::new_generic(
+  "widen_declared_doubles",
+  "connection"
+)
 add_constraint <- S7::new_generic("add_constraint", "connection")
 drop_constraint <- S7::new_generic("drop_constraint", "connection")
 get_indexes <- S7::new_generic("get_indexes", "connection")
