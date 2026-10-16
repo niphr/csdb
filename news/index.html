@@ -57,6 +57,16 @@
 <h3 id="new-features-2026-10-16">New Features<a class="anchor" aria-label="anchor" href="#new-features-2026-10-16"></a></h3>
 <ul><li>New argument <code>pg_load</code> of <code>DBConnection_v9$new()</code>, which <code>DBTable_v9$new()</code> also reads from <code>dbconfig</code>. With <code>pg_load = "json"</code>, a PostgreSQL insert, upsert or <code><a href="../reference/insert_data_many.html">insert_data_many()</a></code> sends its rows as JSON text over the connection that csdb holds. It starts no <code>psql</code>, so it makes no new login. The default stays <code>"psql"</code>.</li>
 </ul></div>
+<div class="section level3">
+<h3 id="bug-fixes-2026-10-16">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-2026-10-16"></a></h3>
+<ul><li>The <code>psql</code> load writes PostgreSQL’s text format, with each backslash, tab and line end escaped. A text value with a double quote no longer stops the load, and an empty string is no longer stored as NULL.</li>
+<li>The <code>psql</code> load writes each double as text that PostgreSQL reads back as the same double: the shortest such text, except a whole number below 2^63, which is written in full digits so it also loads into an integer column. With 15 significant digits, <code>0.1 + 0.2</code> arrived as <code>0.3</code>.</li>
+<li>A load into PostgreSQL, SQL Server, MySQL or SQLite accepts a column named <code>i</code>. Until now it stopped with “invalid first argument”.</li>
+<li>On PostgreSQL, the field type DOUBLE creates <code>double precision</code>. Until now it created <code>real</code>, which keeps about 7 significant digits.</li>
+<li>An existing <code>real</code> column declared DOUBLE stays <code>real</code> until you widen it on purpose. csdb counts it as matching, so it does not drop the table, and it gives one message per table in each session.</li>
+<li>To widen, set <code>pg_widen_doubles = TRUE</code> in the <code>dbconfig</code> of <code>DBTable_v9$new()</code> or in <code>DBConnection_v9$new()</code>. The next <code>create_table()</code>, which <code>connect()</code> calls, then changes each such column to <code>double precision</code> with one <code>ALTER TABLE</code>. The table keeps its rows, and PostgreSQL rewrites it and blocks it during the rewrite. The <code>ALTER</code> waits at most 60 s for its lock, then stops with an error and leaves the columns <code>real</code>.</li>
+<li>A value stored as <code>real</code> keeps its float4 precision after the widening. Import it again for the full precision.</li>
+</ul></div>
 </div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="2026.10.15" id="version-20261015">Version 2026.10.15<a class="anchor" aria-label="anchor" href="#version-20261015"></a></h2>

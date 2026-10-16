@@ -261,9 +261,10 @@ Create a new DBTable_v9 object.
 
   Configuration details of the database (driver, server, port, db,
   schema, user, password, trusted_connection, sslmode,
-  role_create_table, pg_load). `pg_load` is `"psql"` or `"json"`, as in
+  role_create_table, pg_load, pg_widen_doubles). `pg_load` is `"psql"`
+  or `"json"`, and `pg_widen_doubles` is TRUE or FALSE, as in
   [`DBConnection_v9`](https://niphr.github.io/csdb/reference/DBConnection_v9.md).
-  It applies when this object creates its connection.
+  They apply when this object creates its connection.
 
 - `table_name`:
 
@@ -374,6 +375,13 @@ drop the table.
 
 When the table exists and its fields match, this creates each declared
 index that is missing. See the section "Indexes on a table that exists".
+
+On PostgreSQL, a field type DOUBLE creates a `double precision` column.
+A `real` column declared DOUBLE in a table that exists counts as
+matching. With `pg_widen_doubles = TRUE`, it becomes `double precision`
+with one `ALTER TABLE`, and the table keeps its rows. See the section
+"PostgreSQL double precision" of
+[`DBConnection_v9`](https://niphr.github.io/csdb/reference/DBConnection_v9.md).
 
 #### Usage
 

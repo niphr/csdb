@@ -114,14 +114,10 @@ PostgreSQL. Other drivers ignore it.</p><dl><dt><code>"psql"</code>, the default
     of one load runs in one transaction.</p></dd>
 
 
-</dl><p>The two methods store different values in three cases:</p><ul><li><p>An empty string stays an empty string with <code>"json"</code>. The
-    <code>psql</code> load stores <code>NULL</code>.</p></li>
-<li><p>A text with a quote, a tab or a line break is stored unchanged with
-    <code>"json"</code>. The <code>psql</code> load stops with an error on some of these
-    texts, and it removes the quotes around a text such as <code>"abc"</code>.</p></li>
-<li><p>A double reaches the server with the digits that read back as the
-    same double with <code>"json"</code>. The <code>psql</code> load sends 15
-    significant digits.</p></li>
+</dl><p>Until 2026.10.16 the <code>psql</code> load differed from <code>"json"</code> in three
+cases, and it now stores these values unchanged too:</p><ul><li><p>It stored an empty string as <code>NULL</code>.</p></li>
+<li><p>It stopped on some texts with a quote, a tab or a line break.</p></li>
+<li><p>It sent 15 significant digits of a double.</p></li>
 </ul><p>With <code>"json"</code>, csdb finds the failure class in the English error text
 of the server. Each new connection warns once when the <code>lc_messages</code>
 of the server is not C, POSIX or English. A failed load is
@@ -142,6 +138,22 @@ give <code>csdb_load_ambiguous</code>.</p>
 </ul><p>A row with more than 900 MB of JSON text stops the load before csdb sends
 it. PostgreSQL refuses a value of 1 GB or more. The error has class
 <code>csdb_load_other</code>.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="postgresql-double-precision">PostgreSQL double precision<a class="anchor" aria-label="anchor" href="#postgresql-double-precision"></a></h2>
+
+
+<p>The field type DOUBLE creates a <code>double precision</code> column. Until
+2026.10.16 it created <code>real</code>, which keeps about 7 significant digits.
+A <code>real</code> column declared DOUBLE in a table that exists counts as
+matching, and csdb leaves it as it is. Each session gives one message for
+each such table.</p>
+<p>With <code>pg_widen_doubles = TRUE</code>, <code>DBTable_v9$create_table()</code>
+changes each such column to <code>double precision</code> with one
+<code>ALTER TABLE</code>. PostgreSQL rewrites the table and its indexes, and
+blocks every other access to the table until the rewrite ends. The
+<code>ALTER</code> waits at most 60 s for its lock, and then stops with an error.
+The table then stays as it was.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
@@ -201,7 +213,8 @@ possible. After a fork it opens a connection for the current process.</p></dd>
 <span>  trusted_connection <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  sslmode <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  role_create_table <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  pg_load <span class="op">=</span> <span class="st">"psql"</span></span>
+<span>  pg_load <span class="op">=</span> <span class="st">"psql"</span>,</span>
+<span>  pg_widen_doubles <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
 <h4 id="arguments">Arguments<a class="anchor" aria-label="anchor" href="#arguments"></a></h4>
@@ -239,6 +252,11 @@ possible. After a fork it opens a connection for the current process.</p></dd>
 <dd><p>How a PostgreSQL load sends its rows, <code>"psql"</code> or
 <code>"json"</code>. NULL means <code>"psql"</code>. See the section
 "PostgreSQL loads".</p></dd>
+
+      <dt><code>pg_widen_doubles</code></dt>
+<dd><p>TRUE or FALSE. TRUE changes each <code>real</code>
+column that a table declares DOUBLE to <code>double precision</code>. NULL
+means FALSE. See the section "PostgreSQL double precision".</p></dd>
 
 
 </dl><p></p></div>

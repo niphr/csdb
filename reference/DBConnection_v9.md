@@ -67,17 +67,14 @@ send rows to PostgreSQL. Other drivers ignore it.
   most 500,000 rows, and every statement of one load runs in one
   transaction.
 
-The two methods store different values in three cases:
+Until 2026.10.16 the `psql` load differed from `"json"` in three cases,
+and it now stores these values unchanged too:
 
-- An empty string stays an empty string with `"json"`. The `psql` load
-  stores `NULL`.
+- It stored an empty string as `NULL`.
 
-- A text with a quote, a tab or a line break is stored unchanged with
-  `"json"`. The `psql` load stops with an error on some of these texts,
-  and it removes the quotes around a text such as `"abc"`.
+- It stopped on some texts with a quote, a tab or a line break.
 
-- A double reaches the server with the digits that read back as the same
-  double with `"json"`. The `psql` load sends 15 significant digits.
+- It sent 15 significant digits of a double.
 
 With `"json"`, csdb finds the failure class in the English error text of
 the server. Each new connection warns once when the `lc_messages` of the
@@ -104,6 +101,20 @@ The classes differ from those of `psql` in three cases:
 A row with more than 900 MB of JSON text stops the load before csdb
 sends it. PostgreSQL refuses a value of 1 GB or more. The error has
 class `csdb_load_other`.
+
+## PostgreSQL double precision
+
+The field type DOUBLE creates a `double precision` column. Until
+2026.10.16 it created `real`, which keeps about 7 significant digits. A
+`real` column declared DOUBLE in a table that exists counts as matching,
+and csdb leaves it as it is. Each session gives one message for each
+such table.
+
+With `pg_widen_doubles = TRUE`, `DBTable_v9$create_table()` changes each
+such column to `double precision` with one `ALTER TABLE`. PostgreSQL
+rewrites the table and its indexes, and blocks every other access to the
+table until the rewrite ends. The `ALTER` waits at most 60 s for its
+lock, and then stops with an error. The table then stays as it was.
 
 ## See also
 
@@ -169,7 +180,8 @@ Create a new DBConnection_v9 object.
       trusted_connection = NULL,
       sslmode = NULL,
       role_create_table = NULL,
-      pg_load = "psql"
+      pg_load = "psql",
+      pg_widen_doubles = FALSE
     )
 
 #### Arguments
@@ -218,6 +230,12 @@ Create a new DBConnection_v9 object.
 
   How a PostgreSQL load sends its rows, `"psql"` or `"json"`. NULL means
   `"psql"`. See the section "PostgreSQL loads".
+
+- `pg_widen_doubles`:
+
+  TRUE or FALSE. TRUE changes each `real` column that a table declares
+  DOUBLE to `double precision`. NULL means FALSE. See the section
+  "PostgreSQL double precision".
 
 #### Returns
 

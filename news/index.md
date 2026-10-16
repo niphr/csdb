@@ -12,6 +12,33 @@
   starts no `psql`, so it makes no new login. The default stays
   `"psql"`.
 
+### Bug Fixes
+
+- The `psql` load writes PostgreSQL’s text format, with each backslash,
+  tab and line end escaped. A text value with a double quote no longer
+  stops the load, and an empty string is no longer stored as NULL.
+- The `psql` load writes each double as text that PostgreSQL reads back
+  as the same double: the shortest such text, except a whole number
+  below 2^63, which is written in full digits so it also loads into an
+  integer column. With 15 significant digits, `0.1 + 0.2` arrived as
+  `0.3`.
+- A load into PostgreSQL, SQL Server, MySQL or SQLite accepts a column
+  named `i`. Until now it stopped with “invalid first argument”.
+- On PostgreSQL, the field type DOUBLE creates `double precision`. Until
+  now it created `real`, which keeps about 7 significant digits.
+- An existing `real` column declared DOUBLE stays `real` until you widen
+  it on purpose. csdb counts it as matching, so it does not drop the
+  table, and it gives one message per table in each session.
+- To widen, set `pg_widen_doubles = TRUE` in the `dbconfig` of
+  `DBTable_v9$new()` or in `DBConnection_v9$new()`. The next
+  `create_table()`, which `connect()` calls, then changes each such
+  column to `double precision` with one `ALTER TABLE`. The table keeps
+  its rows, and PostgreSQL rewrites it and blocks it during the rewrite.
+  The `ALTER` waits at most 60 s for its lock, then stops with an error
+  and leaves the columns `real`.
+- A value stored as `real` keeps its float4 precision after the
+  widening. Import it again for the full precision.
+
 ## Version 2026.10.15
 
 ### New Features
