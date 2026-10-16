@@ -1,12 +1,8 @@
-# The JSON load of PostgreSQL, pg_load = "json". csdb sends the rows as JSON
-# text over the connection that it holds, and starts no psql.
+# The JSON load of PostgreSQL, the only PostgreSQL load. csdb sends the rows
+# as JSON text over the connection that it holds, and starts no client.
 #
-# SQLite stands in for PostgreSQL here. json_load_execute() is mocked: it
-# records each statement, and for an INSERT it reads the JSON text back with
-# yyjsonr and appends the rows to the SQLite table. BEGIN, COMMIT and
-# ROLLBACK are the real ones of the SQLite connection, so a rollback really
-# removes the rows. run_load_tool() is mocked to fail, so a test fails when
-# csdb starts psql.
+# SQLite stands in for PostgreSQL here, with the mocked server of
+# local_json_server() in helper-json-server.R.
 #
 # The server texts below are the error messages that odbc 1.7.0 and psqlODBC
 # 13.02 gave against PostgreSQL 18.6 on 2026-10-15.
@@ -67,7 +63,7 @@ json_text_german <- paste(
 json_secret <- "json-Pw-SENTINEL"
 
 # Two SQLite tables t1 and t2 on one connection, created before the test.
-json_tables <- function(pg_load = "json", .local_envir = parent.frame()) {
+json_tables <- function(.local_envir = parent.frame()) {
   cfg <- sqlite_dbconfig(.local_envir = .local_envir)
   conn <- sqlite_connection(cfg)
   withr::defer(conn$disconnect(), envir = .local_envir)
@@ -82,7 +78,6 @@ json_tables <- function(pg_load = "json", .local_envir = parent.frame()) {
     suppressMessages(tab$connect())
     return(tab)
   })
-  conn$config$pg_load <- pg_load
   conn$config$password <- json_secret
   return(tables)
 }
@@ -100,48 +95,6 @@ json_rows_of <- function(tab) {
     paste0("SELECT id, x FROM ", tab$table_name, " ORDER BY id")
   )
   return(paste(d$id, d$x))
-}
-
-# The mocked server. `fail` is a function(table, n) that returns NULL, an
-# error text to raise, or a number of stored rows to report: `table` is the
-# bare table name and `n` counts the INSERT statements of that table. The
-# returned environment holds every statement in `sql`.
-local_json_server <- function(fail = NULL, .local_envir = parent.frame()) {
-  rec <- new.env()
-  rec$sql <- character()
-  rec$counts <- list()
-  rec$psql <- 0L
-  local_mocked_bindings(
-    json_load_execute = function(connection, sql, json = NULL) {
-      rec$sql <- c(rec$sql, sql)
-      if (is.null(json)) {
-        return(0)
-      }
-      name <- gsub("[`\"]", "", sub("^INSERT INTO (\\S+) .*$", "\\1", sql))
-      rec$counts[[name]] <- (if (is.null(rec$counts[[name]])) {
-        0L
-      } else {
-        rec$counts[[name]]
-      }) +
-        1L
-      rows <- yyjsonr::read_json_str(json)
-      DBI::dbAppendTable(connection, name, rows)
-      outcome <- if (is.null(fail)) NULL else fail(name, rec$counts[[name]])
-      if (is.character(outcome)) {
-        stop(outcome, call. = FALSE)
-      }
-      if (is.numeric(outcome)) {
-        return(outcome)
-      }
-      return(nrow(rows))
-    },
-    run_load_tool = function(...) {
-      rec$psql <- rec$psql + 1L
-      stop("csdb started psql", call. = FALSE)
-    },
-    .env = .local_envir
-  )
-  return(rec)
 }
 
 local_json_waits <- function(.local_envir = parent.frame()) {
@@ -197,46 +150,42 @@ insert_statements <- function(rec) {
   return(grep("^INSERT INTO ", rec$sql, value = TRUE))
 }
 
-test_that("DBConnection_v9 keeps pg_load, \"psql\" by default, and refuses any other value", {
-  expect_identical(
-    DBConnection_v9$new(driver = "SQLite")$config$pg_load,
-    "psql"
-  )
-  expect_identical(
-    DBConnection_v9$new(driver = "SQLite", pg_load = NULL)$config$pg_load,
-    "psql"
-  )
-  expect_identical(
-    DBConnection_v9$new(driver = "SQLite", pg_load = "json")$config$pg_load,
-    "json"
-  )
-  for (bad in list("JSON", "copy", c("psql", "json"), 1, NA_character_)) {
+test_that("DBConnection_v9$new() takes no pg_load and no pg_widen_doubles", {
+  for (arg in c("pg_load", "pg_widen_doubles")) {
+    args <- list(driver = "SQLite")
+    args[[arg]] <- if (arg == "pg_load") "json" else TRUE
     expect_error(
-      DBConnection_v9$new(driver = "SQLite", pg_load = bad),
-      'pg_load MUST be "psql" or "json".',
-      fixed = TRUE
+      do.call(DBConnection_v9$new, args),
+      "unused argument",
+      fixed = TRUE,
+      label = arg
     )
   }
+  expect_false(any(
+    c("pg_load", "pg_widen_doubles") %in%
+      names(
+        DBConnection_v9$new(driver = "SQLite")$config
+      )
+  ))
 })
 
-test_that("DBTable_v9 gives pg_load of its dbconfig to the connection that it creates", {
+test_that("DBTable_v9 passes no pg_load and no pg_widen_doubles to the connection that it creates", {
   cfg <- sqlite_dbconfig()
-  cfg$pg_load <- "json"
+  cfg$pg_load <- "psql"
+  cfg$pg_widen_doubles <- FALSE
   tab <- DBTable_v9$new(
     dbconfig = cfg,
     table_name = "t1",
     field_types = c(id = "INTEGER"),
     keys = "id"
   )
-  expect_identical(tab$dbconnection$config$pg_load, "json")
-  cfg$pg_load <- NULL
-  tab2 <- DBTable_v9$new(
-    dbconfig = cfg,
-    table_name = "t1",
-    field_types = c(id = "INTEGER"),
-    keys = "id"
-  )
-  expect_identical(tab2$dbconnection$config$pg_load, "psql")
+  expect_false(any(
+    c("pg_load", "pg_widen_doubles") %in%
+      names(
+        tab$dbconnection$config
+      )
+  ))
+  expect_false(any(c("pg_load", "pg_widen_doubles") %in% names(tab$dbconfig)))
 })
 
 test_that("the JSON text keeps an empty string, quotes, tabs, line breaks and unicode, and NA is null", {
@@ -268,7 +217,11 @@ test_that("the JSON text writes a logical as 1 and 0, a whole double as an integ
     big = c(3e9, -1, NA),
     d = c(0.5, Inf, NaN),
     i = c(1L, NA, -2147483647L),
-    p = as.POSIXct(c("2020-01-06 12:00:00", "2020-01-06 12:00:00", NA), tz = "UTC") + c(0, Inf, 0)
+    p = as.POSIXct(
+      c("2020-01-06 12:00:00", "2020-01-06 12:00:00", NA),
+      tz = "UTC"
+    ) +
+      c(0, Inf, 0)
   )
   expect_identical(
     json_load_text(dt),
@@ -305,6 +258,24 @@ test_that("the JSON text writes a Date as YYYY-MM-DD, a POSIXct as as.character(
   expect_identical(back$f, c("lv1", NA, "lv2"))
 })
 
+test_that("the JSON text works on columns named i, j, by, .SD and x", {
+  dt <- data.table::data.table(
+    i = c(1.5, Inf),
+    j = c(NaN, 2.5),
+    by = c("a", "b"),
+    sd = c(-Inf, 3.5),
+    x = as.POSIXct(c("2024-01-02 03:04:05", NA), tz = "UTC")
+  )
+  data.table::setnames(dt, "sd", ".SD")
+  expect_identical(
+    json_load_text(dt),
+    paste0(
+      '[{"i":1.5,"j":null,"by":"a",".SD":null,"x":"2024-01-02 03:04:05"},',
+      '{"i":null,"j":2.5,"by":"b",".SD":3.5,"x":null}]'
+    )
+  )
+})
+
 test_that("json_load_chunks() splits by rows, and by the estimated bytes of JSON", {
   dt <- data.table::data.table(id = 1:10, x = strrep("y", 20))
   expect_identical(
@@ -336,7 +307,7 @@ test_that("json_load_tables() loads every chunk of every table in one transactio
   )
   expect_identical(json_rows_of(tables[[1]]), c("1 a1", "2 a2", "3 a3"))
   expect_identical(json_rows_of(tables[[2]]), c("1 b1", "2 b2"))
-  expect_identical(rec$psql, 0L)
+  expect_identical(rec$client, 0L)
 })
 
 test_that("json_load_tables() locks every table IN ROW EXCLUSIVE MODE before the first INSERT", {
@@ -348,7 +319,10 @@ test_that("json_load_tables() locks every table IN ROW EXCLUSIVE MODE before the
     c(
       "LOCK TABLE `t1` IN ROW EXCLUSIVE MODE",
       "LOCK TABLE `t2` IN ROW EXCLUSIVE MODE",
-      rep("INSERT INTO `t1` (`id`, `x`) SELECT `id`, `x` FROM json_populate_recordset(NULL::`t1`, CAST(? AS json))", 2),
+      rep(
+        "INSERT INTO `t1` (`id`, `x`) SELECT `id`, `x` FROM json_populate_recordset(NULL::`t1`, CAST(? AS json))",
+        2
+      ),
       "INSERT INTO `t2` (`id`, `x`) SELECT `id`, `x` FROM json_populate_recordset(NULL::`t2`, CAST(? AS json))"
     )
   )
@@ -360,7 +334,10 @@ test_that("json_load_tables() locks the tables in the sorted order of their name
   json_load_fixture(rev(tables), rev(json_data()), load_timeout = 0)
   expect_identical(
     rec$sql[1:2],
-    c("LOCK TABLE `t1` IN ROW EXCLUSIVE MODE", "LOCK TABLE `t2` IN ROW EXCLUSIVE MODE")
+    c(
+      "LOCK TABLE `t1` IN ROW EXCLUSIVE MODE",
+      "LOCK TABLE `t2` IN ROW EXCLUSIVE MODE"
+    )
   )
   expect_match(insert_statements(rec)[[1]], "^INSERT INTO `t2` ")
 })
@@ -541,10 +518,18 @@ test_that("classify_json_failure() sorts the server texts into the failure class
   expect_identical(cls(json_text_type), "other")
   expect_identical(cls(json_text_statement_timeout), "other")
   expect_identical(cls(json_text_german), "other")
-  for (text in c(json_text_duplicate, json_text_lock, json_text_type, json_text_german)) {
+  for (text in c(
+    json_text_duplicate,
+    json_text_lock,
+    json_text_type,
+    json_text_german
+  )) {
     expect_identical(cls(text, rolled_back = FALSE), "ambiguous")
   }
-  expect_identical(classify_json_failure(simpleError(json_text_lock)), "ambiguous")
+  expect_identical(
+    classify_json_failure(simpleError(json_text_lock)),
+    "ambiguous"
+  )
   commit <- simpleError(json_text_duplicate)
   commit$csdb_phase <- "commit"
   commit$csdb_rolled_back <- TRUE
@@ -574,8 +559,9 @@ test_that("json_load_tables() leaves the caller's data.table unchanged", {
   expect_identical(json_rows_of(tables[[1]]), c("1 1", "2 NA"))
 })
 
-test_that("the PostgreSQL load_data_infile() with pg_load = \"json\" starts no psql", {
+test_that("the PostgreSQL load_data_infile() sends JSON and starts no external process", {
   rec <- local_json_server()
+  proc <- local_no_external_process()
   tables <- json_tables()
   pg <- S7::method(load_data_infile, db_postgres)
   conn <- tables[[1]]$dbconnection
@@ -586,43 +572,40 @@ test_that("the PostgreSQL load_data_infile() with pg_load = \"json\" starts no p
     dt = json_data()[[1]]
   ))
   expect_null(got$error)
-  expect_identical(rec$psql, 0L)
+  expect_identical(rec$client, 0L)
+  expect_identical(proc$n, 0L)
   expect_length(insert_statements(rec), 1)
   expect_identical(json_rows_of(tables[[1]]), c("1 a1", "2 a2", "3 a3"))
 })
 
-test_that("the PostgreSQL load_data_infile() with pg_load = \"psql\" runs psql", {
-  rec <- local_json_server()
-  tables <- json_tables(pg_load = "psql")
-  pg <- S7::method(load_data_infile, db_postgres)
-  conn <- tables[[1]]$dbconnection
-  got <- json_conditions(pg(
-    connection = conn$autoconnection,
-    dbconfig = conn$config,
-    table = "t1",
-    dt = json_data()[[1]]
-  ))
-  # Without psql on PATH, csdb stops before it starts the client.
-  expect_match(got$message, "csdb started psql|psql command not found")
-  expect_length(insert_statements(rec), 0)
+test_that("local_no_external_process() sees a call of system2()", {
+  proc <- local_no_external_process()
+  expect_error(
+    system2(file.path(R.home("bin"), "Rscript"), "--version", stdout = TRUE),
+    "an external process was started",
+    fixed = TRUE
+  )
+  expect_identical(proc$n, 1L)
 })
 
-test_that("insert_data_many() with pg_load = \"json\" loads every table in one transaction with lock_timeout and starts no psql", {
+test_that("insert_data_many() on PostgreSQL loads every table in one transaction with lock_timeout and starts no external process", {
   rec <- local_json_server()
+  proc <- local_no_external_process()
   tables <- json_tables()
   got <- json_conditions(with_mocked_bindings(
     insert_data_many(tables, json_data()),
-    loads_through_psql = function(connection) TRUE
+    loads_through_json = function(connection) TRUE
   ))
   expect_null(got$error)
-  expect_identical(rec$psql, 0L)
+  expect_identical(rec$client, 0L)
+  expect_identical(proc$n, 0L)
   expect_identical(rec$sql[[1]], "SET LOCAL lock_timeout = '60s'")
   expect_length(insert_statements(rec), 2)
   expect_identical(json_rows_of(tables[[1]]), c("1 a1", "2 a2", "3 a3"))
   expect_identical(json_rows_of(tables[[2]]), c("1 b1", "2 b2"))
 })
 
-test_that("insert_data_many() with pg_load = \"json\" stores no row in any table after a failure in table 2", {
+test_that("insert_data_many() on PostgreSQL stores no row in any table after a failure in table 2", {
   waits <- local_json_waits()
   rec <- local_json_server(fail = function(table, n) {
     if (table == "t2") json_text_type else NULL
@@ -630,7 +613,7 @@ test_that("insert_data_many() with pg_load = \"json\" stores no row in any table
   tables <- json_tables()
   got <- json_conditions(with_mocked_bindings(
     insert_data_many(tables, json_data()),
-    loads_through_psql = function(connection) TRUE
+    loads_through_json = function(connection) TRUE
   ))
   expect_s3_class(got$error, "csdb_load_other")
   expect_identical(json_rows_of(tables[[1]]), character())
@@ -671,11 +654,23 @@ test_that("a row whose JSON text is longer than max_row_bytes stops the load bef
   waits <- local_json_waits()
   rec <- local_json_server()
   tables <- json_tables()
-  data <- list(data.table::data.table(id = 1:3, x = c("a", "b", strrep("z", 1000))))
-  got <- json_conditions(json_load_fixture(tables[1], data, max_rows = 1L, max_row_bytes = 500))
+  data <- list(data.table::data.table(
+    id = 1:3,
+    x = c("a", "b", strrep("z", 1000))
+  ))
+  got <- json_conditions(json_load_fixture(
+    tables[1],
+    data,
+    max_rows = 1L,
+    max_row_bytes = 500
+  ))
   expect_s3_class(got$error, "csdb_load_other")
   expect_length(insert_statements(rec), 2)
-  expect_match(got$message, "row 3 of the data for table `t1` is ", fixed = TRUE)
+  expect_match(
+    got$message,
+    "row 3 of the data for table `t1` is ",
+    fixed = TRUE
+  )
   expect_match(got$message, "csdb did not send it.", fixed = TRUE)
   expect_length(waits$waits, 0)
   expect_identical(json_rows_of(tables[[1]]), character())
@@ -683,7 +678,10 @@ test_that("a row whose JSON text is longer than max_row_bytes stops the load bef
 
 test_that("json_load_row_max_bytes is 900 MB, below the 1 GB limit of PostgreSQL", {
   expect_identical(json_load_row_max_bytes, 900 * 2^20)
-  expect_identical(formals(json_load_tables)$max_row_bytes, quote(json_load_row_max_bytes))
+  expect_identical(
+    formals(json_load_tables)$max_row_bytes,
+    quote(json_load_row_max_bytes)
+  )
 })
 
 test_that("a ROLLBACK that fails after a completed chunk is ambiguous, is not retried, and claims no rollback", {
@@ -702,7 +700,11 @@ test_that("a ROLLBACK that fails after a completed chunk is ambiguous, is not re
     expect_identical(got$error$attempts, 1L)
     expect_length(waits$waits, 0)
     expect_length(insert_statements(rec), 2)
-    expect_match(got$message, "csdb could not confirm the ROLLBACK", fixed = TRUE)
+    expect_match(
+      got$message,
+      "csdb could not confirm the ROLLBACK",
+      fixed = TRUE
+    )
     expect_false(grepl("stored no row", got$message, fixed = TRUE))
   }
 })
@@ -736,11 +738,16 @@ test_that("json_load_locale_text() accepts C, POSIX and English, and warns for a
     expect_null(json_load_locale_text(lc), label = lc)
   }
   for (lc in c("de_DE.UTF-8", "nb_NO.UTF-8", "", NA_character_)) {
-    expect_match(json_load_locale_text(lc), "csdb_load_other or csdb_load_ambiguous", fixed = TRUE, label = lc)
+    expect_match(
+      json_load_locale_text(lc),
+      "csdb_load_other or csdb_load_ambiguous",
+      fixed = TRUE,
+      label = lc
+    )
   }
 })
 
-test_that("a new PostgreSQL connection with pg_load = \"json\" warns once when lc_messages is not English", {
+test_that("a new PostgreSQL connection warns once when lc_messages is not English", {
   json_recorded_connect()
   seen <- new.env()
   seen$n <- 0L
@@ -748,34 +755,68 @@ test_that("a new PostgreSQL connection with pg_load = \"json\" warns once when l
     seen$n <- seen$n + 1L
     return("de_DE.UTF-8")
   })
-  db <- DBConnection_v9$new(driver = "PostgreSQL Unicode", server = "h", port = 5432L, db = "d", user = "u", password = "pw", pg_load = "json")
+  db <- DBConnection_v9$new(
+    driver = "PostgreSQL Unicode",
+    server = "h",
+    port = 5432L,
+    db = "d",
+    user = "u",
+    password = "pw"
+  )
   expect_warning(db$connect(), "lc_messages = 'de_DE.UTF-8'", fixed = TRUE)
   expect_no_warning(db$autoconnection)
   expect_identical(seen$n, 1L)
   db$disconnect()
-  psql <- DBConnection_v9$new(driver = "PostgreSQL Unicode", server = "h", port = 5432L, db = "d", user = "u", password = "pw")
-  expect_no_warning(psql$connect())
+  sqlite <- DBConnection_v9$new(
+    driver = "SQLite",
+    db = withr::local_tempfile(fileext = ".sqlite")
+  )
+  expect_no_warning(sqlite$connect())
   expect_identical(seen$n, 1L)
-  psql$disconnect()
+  sqlite$disconnect()
 })
 
 test_that("an English lc_messages gives no warning", {
   json_recorded_connect()
-  local_mocked_bindings(json_load_lc_messages = function(connection) "en_US.UTF-8")
-  db <- DBConnection_v9$new(driver = "PostgreSQL Unicode", server = "h", port = 5432L, db = "d", user = "u", password = "pw", pg_load = "json")
+  local_mocked_bindings(json_load_lc_messages = function(connection) {
+    "en_US.UTF-8"
+  })
+  db <- DBConnection_v9$new(
+    driver = "PostgreSQL Unicode",
+    server = "h",
+    port = 5432L,
+    db = "d",
+    user = "u",
+    password = "pw"
+  )
   expect_no_warning(db$connect())
   db$disconnect()
 })
 
-# The tables of json_tables(), with a connection that can no longer open: the
-# SQLite file is under a path that is a file.
-json_broken_tables <- function(pg_load = "json", .local_envir = parent.frame()) {
-  tables <- json_tables(pg_load = pg_load, .local_envir = .local_envir)
+# The tables of json_tables(), with a connection that can no longer open.
+# With `driver = "PostgreSQL Unicode"` the connection is a PostgreSQL one, and
+# DBI::dbConnect() fails as SQLite fails on a path under a file. With
+# `driver = "SQLite"` the SQLite file is under a path that is a file.
+json_broken_tables <- function(
+  driver = "PostgreSQL Unicode",
+  .local_envir = parent.frame()
+) {
+  tables <- json_tables(.local_envir = .local_envir)
   conn <- tables[[1]]$dbconnection
   conn$disconnect()
   blocker <- withr::local_tempfile(.local_envir = .local_envir)
   writeLines("x", blocker)
   conn$config$db <- file.path(blocker, "sub", "x.sqlite")
+  if (driver == "PostgreSQL Unicode") {
+    conn$config$driver <- driver
+    local_mocked_bindings(
+      dbConnect = function(drv, ...) {
+        stop("unable to open database file", call. = FALSE)
+      },
+      .package = "DBI",
+      .env = .local_envir
+    )
+  }
   return(tables)
 }
 
@@ -783,27 +824,52 @@ test_that("a connection that cannot open for a JSON load stops with csdb_load_tr
   waits <- local_json_waits()
   rec <- local_json_server()
   tables <- json_broken_tables()
-  got <- json_conditions(tables[[1]]$insert_data(json_data()[[1]], verbose = FALSE))
+  got <- json_conditions(tables[[1]]$insert_data(
+    json_data()[[1]],
+    verbose = FALSE
+  ))
   expect_s3_class(got$error, "csdb_load_transient")
   expect_s3_class(got$error, "csdb_load_error")
   expect_identical(got$error$tool, "json_populate_recordset")
-  expect_match(got$message, "failed before csdb sent a row: csdb could not connect.", fixed = TRUE)
-  expect_match(got$message, "Failed to connect to database after 3 attempts", fixed = TRUE)
-  expect_match(got$message, "The last attempt said: Attempt 3 of 3 to connect failed:", fixed = TRUE)
+  expect_match(
+    got$message,
+    "failed before csdb sent a row: csdb could not connect.",
+    fixed = TRUE
+  )
+  expect_match(
+    got$message,
+    "Failed to connect to database after 3 attempts",
+    fixed = TRUE
+  )
+  expect_match(
+    got$message,
+    "The last attempt said: Attempt 3 of 3 to connect failed:",
+    fixed = TRUE
+  )
   expect_match(got$message, "unable to open database file", fixed = TRUE)
   expect_s3_class(got$error$parent, "error")
   expect_length(insert_statements(rec), 0)
   got2 <- json_conditions(insert_data_many(tables, json_data()))
   expect_s3_class(got2$error, "csdb_load_transient")
-  got3 <- json_conditions(tables[[1]]$upsert_data(json_data()[[1]], verbose = FALSE))
+  got3 <- json_conditions(tables[[1]]$upsert_data(
+    json_data()[[1]],
+    verbose = FALSE
+  ))
   expect_s3_class(got3$error, "csdb_load_transient")
 })
 
-test_that("with pg_load = \"psql\" a connection that cannot open keeps its plain error", {
+test_that("a SQLite connection that cannot open keeps its plain error", {
   waits <- local_json_waits()
   rec <- local_json_server()
-  tables <- json_broken_tables(pg_load = "psql")
-  got <- json_conditions(tables[[1]]$insert_data(json_data()[[1]], verbose = FALSE))
+  tables <- json_broken_tables(driver = "SQLite")
+  got <- json_conditions(tables[[1]]$insert_data(
+    json_data()[[1]],
+    verbose = FALSE
+  ))
   expect_false(inherits(got$error, "csdb_load_error"))
-  expect_match(got$message, "Failed to connect to database after 3 attempts", fixed = TRUE)
+  expect_match(
+    got$message,
+    "Failed to connect to database after 3 attempts",
+    fixed = TRUE
+  )
 })

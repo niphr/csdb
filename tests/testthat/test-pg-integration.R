@@ -5,10 +5,9 @@
 # CSDB_TEST_PG_PASSWORD. CSDB_TEST_PG_PORT (5432), CSDB_TEST_PG_SCHEMA
 # ("public") and CSDB_TEST_PG_DRIVER ("PostgreSQL Unicode") are optional. The
 # user MUST be able to create tables in the schema. Each test makes tables
-# with new names, and drops them when it ends. The psql test also needs psql
-# on the PATH.
+# with new names, and drops them when it ends.
 
-pg_it_config <- function(pg_widen_doubles = NULL) {
+pg_it_config <- function() {
   server <- Sys.getenv("CSDB_TEST_PG_SERVER")
   skip_if(
     server == "",
@@ -24,22 +23,16 @@ pg_it_config <- function(pg_widen_doubles = NULL) {
     db = Sys.getenv("CSDB_TEST_PG_DB"),
     schema = Sys.getenv("CSDB_TEST_PG_SCHEMA", "public"),
     user = Sys.getenv("CSDB_TEST_PG_USER"),
-    password = Sys.getenv("CSDB_TEST_PG_PASSWORD"),
-    pg_load = "psql",
-    pg_widen_doubles = pg_widen_doubles
+    password = Sys.getenv("CSDB_TEST_PG_PASSWORD")
   ))
 }
 
 # A DBTable_v9 on a table with a new name. The table is dropped when the
 # calling test ends.
-pg_it_table <- function(
-  field_types,
-  pg_widen_doubles = NULL,
-  envir = parent.frame()
-) {
+pg_it_table <- function(field_types, envir = parent.frame()) {
   name <- paste0("csdb_it_", gsub("-", "", uuid::UUIDgenerate()))
   tab <- DBTable_v9$new(
-    dbconfig = pg_it_config(pg_widen_doubles),
+    dbconfig = pg_it_config(),
     table_name = name,
     field_types = field_types,
     keys = names(field_types)[[1]],
@@ -131,26 +124,62 @@ pg_it_text <- c(
   "\u65e5\u672c\u8a9e"
 )
 
-test_that("PostgreSQL psql load: every edge text value and every double round-trips", {
-  skip_if(Sys.which("psql") == "", "psql is not on the PATH")
-  tab <- pg_it_table(c(id = "INTEGER", txt = "TEXT", x = "DOUBLE"))
+pg_it_x <- function() {
   x <- c(0.1 + 0.2, 1 / 3, pi, 1e-300, 5e-324, .Machine$double.xmax, -2.5e-8)
-  x <- rep_len(c(x, NA), length(pg_it_text))
+  return(rep_len(c(x, NA), length(pg_it_text)))
+}
+
+# x::text is the shortest text that PostgreSQL reads back as the same double,
+# so the ODBC driver adds no rounding.
+pg_it_rows <- function(tab) {
+  return(pg_it_query(
+    tab,
+    "SELECT id, txt, x::text AS x FROM {table} ORDER BY id"
+  ))
+}
+
+test_that("PostgreSQL insert: every edge text value and every double round-trips, and no external process starts", {
+  tab <- pg_it_table(c(id = "INTEGER", txt = "TEXT", x = "DOUBLE"))
+  suppressMessages(tab$connect())
+  proc <- local_no_external_process()
   dt <- data.table::data.table(
     id = seq_along(pg_it_text),
     txt = pg_it_text,
-    x = x
+    x = pg_it_x()
   )
   suppressMessages(tab$insert_data(data.table::copy(dt), verbose = FALSE))
-  # x::text is the shortest text that PostgreSQL reads back as the same
-  # double, so the ODBC driver adds no rounding.
-  got <- pg_it_query(
-    tab,
-    "SELECT id, txt, x::text AS x FROM {table} ORDER BY id"
-  )
+  got <- pg_it_rows(tab)
   expect_identical(got$id, dt$id)
   expect_identical(got$txt, pg_it_text)
-  expect_identical(as.numeric(got$x), x)
+  expect_identical(as.numeric(got$x), pg_it_x())
+  expect_identical(proc$n, 0L)
+})
+
+test_that("PostgreSQL upsert and insert_data_many(): every value round-trips, and no external process starts", {
+  tab <- pg_it_table(c(id = "INTEGER", txt = "TEXT", x = "DOUBLE"))
+  tab2 <- pg_it_table(c(id = "INTEGER", txt = "TEXT", x = "DOUBLE"))
+  suppressMessages(tab$connect())
+  suppressMessages(tab2$connect())
+  proc <- local_no_external_process()
+  dt <- data.table::data.table(
+    id = seq_along(pg_it_text),
+    txt = pg_it_text,
+    x = pg_it_x()
+  )
+  suppressMessages(tab$insert_data(dt[1:3], verbose = FALSE))
+  suppressMessages(tab$upsert_data(data.table::copy(dt), verbose = FALSE))
+  suppressMessages(insert_data_many(
+    list(tab2),
+    list(data.table::copy(dt)),
+    verbose = FALSE
+  ))
+  for (t in list(tab, tab2)) {
+    got <- pg_it_rows(t)
+    expect_identical(got$id, dt$id)
+    expect_identical(got$txt, pg_it_text)
+    expect_identical(as.numeric(got$x), pg_it_x())
+  }
+  expect_identical(proc$n, 0L)
 })
 
 test_that("PostgreSQL: a new table gets double precision for DOUBLE", {
@@ -183,35 +212,12 @@ pg_it_read <- paste0(
   "FROM {table} WHERE id <= 1000 ORDER BY id"
 )
 
-test_that("PostgreSQL: by default a real column declared DOUBLE stays real, with every row kept, and the table takes rows", {
+test_that("PostgreSQL: a real column declared DOUBLE becomes double precision, with every row kept, and the table takes rows", {
   tab <- pg_it_table(c(id = "INTEGER", x = "DOUBLE", y = "DOUBLE"))
   pg_it_real_table(tab)
   before <- pg_it_query(tab, pg_it_read)
   oid <- pg_it_oid(tab)
   msgs <- testthat::capture_messages(tab$connect())
-  expect_identical(pg_it_types(tab)$type, c("integer", "real", "real"))
-  expect_identical(pg_it_oid(tab), oid)
-  expect_identical(pg_it_query(tab, pg_it_read), before)
-  expect_identical(sum(grepl("are declared DOUBLE but are real", msgs)), 1L)
-  suppressMessages(tab$insert_data(
-    data.table::data.table(id = 1001L, x = 0.5, y = 2),
-    verbose = FALSE
-  ))
-  expect_identical(
-    pg_it_query(tab, "SELECT count(*)::int AS n FROM {table}")$n,
-    1001L
-  )
-})
-
-test_that("PostgreSQL: with pg_widen_doubles = TRUE a real column declared DOUBLE becomes double precision, with every row kept", {
-  tab <- pg_it_table(
-    c(id = "INTEGER", x = "DOUBLE", y = "DOUBLE"),
-    pg_widen_doubles = TRUE
-  )
-  pg_it_real_table(tab)
-  before <- pg_it_query(tab, pg_it_read)
-  oid <- pg_it_oid(tab)
-  suppressMessages(tab$connect())
   expect_identical(
     pg_it_types(tab)$type,
     c("integer", "double precision", "double precision")
@@ -220,6 +226,19 @@ test_that("PostgreSQL: with pg_widen_doubles = TRUE a real column declared DOUBL
   after <- pg_it_query(tab, pg_it_read)
   expect_identical(nrow(after), 1000L)
   expect_identical(after, before)
+  expect_false(any(grepl("Dropping table", msgs, fixed = TRUE)))
+  suppressMessages(tab$insert_data(
+    data.table::data.table(id = 1001L, x = 0.1 + 0.2, y = 2),
+    verbose = FALSE
+  ))
+  expect_identical(
+    pg_it_query(tab, "SELECT x::text AS x FROM {table} WHERE id = 1001")$x,
+    "0.30000000000000004"
+  )
+  expect_identical(
+    pg_it_query(tab, "SELECT count(*)::int AS n FROM {table}")$n,
+    1001L
+  )
 })
 
 test_that("PostgreSQL: a table whose names differ is still dropped and created", {

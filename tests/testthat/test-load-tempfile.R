@@ -155,30 +155,32 @@ test_that("a MySQL load leaves a partly written file that the caller named", {
   expect_true(file.exists(file))
 })
 
-# PostgreSQL and SQL Server. The mocked fwrite() stops before psql or bcp can
-# run, so no client and no server is needed.
-pg_load <- S7::method(load_data_infile, db_postgres)
+# SQL Server. The mocked fwrite() stops before bcp can run, so no client and
+# no server is needed. The PostgreSQL load writes no file.
+pg_json_method <- S7::method(load_data_infile, db_postgres)
 pg_upsert <- S7::method(upsert_load_data_infile, db_postgres)
 ms_load <- S7::method(load_data_infile, db_mssql)
 ms_upsert <- S7::method(upsert_load_data_infile, db_mssql)
 
-test_that("a default PostgreSQL load deletes a partly written file", {
+test_that("a PostgreSQL load and upsert write no load file", {
   con <- local_sqlite_con()
-  seen <- local_mysql_load_path(load = pg_load)
+  seen <- local_mysql_load_path(load = pg_json_method)
   local_partial_fwrite()
-  expect_error(
-    pg_load(connection = con, table = "tab", dt = new_rows()),
-    "disk full"
+  local_mocked_bindings(
+    json_load_execute = function(connection, sql, json = NULL) {
+      if (is.null(json)) {
+        return(0)
+      }
+      return(nrow(yyjsonr::read_json_str(json)))
+    }
   )
-  expect_length(seen$files, 1L)
-  expect_false(file.exists(seen$files[[1]]))
-})
-
-test_that("a default PostgreSQL upsert deletes a partly written file", {
-  con <- local_sqlite_con()
-  seen <- local_mysql_load_path(load = pg_load)
-  local_partial_fwrite()
-  expect_error(
+  expect_no_error(pg_json_method(
+    connection = con,
+    table = "tab",
+    dt = new_rows()
+  ))
+  # The upsert MAY fail after its load, on the SQLite stand-in.
+  try(
     pg_upsert(
       connection = con,
       table = DBI::Id(schema = "public", table = "tab"),
@@ -186,10 +188,9 @@ test_that("a default PostgreSQL upsert deletes a partly written file", {
       fields = c("a", "b"),
       keys = "a"
     ),
-    "disk full"
+    silent = TRUE
   )
-  expect_length(seen$files, 1L)
-  expect_false(file.exists(seen$files[[1]]))
+  expect_identical(seen$files, character(0))
 })
 
 test_that("a default SQL Server load deletes a partly written file", {

@@ -1,12 +1,10 @@
 # csdb_set_password_hook() registers a function that returns the password.
-# csdb calls it for each new PostgreSQL connection and for each psql load, so
-# a token that expires is fetched again each time. Other drivers keep the
-# configured password.
+# csdb calls it for each new PostgreSQL connection, so a token that expires is
+# fetched again each time. Other drivers keep the configured password.
 #
 # No test needs a database server. A mocked DBI::dbConnect() records its
-# arguments and returns an in-memory SQLite connection. A mocked
-# run_load_tool() records the environment that psql would get. The hook
-# values are fake: "tok-1", "tok-2" and "tok-3".
+# arguments and returns an in-memory SQLite connection. The hook values are
+# fake: "tok-1", "tok-2" and "tok-3".
 
 hook_tokens <- c("tok-1", "tok-2", "tok-3")
 
@@ -56,6 +54,12 @@ local_recorded_connect <- function(
       return(real_connect(RSQLite::SQLite(), ":memory:"))
     },
     .package = "DBI",
+    .env = .local_envir
+  )
+  # The SQLite stand-in has no lc_messages. A PostgreSQL connection reads it
+  # once, and an unknown value would give a warning.
+  local_mocked_bindings(
+    json_load_lc_messages = function(connection) "C",
     .env = .local_envir
   )
   return(rec)
@@ -244,62 +248,20 @@ test_that("SQLite and a trusted SQL Server connection do not call the hook", {
   expect_identical(hook$calls, 0L)
 })
 
-# (b) psql gets the hook value ----
+# (b) A load uses the open connection and does not call the hook ----
 
-# The methods call Sys.which("psql") before they run the client. Put an
-# executable of that name first on PATH, as test-load-timeout.R does. It never
-# runs, because run_load_tool() is mocked.
-hook_stand_in_psql <- function(.local_envir = parent.frame()) {
-  dir <- withr::local_tempdir(.local_envir = .local_envir)
-  if (.Platform$OS.type == "windows") {
-    file.copy(
-      file.path(R.home("bin"), "Rscript.exe"),
-      file.path(dir, "psql.exe")
-    )
-  } else {
-    writeLines(c("#!/bin/sh", "exit 99"), file.path(dir, "psql"))
-    Sys.chmod(file.path(dir, "psql"), "0755")
-  }
-  withr::local_envvar(
-    PATH = paste(dir, Sys.getenv("PATH"), sep = .Platform$path.sep),
-    .local_envir = .local_envir
-  )
-  return(invisible(dir))
-}
-
-pg_hook_load <- S7::method(load_data_infile, db_postgres)
-pg_hook_upsert <- S7::method(upsert_load_data_infile, db_postgres)
-
-# Record the `env` of every psql call. With fail = TRUE, psql fails and prints
-# the PGPASSWORD it received; otherwise it reports that it stored both rows.
-# The upsert reaches the PostgreSQL load method, and the DBI calls that need a
-# server do nothing.
-local_recorded_psql <- function(fail = FALSE, .local_envir = parent.frame()) {
-  hook_stand_in_psql(.local_envir = .local_envir)
-  rec <- new.env()
-  rec$env <- list()
+test_that("a PostgreSQL load and upsert do not call the hook", {
+  hook <- local_password_hook(hook_tokens)
   local_mocked_bindings(
-    run_load_tool = function(command, args, timeout = 0, env = NULL) {
-      rec$env[[length(rec$env) + 1L]] <- env
-      if (fail) {
-        return(list(
-          status = 2L,
-          output = paste0(
-            "psql: error: password \"",
-            env[["PGPASSWORD"]],
-            "\" rejected"
-          )
-        ))
+    json_load_execute = function(connection, sql, json = NULL) {
+      if (is.null(json)) {
+        return(0)
       }
-      return(list(status = 0L, output = "COPY 2"))
-    },
-    load_data_infile = function(connection, ...) {
-      return(pg_hook_load(connection, ...))
+      return(nrow(yyjsonr::read_json_str(json)))
     },
     add_index = function(...) {
       return(invisible(NULL))
-    },
-    .env = .local_envir
+    }
   )
   local_mocked_bindings(
     dbExecute = function(conn, statement, ...) {
@@ -311,87 +273,33 @@ local_recorded_psql <- function(fail = FALSE, .local_envir = parent.frame()) {
     dbRemoveTable = function(conn, name, ...) {
       return(TRUE)
     },
-    .package = "DBI",
-    .env = .local_envir
+    .package = "DBI"
   )
-  return(rec)
-}
-
-hook_sqlite_con <- function(.local_envir = parent.frame()) {
   con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
-  withr::defer(DBI::dbDisconnect(con), envir = .local_envir)
-  return(con)
-}
-
-hook_dbconfig <- function() {
-  return(list(
+  withr::defer(DBI::dbDisconnect(con))
+  rows <- data.table::data.table(a = 1:2, b = c("x", "y"))
+  cfg <- list(
     server = "h",
     port = 5432L,
     db = "d",
     user = "u",
     password = "cfg-pw"
-  ))
-}
-
-hook_rows <- function() {
-  return(data.table::data.table(a = 1:2, b = c("x", "y")))
-}
-
-run_hook_load <- function(con) {
-  return(pg_hook_load(
+  )
+  S7::method(load_data_infile, db_postgres)(
     connection = con,
-    dbconfig = hook_dbconfig(),
+    dbconfig = cfg,
     table = "tab",
-    dt = hook_rows()
-  ))
-}
-
-run_hook_upsert <- function(con) {
-  return(pg_hook_upsert(
+    dt = rows
+  )
+  S7::method(upsert_load_data_infile, db_postgres)(
     connection = con,
-    dbconfig = hook_dbconfig(),
+    dbconfig = cfg,
     table = DBI::Id(schema = "public", table = "tab"),
-    dt = hook_rows(),
+    dt = rows,
     fields = c("a", "b"),
     keys = "a"
-  ))
-}
-
-test_that("the PostgreSQL load and upsert give psql the current hook value as PGPASSWORD", {
-  hook <- local_password_hook(hook_tokens)
-  rec <- local_recorded_psql()
-  con <- hook_sqlite_con()
-  run_hook_load(con)
-  run_hook_upsert(con)
-  expect_identical(
-    rec$env,
-    list(c(PGPASSWORD = "tok-1"), c(PGPASSWORD = "tok-2"))
   )
-  expect_identical(hook$calls, 2L)
-})
-
-test_that("the PostgreSQL load and upsert redact the hook value in their messages", {
-  local_password_hook(hook_tokens)
-  local_recorded_psql(fail = TRUE)
-  con <- hook_sqlite_con()
-  for (run in list(run_hook_load, run_hook_upsert)) {
-    got <- collect_conditions(run(con))
-    expect_s3_class(got$error, "csdb_load_error")
-    text <- c(got$messages, conditionMessage(got$error))
-    # psql printed the password, and the message shows *** in its place.
-    expect_true(any(grepl("password \"***\" rejected", text, fixed = TRUE)))
-    for (tok in hook_tokens) {
-      expect_false(any(grepl(tok, text, fixed = TRUE)), label = tok)
-    }
-  }
-})
-
-test_that("a PostgreSQL load stops before psql when the hook value is not a string", {
-  local_password_hook(list(NULL))
-  rec <- local_recorded_psql()
-  con <- hook_sqlite_con()
-  expect_error(run_hook_load(con), "csdb password hook", fixed = TRUE)
-  expect_length(rec$env, 0L)
+  expect_identical(hook$calls, 0L)
 })
 
 # (c) A failed connection does not show the hook value ----
@@ -464,17 +372,5 @@ test_that("with no hook, a failed connection message is as in 2026.10.7", {
       "uid=u;password={cfg-pw};database=d"
     ),
     fixed = TRUE
-  )
-})
-
-test_that("with no hook, psql gets the configured password as in 2026.10.7", {
-  local_no_password_hook()
-  rec <- local_recorded_psql()
-  con <- hook_sqlite_con()
-  run_hook_load(con)
-  run_hook_upsert(con)
-  expect_identical(
-    rec$env,
-    list(c(PGPASSWORD = "cfg-pw"), c(PGPASSWORD = "cfg-pw"))
   )
 })

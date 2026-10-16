@@ -1,17 +1,18 @@
 # The JSON load of PostgreSQL.
 #
-# With DBConnection_v9$new(pg_load = "json"), a PostgreSQL load sends its
-# rows as JSON text over the ODBC connection that csdb already holds. It
-# starts no psql, so it makes no login. One statement loads one chunk:
+# Every PostgreSQL load sends its rows as JSON text over the ODBC connection
+# that csdb already holds. It starts no client, so it makes no login. One
+# statement loads one chunk:
 #
 #   INSERT INTO t (a, b) SELECT a, b
 #   FROM json_populate_recordset(NULL::t, CAST(? AS json))
 #
 # Every chunk of one load, and every table of one insert_data_many(), runs in
-# one transaction. Each psql load is a new login, and the Entra token proxy
-# runs ALTER ROLE for each login. The phase 34 benchmark (PostgreSQL 18, 80
-# plans of 60,000 rows, 4 workers) measured 320 logins in 34.0 s with psql,
-# and 8 logins in 32.2 s with this method.
+# one transaction. Until 2026.10.17 the default load started psql, and each
+# psql load was a new login, for which the Entra token proxy runs ALTER ROLE.
+# The phase 34 benchmark loaded 80 plans of 60,000 rows with 4 workers into
+# PostgreSQL 18. It measured 320 logins in 34.0 s with psql, and 8 logins in
+# 32.2 s with this method.
 #
 # The failure classes are those of run_checked_load(). They fail closed:
 #
@@ -44,17 +45,20 @@ json_load_row_max_bytes <- 900 * 2^20
 
 json_load_tool <- "json_populate_recordset"
 
-# The server texts of the failure classes. The SQLSTATE that each one has in
-# a psql load is in the comment.
+# The server texts of the failure classes. The SQLSTATE of each one is in
+# the comment.
 pg_json_duplicate_text <- "duplicate key value violates unique constraint" # 23505
 pg_json_retry_text <- paste0(
   "canceling statement due to lock timeout|could not obtain lock on|", # 55P03
   "deadlock detected|", # 40P01
   "could not serialize access" # 40001
 )
+# A lost connection: libpq texts, then the psqlODBC texts.
 pg_json_lost_text <- paste0(
-  pg_lost_text,
-  "|The connection has been lost|the connection lost|",
+  "server closed the connection unexpectedly|connection to server was lost|",
+  "could not receive data from server|could not send data to server|",
+  "SSL SYSCALL error|Connection reset by peer|",
+  "The connection has been lost|the connection lost|",
   "terminating connection due to|Could not send Query|",
   "no connection to the server"
 )
@@ -119,8 +123,8 @@ json_load_tables <- function(
 # chunk.
 json_load_plan <- function(connection, table, dt, max_rows, max_bytes) {
   table_text <- as.character(DBI::dbQuoteIdentifier(connection, table))
-  # The columns and their order, as the psql load takes them. A column that
-  # the table has and `dt` lacks stops here, before the transaction starts.
+  # The columns and their order, as the table has them. A column that the
+  # table has and `dt` lacks stops here, before the transaction starts.
   columns <- DBI::dbListFields(connection, table)
   if (length(columns) == 0) {
     columns <- names(dt)
@@ -388,13 +392,12 @@ json_load_values <- function(dt) {
 # One column in the form that the JSON text carries.
 #
 # Inf, -Inf and NaN become NA, and a POSIXt becomes as.character(), as
-# write_data_infile() does for the psql load. So a TIMESTAMP column stores
-# the same value from both loads. This function does not call
-# scrub_non_finite(), which changes a whole data.table by reference.
+# write_data_infile() does for the bcp and MySQL loads. This function does
+# not call scrub_non_finite(), which changes a whole data.table by reference.
 #
 # A character value is sent unchanged, so an empty string stays an empty
-# string. A logical becomes 1 or 0, as fwrite(logical01 = TRUE) writes it for
-# psql: csdb creates BIT(1) for BOOLEAN, and BIT(1) refuses JSON true. A
+# string. A logical becomes 1 or 0, as fwrite(logical01 = TRUE) writes it:
+# csdb creates BIT(1) for BOOLEAN, and BIT(1) refuses JSON true. A
 # factor becomes its labels. A Date is written as "YYYY-MM-DD". A double goes
 # to json_load_double(). Any other class becomes as.character().
 json_load_column <- function(x) {
@@ -579,10 +582,10 @@ json_load_ambiguous_text <- function(failed, words) {
 # login that a token proxy refuses, stops with class csdb_load_transient:
 # csdb sent no row. connect() made its own attempts first. Its error says only
 # how many, so the error here also holds the message of its last attempt,
-# with the error of the server. A psql load keeps its old path, so this
-# applies to pg_load = "json" only.
+# with the error of the server. This applies to the driver "PostgreSQL
+# Unicode" only. Every other driver gives the error of connect() unchanged.
 load_connection <- function(dbconnection, table) {
-  if (!identical(dbconnection$config$pg_load, "json")) {
+  if (!identical(dbconnection$config$driver, "PostgreSQL Unicode")) {
     return(dbconnection$autoconnection)
   }
   attempts <- character()
@@ -650,14 +653,13 @@ json_load_locale_text <- function(lc) {
     "csdb: the server sends its messages with lc_messages = '",
     lc,
     "'. csdb finds the duplicate-key and the transient failures of a",
-    " pg_load = \"json\" load in the English text only. A load that fails",
+    " PostgreSQL load in the English text only. A load that fails",
     " on this connection therefore has class csdb_load_other or",
     " csdb_load_ambiguous."
   ))
 }
 
-# DBConnection_v9 runs this once for each new PostgreSQL connection with
-# pg_load = "json".
+# DBConnection_v9 runs this once for each new PostgreSQL connection.
 json_load_check_locale <- function(connection) {
   text <- json_load_locale_text(json_load_lc_messages(connection))
   if (!is.null(text)) {

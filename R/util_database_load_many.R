@@ -2,68 +2,57 @@
 # DBTable_v9$insert_data().
 #
 # This name sorts after "util_database.R" and "util_database_load.R", so
-# load_data_infile and db_postgres exist before loads_through_psql() runs.
+# load_data_infile and db_postgres exist before loads_through_json() runs.
 #
 # Until 2026.10.13 a caller that filled several tables called $insert_data()
 # once for each table. On PostgreSQL each call started its own psql process,
 # and so its own psql login. A cs9 partitioned table therefore made one psql
 # login for each partition in one insert. On 2026-10-12 parallel workers that
-# did this used up the 100 connections of a token proxy.
+# did this used up the 100 connections of a token proxy. From 2026.10.17 the
+# PostgreSQL load starts no psql and makes no login.
 
 #' Insert data into several tables in one transaction
 #'
 #' @description
 #' Inserts one data.table into each table of a list. On PostgreSQL, one
-#' \code{psql} session loads every table in one transaction, so by default the
-#' call stores every row or no row. The one exception is a duplicate key with
+#' transaction loads every table, so by default the call stores every row or
+#' no row. The one exception is a duplicate key with
 #' \code{confirm_insert_via_nrow = TRUE}: csdb then inserts table by table.
 #'
 #' @details
-#' On PostgreSQL, csdb starts \code{psql} once, with
-#' \code{--single-transaction}, and runs one \code{\\copy} for each table. A
-#' table whose data.table is \code{NULL} or has no rows gets no \code{\\copy}.
-#' After each \code{\\copy}, the script compares the stored rows with the rows
-#' sent. A difference raises an error before the commit, so the server stores
-#' no row in any table.
+#' On PostgreSQL, one transaction on the connection of the first table loads
+#' every table. csdb sends the rows as JSON text, at most 500,000 rows in one
+#' statement, and starts no client. A table whose data.table is \code{NULL} or
+#' has no rows gets no statement. After each statement, csdb compares the
+#' stored rows with the rows sent. A difference raises an error before the
+#' commit, so the server stores no row in any table.
 #'
 #' The transaction holds a lock on every table until it commits, so a
-#' \code{TRUNCATE} or an index change on one of them waits. The session waits
-#' at most 60 s for one lock. After a longer wait, a deadlock or a refused
-#' login, csdb runs the whole session again, at most 3 attempts in total. A
-#' connection that breaks after the load starts is not run again, and the error
-#' says to count the rows first. So is a row count that differs after \code{psql}
-#' exits.
+#' \code{TRUNCATE} or an index change on one of them waits. The transaction
+#' waits at most 60 s for one lock. After a longer wait, a deadlock or a
+#' serialization failure, csdb runs the whole load again, at most 3 attempts
+#' in total. A load whose connection breaks, or whose COMMIT fails, does not
+#' run again. The error then says to count the rows first.
 #'
-#' A duplicate key stops the session. With
+#' A duplicate key stops the load. With
 #' \code{confirm_insert_via_nrow = TRUE}, csdb then calls
 #' \code{$insert_data(confirm_insert_via_nrow = TRUE)} on each table, which
 #' upserts a table that stops on the duplicate key.
 #'
 #' With another driver, or with tables that have different connection settings,
 #' csdb calls \code{$insert_data()} on each table in turn.
-#'
-#' A connection with \code{pg_load = "json"} (see
-#' \code{\link{DBConnection_v9}}) starts no \code{psql}. One transaction on
-#' the connection of the first table then loads every table. It sends the rows
-#' as JSON text, at most 500,000 rows in one statement. Before the commit,
-#' csdb compares the rows that each statement stored with the rows sent. The
-#' 60 s lock limit and the duplicate-key rule stay the same. After a lock
-#' timeout, a deadlock or a serialization failure, csdb runs the whole load
-#' again, at most 3 attempts in total.
 #' @param tables A list of \code{DBTable_v9} objects.
 #' @param newdata A list of data.tables, one for each table, in the order of
 #'   \code{tables}.
 #' @param confirm_insert_via_nrow See \code{DBTable_v9$insert_data()}.
 #' @param verbose See \code{DBTable_v9$insert_data()}.
-#' @param load_timeout The longest time in seconds that the \code{psql} session
-#'   MAY run. csdb then stops it with an error of class
-#'   \code{csdb_load_ambiguous}. With \code{pg_load = "json"}, the server
-#'   cancels the statement that runs past this time, and the error has class
-#'   \code{csdb_load_other}.
+#' @param load_timeout The longest time in seconds that the load MAY run. On
+#'   PostgreSQL, the server cancels the statement that runs past this time and
+#'   stores no row, and the error has class \code{csdb_load_other}.
 #' @return \code{NULL}, invisibly.
 #' @examples
 #' \donttest{
-#' # SQLite has no psql, so csdb inserts into each table in turn here.
+#' # SQLite has no JSON load, so csdb inserts into each table in turn here.
 #' db_config <- list(driver = "SQLite", db = tempfile(fileext = ".sqlite"))
 #' connection <- DBConnection_v9$new(driver = "SQLite", db = db_config$db)
 #' tables <- lapply(c("cases_a", "cases_b"), function(name) {
@@ -200,47 +189,29 @@ insert_each <- function(
   return(invisible(NULL))
 }
 
-# One psql session that loads every table, through the connection of the
-# first table. The tables share one connection configuration. With
-# pg_load = "json", one transaction on that connection loads every table
-# instead, with the lock_timeout of the psql session.
+# One transaction on the connection of the first table loads every table.
+# The tables share one connection configuration.
 insert_session <- function(tables, newdata, load_timeout) {
   first <- tables[[1]]
-  if (identical(first$dbconnection$config$pg_load, "json")) {
-    json_load_tables(
-      connection = load_connection(
-        first$dbconnection,
-        first$table_name_short_for_mssql_fully_specified_for_postgres
-      ),
-      dbconfig = first$dbconnection$config,
-      tables = lapply(tables, function(x) {
-        return(x$table_name_short_for_mssql_fully_specified_for_postgres)
-      }),
-      dts = newdata,
-      load_timeout = load_timeout,
-      lock_timeout = load_lock_timeout_seconds
-    )
-    return(NULL)
-  }
-  psql_load_session(
-    connection = first$dbconnection$autoconnection,
+  json_load_tables(
+    connection = load_connection(
+      first$dbconnection,
+      first$table_name_short_for_mssql_fully_specified_for_postgres
+    ),
     dbconfig = first$dbconnection$config,
     tables = lapply(tables, function(x) {
       return(x$table_name_short_for_mssql_fully_specified_for_postgres)
     }),
     dts = newdata,
-    files = lapply(seq_along(tables), function(i) {
-      return(insert_load_file(table_private(tables[[i]]), newdata[[i]]))
-    }),
-    load_timeout = load_timeout
+    load_timeout = load_timeout,
+    lock_timeout = load_lock_timeout_seconds
   )
   return(NULL)
 }
 
-# TRUE when load_data_infile() dispatches to the psql method for this
-# connection. That is the PostgreSQL branch of today's per-table load, so the
-# session covers exactly the connections that load through psql.
-loads_through_psql <- function(connection) {
+# TRUE when load_data_infile() dispatches to the PostgreSQL method for this
+# connection, which is the JSON load.
+loads_through_json <- function(connection) {
   found <- tryCatch(
     S7::method(load_data_infile, object = connection),
     error = function(e) NULL
@@ -248,15 +219,15 @@ loads_through_psql <- function(connection) {
   return(identical(found, S7::method(load_data_infile, db_postgres)))
 }
 
-# One psql session can load the tables when they share one connection
-# configuration and that connection loads through psql.
+# One transaction can load the tables when they share one connection
+# configuration and that connection loads through JSON.
 insert_session_possible <- function(tables) {
   configs <- lapply(tables, function(x) x$dbconnection$config)
   same <- all(vapply(configs, identical, logical(1), configs[[1]]))
   first <- tables[[1]]
   return(
     same &&
-      loads_through_psql(load_connection(
+      loads_through_json(load_connection(
         first$dbconnection,
         first$table_name_short_for_mssql_fully_specified_for_postgres
       ))
@@ -360,126 +331,4 @@ insert_confirm <- function(
     }
   }
   return(invisible(NULL))
-}
-
-# Load several PostgreSQL tables with one psql process, in one transaction.
-#
-# csdb writes one load file for each table, with the writer of the
-# single-table load, and one script with one \copy for each table, in order.
-# --single-transaction wraps the script in BEGIN and COMMIT, and
-# ON_ERROR_STOP=1 makes psql stop at the first error. The server then rolls
-# back every \copy before it. After each \copy, pg_row_count_check() compares
-# the stored rows with the rows sent, inside the transaction. In the first
-# version of this function only run_checked_load() compared them, after psql
-# had committed, so a short count stopped the call with the rows stored.
-# run_checked_load() still checks one "COPY <n>" for each table, and it
-# classifies and retries the whole session as it does one table.
-#
-# The script sets lock_timeout to load_lock_timeout_seconds before any \copy.
-# A longer wait for a lock fails with SQLSTATE 55P03, which
-# classify_psql_failure() classes as transient. With a context, a SET
-# application_name comes first.
-#
-# The function deletes every load file and the script when it returns, also
-# after a write that fails partway.
-psql_load_session <- function(
-  connection,
-  dbconfig,
-  tables,
-  dts,
-  files,
-  load_timeout = 3600
-) {
-  files <- unlist(files)
-  on.exit(unlink(files), add = TRUE)
-  table_text <- vapply(
-    tables,
-    function(x) {
-      return(as.character(DBI::dbQuoteIdentifier(connection, x)))
-    },
-    character(1)
-  )
-  rows_sent <- vapply(dts, nrow, integer(1))
-  copies <- vapply(
-    seq_along(tables),
-    function(i) {
-      return(pg_write_copy_command(
-        connection,
-        tables[[i]],
-        dts[[i]],
-        files[[i]]
-      ))
-    },
-    character(1)
-  )
-
-  # A binary connection writes "\n" on every OS, so the script has the same
-  # bytes on Windows as on Linux.
-  script <- tempfile(fileext = ".sql")
-  on.exit(unlink(script), add = TRUE)
-  con <- file(script, open = "wb")
-  # application_name shows the caller in pg_stat_activity. The SET runs in
-  # the session, after the login, so the login carries no extra parameter.
-  app_sql <- pg_application_name_sql()
-  lines <- c(
-    if (!is.null(app_sql)) paste0(app_sql, ";"),
-    sprintf("SET lock_timeout = '%ds';", as.integer(load_lock_timeout_seconds)),
-    unlist(lapply(seq_along(copies), function(i) {
-      return(c(
-        copies[[i]],
-        pg_row_count_check(table_text[[i]], rows_sent[[i]], i)
-      ))
-    }))
-  )
-  tryCatch(writeLines(lines, con, sep = "\n"), finally = close(con))
-
-  return(run_psql_load(
-    dbconfig = dbconfig,
-    command = c("-f", script),
-    table = table_text,
-    rows_sent = rows_sent,
-    load_timeout = load_timeout,
-    options = c("-v", "ON_ERROR_STOP=1", "--single-transaction")
-  ))
-}
-
-# The psql lines that check one table inside the transaction, after its \copy.
-#
-# psql sets ROW_COUNT to the number of rows that the \copy stored. psql 14.24
-# against PostgreSQL 14.24 printed "ROW_COUNT=2" after a \copy of 3 rows of
-# which a trigger skipped 1 (2026-10-12). \gset stores the comparison in
-# csdb_rows_ok, and \if runs the DO block only when the counts differ. Its
-# RAISE EXCEPTION stops the script under ON_ERROR_STOP=1 before COMMIT, so
-# the server rolls back every table. The error has SQLSTATE P0001, which
-# classify_psql_failure() classes as "other": csdb does not retry it.
-#
-# psql does not replace :csdb_rows inside the DO block, so \echo prints the
-# stored count first. A quote or a % in the table name is doubled, because
-# the name sits in a SQL string that RAISE reads as a format.
-pg_row_count_check <- function(table_text, rows_sent, i) {
-  name <- gsub(
-    "%",
-    "%%",
-    gsub("'", "''", table_text, fixed = TRUE),
-    fixed = TRUE
-  )
-  return(c(
-    sprintf(
-      "SELECT :ROW_COUNT AS csdb_rows, :ROW_COUNT = %d AS csdb_rows_ok \\gset",
-      as.integer(rows_sent)
-    ),
-    "\\if :csdb_rows_ok",
-    "\\else",
-    sprintf(
-      "\\echo csdb: table number %d of the session stored :csdb_rows rows, and csdb sent %d rows.",
-      as.integer(i),
-      as.integer(rows_sent)
-    ),
-    sprintf(
-      "DO $csdb$ BEGIN RAISE EXCEPTION 'csdb: table %s did not store the %d rows that csdb sent. The server stored no row in any table.'; END $csdb$;",
-      name,
-      as.integer(rows_sent)
-    ),
-    "\\endif"
-  ))
 }

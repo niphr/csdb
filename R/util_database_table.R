@@ -74,7 +74,7 @@ S7::method(create_table, db_postgres) <- function(
   fields_new[fields == "TEXT"] <- "VARCHAR"
   # Until 2026.10.16 this was REAL, which keeps about 7 significant digits.
   # widen_declared_doubles() below changes such a column of a table that
-  # exists, but only with pg_widen_doubles = TRUE.
+  # exists.
   fields_new[fields == "DOUBLE"] <- "DOUBLE PRECISION"
   fields_new[fields == "BOOLEAN"] <- "BIT"
   fields_new[fields == "DATETIME"] <- "TIMESTAMP"
@@ -116,9 +116,8 @@ S7::method(create_table, db_postgres) <- function(
 #
 # "recreate" when the column names or their order differ from `declared`:
 # the table is dropped and created again. "widen" when the names match and
-# a column declared DOUBLE is real: `columns` names those columns. Only with
-# pg_widen_doubles = TRUE does each become double precision in place, and
-# "widen" otherwise also keeps the table. "keep" in every other case. The
+# a column declared DOUBLE is real: `columns` names those columns, and each
+# becomes double precision in place. "keep" in every other case. The
 # decision compares no other type, so a different type of another column is
 # "keep", as it was before 2026.10.16.
 #
@@ -143,7 +142,7 @@ table_fields_decision <- function(declared, live_names, live_types = NULL) {
 #
 # One statement rewrites the table once for all the columns. The cast from
 # real to double precision is exact, so every stored value stays the same.
-pg_widen_doubles_sql <- function(connection, table, columns) {
+pg_double_precision_sql <- function(connection, table, columns) {
   alters <- paste0(
     "ALTER COLUMN ",
     DBI::dbQuoteIdentifier(connection, columns),
@@ -160,35 +159,26 @@ pg_widen_doubles_sql <- function(connection, table, columns) {
 
 # widen_declared_doubles methods
 #
-# With widen = TRUE, make each real column that `field_types` declares DOUBLE
-# double precision. The value is the names of the columns that changed. Only
-# PostgreSQL can have such a column. SQLite REAL and SQL Server FLOAT already
-# hold a double.
-#
-# With widen = FALSE, the default, such a column stays real and counts as
-# matching. A message names the table and its real columns, once per table
-# in each R session.
+# Make each real column that `field_types` declares DOUBLE double precision.
+# The value is the names of the columns that changed. Only PostgreSQL can
+# have such a column. SQLite REAL and SQL Server FLOAT already hold a double.
+# Until 2026.10.17 such a column stayed real unless the caller set an option.
 S7::method(widen_declared_doubles, db_default) <- function(
   connection,
   table,
   field_types,
   role_create_table = NULL,
-  widen = FALSE,
   table_name = NULL,
   ...
 ) {
   return(character(0))
 }
 
-# The tables that have had their message about real columns in this session.
-pg_real_doubles_noted <- new.env(parent = emptyenv())
-
 S7::method(widen_declared_doubles, db_postgres) <- function(
   connection,
   table,
   field_types,
   role_create_table = NULL,
-  widen = FALSE,
   table_name = NULL,
   ...
 ) {
@@ -213,23 +203,6 @@ S7::method(widen_declared_doubles, db_postgres) <- function(
     return(character(0))
   }
   columns <- paste(decision$columns, collapse = ", ")
-  if (!widen) {
-    if (is.null(pg_real_doubles_noted[[table_text]])) {
-      assign(table_text, TRUE, envir = pg_real_doubles_noted)
-      message(
-        "Table ",
-        table_name,
-        ": the column(s) ",
-        columns,
-        " are declared ",
-        "DOUBLE but are real, which keeps about 7 significant digits. ",
-        "csdb leaves them real. To change them to double precision with one ",
-        "ALTER TABLE, which rewrites the table, set pg_widen_doubles = TRUE ",
-        "in the dbconfig or in DBConnection_v9$new()."
-      )
-    }
-    return(character(0))
-  }
   # The ALTER takes an ACCESS EXCLUSIVE lock. lock_timeout stops it when
   # another session holds a lock for longer, so later queries on a busy
   # table do not queue behind it. The rollback keeps the columns real. The
@@ -247,7 +220,7 @@ S7::method(widen_declared_doubles, db_postgres) <- function(
         connection,
         postgres_with_create_role(
           connection,
-          pg_widen_doubles_sql(connection, table, decision$columns),
+          pg_double_precision_sql(connection, table, decision$columns),
           role_create_table
         )
       )

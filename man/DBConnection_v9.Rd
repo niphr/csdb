@@ -48,40 +48,24 @@ garbage collector, would close the other process's socket.
 
 \section{PostgreSQL loads}{
 
-\code{pg_load} selects how \code{DBTable_v9$insert_data()},
-\code{$upsert_data()} and \code{\link{insert_data_many}} send rows to
-PostgreSQL. Other drivers ignore it.
-\describe{
-  \item{\code{"psql"}, the default}{csdb writes a load file and starts
-    \code{psql}. Each \code{psql} process logs in again.}
-  \item{\code{"json"}}{csdb sends the rows as JSON text over this
-    connection, and starts no \code{psql}. A load therefore makes no new
-    login. One statement sends at most 500,000 rows, and every statement
-    of one load runs in one transaction.}
-}
+\code{DBTable_v9$insert_data()}, \code{$upsert_data()} and
+\code{\link{insert_data_many}} send rows to PostgreSQL as JSON text over
+this connection. csdb starts no client, so a load makes no new login. One
+statement sends at most 500,000 rows, and every statement of one load runs
+in one transaction.
 
-Until 2026.10.16 the \code{psql} load differed from \code{"json"} in three
-cases, and it now stores these values unchanged too:
-\itemize{
-  \item It stored an empty string as \code{NULL}.
-  \item It stopped on some texts with a quote, a tab or a line break.
-  \item It sent 15 significant digits of a double.
-}
+csdb finds the failure class in the English error text of the server. Each
+new connection warns once when the \code{lc_messages} of the server is not
+C, POSIX or English. A failed load is \code{csdb_load_ambiguous} unless its
+ROLLBACK succeeded and the connection then answered \code{SELECT 1}. Only
+then can a known English text give \code{csdb_load_duplicate_key} or
+\code{csdb_load_transient}. Any other text gives \code{csdb_load_other}.
+The COMMIT and a broken connection also give \code{csdb_load_ambiguous}.
 
-With \code{"json"}, csdb finds the failure class in the English error text
-of the server. Each new connection warns once when the \code{lc_messages}
-of the server is not C, POSIX or English. A failed load is
-\code{csdb_load_ambiguous} unless its ROLLBACK succeeded and the connection
-then answered \code{SELECT 1}. Only then can a known English text give
-\code{csdb_load_duplicate_key} or \code{csdb_load_transient}. Any other
-text gives \code{csdb_load_other}. The COMMIT and a broken connection also
-give \code{csdb_load_ambiguous}.
-
-The classes differ from those of \code{psql} in three cases:
+Three more rules apply:
 \itemize{
   \item A statement that runs past \code{load_timeout} stops on the server,
-    which stores no row. The error has class \code{csdb_load_other}, not
-    \code{csdb_load_ambiguous}.
+    which stores no row. The error has class \code{csdb_load_other}.
   \item A statement that stores fewer rows than csdb sent stops the load
     before the commit. The error has class \code{csdb_load_other}, and the
     server stores no row.
@@ -98,16 +82,13 @@ it. PostgreSQL refuses a value of 1 GB or more. The error has class
 
 The field type DOUBLE creates a \code{double precision} column. Until
 2026.10.16 it created \code{real}, which keeps about 7 significant digits.
-A \code{real} column declared DOUBLE in a table that exists counts as
-matching, and csdb leaves it as it is. Each session gives one message for
-each such table.
 
-With \code{pg_widen_doubles = TRUE}, \code{DBTable_v9$create_table()}
-changes each such column to \code{double precision} with one
-\code{ALTER TABLE}. PostgreSQL rewrites the table and its indexes, and
-blocks every other access to the table until the rewrite ends. The
-\code{ALTER} waits at most 60 s for its lock, and then stops with an error.
-The table then stays as it was.
+\code{DBTable_v9$create_table()} changes each \code{real} column that a
+table declares DOUBLE to \code{double precision} with one
+\code{ALTER TABLE}, and the table keeps its rows. PostgreSQL rewrites the
+table and its indexes, and blocks every other access to the table until the
+rewrite ends. The \code{ALTER} waits at most 60 s for its lock, and then
+stops with an error. The table then stays as it was.
 }
 
 \examples{
@@ -204,9 +185,7 @@ possible. After a fork it opens a connection for the current process.}
   password = NULL,
   trusted_connection = NULL,
   sslmode = NULL,
-  role_create_table = NULL,
-  pg_load = "psql",
-  pg_widen_doubles = FALSE
+  role_create_table = NULL
 )}
     \if{html}{\out{</div>}}
   }
@@ -223,12 +202,6 @@ possible. After a fork it opens a connection for the current process.}
       \item{\code{trusted_connection}}{NULL or "yes".}
       \item{\code{sslmode}}{NULL or "require".}
       \item{\code{role_create_table}}{NULL or the role to take when creating tables.}
-      \item{\code{pg_load}}{How a PostgreSQL load sends its rows, \code{"psql"} or
-\code{"json"}. NULL means \code{"psql"}. See the section
-"PostgreSQL loads".}
-      \item{\code{pg_widen_doubles}}{TRUE or FALSE. TRUE changes each \code{real}
-column that a table declares DOUBLE to \code{double precision}. NULL
-means FALSE. See the section "PostgreSQL double precision".}
     }
     \if{html}{\out{</div>}}
   }
@@ -285,7 +258,7 @@ opens a connection for the current process.
 
 The method tries again after any error, until it has made
 \code{attempts} attempts. It waits 2 s before attempt 2 and 10 s
-before each later attempt, as a psql or bcp load does. Each failed
+before each later attempt, as a bcp or a JSON load does. Each failed
 attempt emits a message with its number, the wait and the error.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}

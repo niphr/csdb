@@ -1,56 +1,11 @@
-# With csdb_set_context(), each PostgreSQL connection and each psql load runs
-# SET application_name, so pg_stat_activity names the caller. The tests use
-# SQLite connections, and they replace run_load_tool(), so no psql runs and
-# the tests run on every OS. The p33 PostgreSQL harness checks a real server.
+# With csdb_set_context(), each PostgreSQL connection runs SET
+# application_name, so pg_stat_activity names the caller. The tests use SQLite
+# connections, so they run on every OS. The p33 PostgreSQL harness checks a
+# real server.
 
 local_context <- function(x = "p33|plan7", .local_envir = parent.frame()) {
   withr::local_options(csdb.context = x, .local_envir = .local_envir)
   return(invisible(NULL))
-}
-
-# A SQLite connection with table t1 (id, x), for the psql command builders.
-local_t1 <- function(.local_envir = parent.frame()) {
-  con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
-  withr::defer(DBI::dbDisconnect(con), envir = .local_envir)
-  DBI::dbExecute(con, "CREATE TABLE t1 (id INTEGER, x TEXT)")
-  return(con)
-}
-
-pg_dbconfig <- function() {
-  return(list(
-    driver = "PostgreSQL Unicode",
-    server = "pg.example",
-    port = 5432,
-    db = "db1",
-    user = "u1",
-    password = "pw-SENTINEL"
-  ))
-}
-
-# Replace run_load_tool() with a client that records its arguments and the
-# lines of the script that -f names, and prints "COPY 2". Put an empty psql
-# file first on PATH, because run_psql_load() stops when it finds no psql.
-local_recording_client <- function(.local_envir = parent.frame()) {
-  seen <- new.env()
-  local_mocked_bindings(
-    run_load_tool = function(command, args, timeout = 0, env = NULL) {
-      seen$args <- args
-      at <- match("-f", args)
-      if (!is.na(at)) {
-        seen$script <- readLines(args[[at + 1L]])
-      }
-      return(list(status = 0L, output = "COPY 2"))
-    },
-    .env = .local_envir
-  )
-  bin <- withr::local_tempdir(.local_envir = .local_envir)
-  file.create(file.path(bin, c("psql", "psql.exe")))
-  Sys.chmod(file.path(bin, "psql"), "0755")
-  withr::local_envvar(
-    PATH = paste(bin, Sys.getenv("PATH"), sep = .Platform$path.sep),
-    .local_envir = .local_envir
-  )
-  return(seen)
 }
 
 test_that("csdb_set_context() sets the context and returns the previous one", {
@@ -99,23 +54,9 @@ test_that("application_name keeps only [A-Za-z0-9_|.:-] and the first 63 charact
   )
 })
 
-test_that("both SETs hold only the kept characters of a hostile context", {
+test_that("the SET of a connection holds only the kept characters of a hostile context", {
   local_context(hostile_context)
-  con <- local_t1()
-  seen <- local_recording_client()
-  dt <- data.table::data.table(id = 1:2, x = c("a", "b"))
   want <- paste0("SET application_name = '", hostile_name, "'")
-  psql_load_session(
-    con,
-    pg_dbconfig(),
-    list("t1"),
-    list(dt),
-    list(withr::local_tempfile())
-  )
-  expect_identical(seen$script[[1]], paste0(want, ";"))
-  pg <- S7::method(load_data_infile, db_postgres)
-  pg(con, dbconfig = pg_dbconfig(), table = "t1", dt = dt)
-  expect_identical(seen$args[[which(seen$args == "-c")[1] + 1L]], want)
   expect_identical(connection_application_name_sql("PostgreSQL Unicode"), want)
 })
 
@@ -188,57 +129,4 @@ test_that("probe_connection() passes a live connection and stops on a closed one
   expect_no_condition(probe_connection(con))
   DBI::dbDisconnect(con)
   expect_error(probe_connection(con), "did not answer SELECT 1", fixed = TRUE)
-})
-
-test_that("the psql session script sets application_name in its first line", {
-  local_context()
-  con <- local_t1()
-  seen <- local_recording_client()
-  dt <- data.table::data.table(id = 1:2, x = c("a", "b"))
-  psql_load_session(
-    con,
-    pg_dbconfig(),
-    list("t1"),
-    list(dt),
-    list(withr::local_tempfile())
-  )
-  expect_identical(seen$script[[1]], "SET application_name = 'p33|plan7';")
-  expect_match(seen$script[[2]], "^SET lock_timeout")
-  expect_false(any(grepl("application_name", seen$args, fixed = TRUE)))
-
-  local_context("")
-  psql_load_session(
-    con,
-    pg_dbconfig(),
-    list("t1"),
-    list(dt),
-    list(withr::local_tempfile())
-  )
-  expect_match(seen$script[[1]], "^SET lock_timeout")
-  expect_false(any(grepl("application_name", seen$script, fixed = TRUE)))
-})
-
-test_that("a single-table psql load sets application_name with a -c before the copy, under ON_ERROR_STOP", {
-  local_context()
-  con <- local_t1()
-  seen <- local_recording_client()
-  pg <- S7::method(load_data_infile, db_postgres)
-  dt <- data.table::data.table(id = 1:2, x = c("a", "b"))
-  pg(con, dbconfig = pg_dbconfig(), table = "t1", dt = dt)
-  at <- which(seen$args == "-c")
-  expect_length(at, 2)
-  expect_identical(
-    seen$args[[at[1] + 1L]],
-    "SET application_name = 'p33|plan7'"
-  )
-  expect_match(seen$args[[at[2] + 1L]], "^\\\\copy")
-  expect_false(any(grepl("application_name=", seen$args, fixed = TRUE)))
-  # A failed SET stops psql before the copy.
-  expect_identical(seen$args[[match("ON_ERROR_STOP=1", seen$args) - 1L]], "-v")
-
-  local_context("")
-  pg(con, dbconfig = pg_dbconfig(), table = "t1", dt = dt)
-  expect_length(which(seen$args == "-c"), 1)
-  expect_false("ON_ERROR_STOP=1" %in% seen$args)
-  expect_false(any(grepl("application_name", seen$args, fixed = TRUE)))
 })

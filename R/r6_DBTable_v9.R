@@ -688,7 +688,7 @@ DBTable_v9 <- R6::R6Class(
     #' @description
     #' Create a new DBTable_v9 object.
     #'
-    #' @param dbconfig Configuration details of the database (driver, server, port, db, schema, user, password, trusted_connection, sslmode, role_create_table, pg_load, pg_widen_doubles). \code{pg_load} is \code{"psql"} or \code{"json"}, and \code{pg_widen_doubles} is TRUE or FALSE, as in \code{\link{DBConnection_v9}}. They apply when this object creates its connection.
+    #' @param dbconfig Configuration details of the database (driver, server, port, db, schema, user, password, trusted_connection, sslmode, role_create_table).
     #' @param table_name Name of the table in the database.
     #' @param field_types The types of each column in the database table (INTEGER, DOUBLE, TEXT, BOOLEAN, DATE, DATETIME).
     #' @param keys The combination of these variables uniquely identifies each row of data in the table.
@@ -724,8 +724,6 @@ DBTable_v9 <- R6::R6Class(
       self$dbconfig$trusted_connection <- dbconfig$trusted_connection
       self$dbconfig$sslmode <- dbconfig$sslmode
       self$dbconfig$role_create_table <- dbconfig$role_create_table
-      self$dbconfig$pg_load <- dbconfig$pg_load
-      self$dbconfig$pg_widen_doubles <- dbconfig$pg_widen_doubles
 
       # PostgreSQL silently truncates an identifier longer than 63 bytes.
       # table_exists() would then miss the truncated table, and
@@ -754,9 +752,7 @@ DBTable_v9 <- R6::R6Class(
           password = self$dbconfig$password,
           trusted_connection = self$dbconfig$trusted_connection,
           sslmode = self$dbconfig$sslmode,
-          role_create_table = self$dbconfig$role_create_table,
-          pg_load = self$dbconfig$pg_load,
-          pg_widen_doubles = self$dbconfig$pg_widen_doubles
+          role_create_table = self$dbconfig$role_create_table
         )
         private$owns_dbconnection <- TRUE
       } else {
@@ -966,10 +962,9 @@ DBTable_v9 <- R6::R6Class(
     #'
     #' On PostgreSQL, a field type DOUBLE creates a \code{double precision}
     #' column. A \code{real} column declared DOUBLE in a table that exists
-    #' counts as matching. With \code{pg_widen_doubles = TRUE}, it becomes
-    #' \code{double precision} with one \code{ALTER TABLE}, and the table
-    #' keeps its rows. See the section "PostgreSQL double precision" of
-    #' \code{\link{DBConnection_v9}}.
+    #' counts as matching. It becomes \code{double precision} with one
+    #' \code{ALTER TABLE}, and the table keeps its rows. See the section
+    #' "PostgreSQL double precision" of \code{\link{DBConnection_v9}}.
     create_table = function() {
       # self$connect calls self$create_table.
       # cannot have infinite loop
@@ -984,14 +979,12 @@ DBTable_v9 <- R6::R6Class(
           create_tab <- FALSE
           # widen_declared_doubles() is in util_database_table.R. A real
           # column declared DOUBLE counts as matching, so the table is never
-          # dropped for it. It becomes double precision only with
-          # pg_widen_doubles = TRUE.
+          # dropped for it. It becomes double precision in place.
           widen_declared_doubles(
             connection = self$dbconnection$autoconnection,
             table = self$table_name_short_for_mssql_fully_specified_for_postgres,
             field_types = self$field_types,
             role_create_table = self$dbconnection$config$role_create_table,
-            widen = isTRUE(self$dbconnection$config$pg_widen_doubles),
             table_name = self$table_name
           )
           # Until 2026.10.6 this branch did no index work, so a table that
@@ -1044,14 +1037,14 @@ DBTable_v9 <- R6::R6Class(
     #' @description
     #' Inserts data into the database table.
     #' @details
-    #' For PostgreSQL, SQL Server and MySQL, the method writes \code{newdata} to a new load file in \code{tempdir()} for each call.
+    #' For SQL Server and MySQL, the method writes \code{newdata} to a new load file in \code{tempdir()} for each call.
     #' csdb deletes that file when the load returns, also after a failed load.
-    #' A write that fails partway leaves the file in \code{tempdir()}. SQLite writes no file.
+    #' A write that fails partway leaves the file in \code{tempdir()}. PostgreSQL and SQLite write no file.
     #' Called without \code{file}, the internal load methods default to a new file from \code{tempfile()}.
     #' They delete that default file in every case, also after a write that fails partway.
     #' @param newdata The data to insert.
     #' @param confirm_insert_via_nrow If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key is upserted once instead. Otherwise the method counts the rows after the insert, and upserts when the table holds fewer rows than \code{newdata}. It stops when the table still holds fewer rows than \code{newdata} after the upsert.
-    #' @param load_timeout The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task. For a connection with \code{pg_load = "json"}, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}.
+    #' @param load_timeout The longest time in seconds that one load MAY run. On SQL Server, csdb then kills \code{bcp} and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. On PostgreSQL, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.
     #' @param verbose Boolean.
     insert_data = function(
       newdata,
@@ -1115,7 +1108,7 @@ DBTable_v9 <- R6::R6Class(
     #' The load file follows the same rules as in \code{insert_data()}: a new file in \code{tempdir()} for each call, deleted when the load returns.
     #' @param newdata The data to insert.
     #' @param drop_indexes A vector of the indexes to drop before the upsert (can increase performance).
-    #' @param load_timeout The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task. For a connection with \code{pg_load = "json"}, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}.
+    #' @param load_timeout The longest time in seconds that one load MAY run. On SQL Server, csdb then kills \code{bcp} and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. On PostgreSQL, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.
     #' @param verbose Boolean.
     upsert_data = function(
       newdata,
@@ -1181,8 +1174,8 @@ DBTable_v9 <- R6::R6Class(
     #' Replaces every row of the database table with \code{newdata}, in one
     #' transaction. When a statement fails, the table keeps its old rows.
     #'
-    #' The rows go through DBI, not through bcp or psql. Use this method for
-    #' small tables.
+    #' The rows go through \code{DBI::dbAppendTable()}, not through bcp or
+    #' the JSON load. Use this method for small tables.
     #'
     #' The method stops before any statement unless \code{newdata} has each
     #' name in \code{names(field_types)} once, and no other column.
@@ -1252,7 +1245,7 @@ DBTable_v9 <- R6::R6Class(
     #' Drops all rows in the database table and then upserts data.
     #' @param newdata The data to insert.
     #' @param drop_indexes A vector of the indexes to drop before the upsert (can increase performance).
-    #' @param load_timeout The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task. For a connection with \code{pg_load = "json"}, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}.
+    #' @param load_timeout The longest time in seconds that one load MAY run. On SQL Server, csdb then kills \code{bcp} and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. On PostgreSQL, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.
     #' @param verbose Boolean.
     drop_all_rows_and_then_upsert_data = function(
       newdata,
@@ -1287,7 +1280,7 @@ DBTable_v9 <- R6::R6Class(
     #' Drops all rows in the database table and then inserts data.
     #' @param newdata The data to insert.
     #' @param confirm_insert_via_nrow If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key is upserted once instead. Otherwise the method counts the rows after the insert, and upserts when the table holds fewer rows than \code{newdata}. It stops when the table still holds fewer rows than \code{newdata} after the upsert.
-    #' @param load_timeout The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task. For a connection with \code{pg_load = "json"}, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}.
+    #' @param load_timeout The longest time in seconds that one load MAY run. On SQL Server, csdb then kills \code{bcp} and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. On PostgreSQL, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.
     #' @param verbose Boolean.
     drop_all_rows_and_then_insert_data = function(
       newdata,

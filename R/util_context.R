@@ -9,15 +9,12 @@
 #'
 #' @details
 #' With a non-empty context, csdb runs \code{SET application_name} with the
-#' context:
-#' \itemize{
-#'   \item right after each PostgreSQL connection that \code{DBConnection_v9}
-#'     opens. After a failed SET, csdb runs \code{SELECT 1}. A connection
-#'     that answers stays open and reports nothing. A connection that does
-#'     not answer counts as a failed connect attempt.
-#'   \item as the first statement of each \code{psql} load, after the login.
-#'     A failed SET stops the load.
-#' }
+#' context right after each PostgreSQL connection that
+#' \code{DBConnection_v9} opens. After a failed SET, csdb runs
+#' \code{SELECT 1}. A connection that answers stays open and reports nothing.
+#' A connection that does not answer counts as a failed connect attempt. A
+#' PostgreSQL load uses that connection, so it shows the same name.
+#'
 #' The name keeps only the letters A-Z and a-z, the digits 0-9 and the
 #' characters \code{_ | . : -}. csdb drops every other character, and then
 #' keeps the first 63 characters, the limit of PostgreSQL. A context that

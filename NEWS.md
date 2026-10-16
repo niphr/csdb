@@ -1,3 +1,8 @@
+# Version 2026.10.17
+
+## Breaking Changes
+* csdb removes the `psql` load and the arguments `pg_load` and `pg_widen_doubles`. Every PostgreSQL insert, upsert and `insert_data_many()` sends its rows as JSON over the open connection. `create_table()` always widens a `real` column declared DOUBLE to `double precision` in place.
+
 # Version 2026.10.16
 
 ## New Features

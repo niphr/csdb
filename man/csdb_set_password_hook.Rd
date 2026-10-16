@@ -15,21 +15,19 @@ Invisibly returns the previous hook, or NULL when no hook was set.
 }
 \description{
 Registers a function that returns the password for each new PostgreSQL
-connection and each \code{psql} load. Use it for a password that expires,
-such as an Entra access token.
+connection. Use it for a password that expires, such as an Entra access
+token.
 }
 \details{
-csdb calls the hook with no arguments, and uses its current return value as
-the password:
-\itemize{
-  \item once for each attempt of \code{DBConnection_v9$connect()} with the
-    driver \code{"PostgreSQL Unicode"}.
-  \item once for each PostgreSQL load or upsert that runs \code{psql}.
-}
+csdb calls the hook with no arguments, once for each attempt of
+\code{DBConnection_v9$connect()} with the driver
+\code{"PostgreSQL Unicode"}. It uses the current return value as the
+password. A PostgreSQL load uses the connection, and calls the hook only
+when it opens a new one.
 
 The hook MUST return a single non-empty string. Any other value stops the
-connection or the load with an error that names the hook. The error does not
-show the value.
+connection with an error that names the hook. The error does not show the
+value.
 
 The hook applies to PostgreSQL only. A SQL Server, SQLite or other
 connection, and a \code{bcp} load, use the \code{password} in their settings.

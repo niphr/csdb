@@ -82,21 +82,19 @@ csdb_get_auth_hook <- function() {
 #'
 #' @description
 #' Registers a function that returns the password for each new PostgreSQL
-#' connection and each \code{psql} load. Use it for a password that expires,
-#' such as an Entra access token.
+#' connection. Use it for a password that expires, such as an Entra access
+#' token.
 #'
 #' @details
-#' csdb calls the hook with no arguments, and uses its current return value as
-#' the password:
-#' \itemize{
-#'   \item once for each attempt of \code{DBConnection_v9$connect()} with the
-#'     driver \code{"PostgreSQL Unicode"}.
-#'   \item once for each PostgreSQL load or upsert that runs \code{psql}.
-#' }
+#' csdb calls the hook with no arguments, once for each attempt of
+#' \code{DBConnection_v9$connect()} with the driver
+#' \code{"PostgreSQL Unicode"}. It uses the current return value as the
+#' password. A PostgreSQL load uses the connection, and calls the hook only
+#' when it opens a new one.
 #'
 #' The hook MUST return a single non-empty string. Any other value stops the
-#' connection or the load with an error that names the hook. The error does not
-#' show the value.
+#' connection with an error that names the hook. The error does not show the
+#' value.
 #'
 #' The hook applies to PostgreSQL only. A SQL Server, SQLite or other
 #' connection, and a \code{bcp} load, use the \code{password} in their settings.
@@ -335,40 +333,24 @@ odbc_connect_args <- function(config) {
 #' garbage collector, would close the other process's socket.
 #'
 #' @section PostgreSQL loads:
-#' \code{pg_load} selects how \code{DBTable_v9$insert_data()},
-#' \code{$upsert_data()} and \code{\link{insert_data_many}} send rows to
-#' PostgreSQL. Other drivers ignore it.
-#' \describe{
-#'   \item{\code{"psql"}, the default}{csdb writes a load file and starts
-#'     \code{psql}. Each \code{psql} process logs in again.}
-#'   \item{\code{"json"}}{csdb sends the rows as JSON text over this
-#'     connection, and starts no \code{psql}. A load therefore makes no new
-#'     login. One statement sends at most 500,000 rows, and every statement
-#'     of one load runs in one transaction.}
-#' }
+#' \code{DBTable_v9$insert_data()}, \code{$upsert_data()} and
+#' \code{\link{insert_data_many}} send rows to PostgreSQL as JSON text over
+#' this connection. csdb starts no client, so a load makes no new login. One
+#' statement sends at most 500,000 rows, and every statement of one load runs
+#' in one transaction.
 #'
-#' Until 2026.10.16 the \code{psql} load differed from \code{"json"} in three
-#' cases, and it now stores these values unchanged too:
-#' \itemize{
-#'   \item It stored an empty string as \code{NULL}.
-#'   \item It stopped on some texts with a quote, a tab or a line break.
-#'   \item It sent 15 significant digits of a double.
-#' }
+#' csdb finds the failure class in the English error text of the server. Each
+#' new connection warns once when the \code{lc_messages} of the server is not
+#' C, POSIX or English. A failed load is \code{csdb_load_ambiguous} unless its
+#' ROLLBACK succeeded and the connection then answered \code{SELECT 1}. Only
+#' then can a known English text give \code{csdb_load_duplicate_key} or
+#' \code{csdb_load_transient}. Any other text gives \code{csdb_load_other}.
+#' The COMMIT and a broken connection also give \code{csdb_load_ambiguous}.
 #'
-#' With \code{"json"}, csdb finds the failure class in the English error text
-#' of the server. Each new connection warns once when the \code{lc_messages}
-#' of the server is not C, POSIX or English. A failed load is
-#' \code{csdb_load_ambiguous} unless its ROLLBACK succeeded and the connection
-#' then answered \code{SELECT 1}. Only then can a known English text give
-#' \code{csdb_load_duplicate_key} or \code{csdb_load_transient}. Any other
-#' text gives \code{csdb_load_other}. The COMMIT and a broken connection also
-#' give \code{csdb_load_ambiguous}.
-#'
-#' The classes differ from those of \code{psql} in three cases:
+#' Three more rules apply:
 #' \itemize{
 #'   \item A statement that runs past \code{load_timeout} stops on the server,
-#'     which stores no row. The error has class \code{csdb_load_other}, not
-#'     \code{csdb_load_ambiguous}.
+#'     which stores no row. The error has class \code{csdb_load_other}.
 #'   \item A statement that stores fewer rows than csdb sent stops the load
 #'     before the commit. The error has class \code{csdb_load_other}, and the
 #'     server stores no row.
@@ -383,16 +365,13 @@ odbc_connect_args <- function(config) {
 #' @section PostgreSQL double precision:
 #' The field type DOUBLE creates a \code{double precision} column. Until
 #' 2026.10.16 it created \code{real}, which keeps about 7 significant digits.
-#' A \code{real} column declared DOUBLE in a table that exists counts as
-#' matching, and csdb leaves it as it is. Each session gives one message for
-#' each such table.
 #'
-#' With \code{pg_widen_doubles = TRUE}, \code{DBTable_v9$create_table()}
-#' changes each such column to \code{double precision} with one
-#' \code{ALTER TABLE}. PostgreSQL rewrites the table and its indexes, and
-#' blocks every other access to the table until the rewrite ends. The
-#' \code{ALTER} waits at most 60 s for its lock, and then stops with an error.
-#' The table then stays as it was.
+#' \code{DBTable_v9$create_table()} changes each \code{real} column that a
+#' table declares DOUBLE to \code{double precision} with one
+#' \code{ALTER TABLE}, and the table keeps its rows. PostgreSQL rewrites the
+#' table and its indexes, and blocks every other access to the table until the
+#' rewrite ends. The \code{ALTER} waits at most 60 s for its lock, and then
+#' stops with an error. The table then stays as it was.
 #'
 #' @import data.table
 #' @import R6
@@ -460,12 +439,6 @@ DBConnection_v9 <- R6::R6Class(
     #' @param trusted_connection NULL or "yes".
     #' @param sslmode NULL or "require".
     #' @param role_create_table NULL or the role to take when creating tables.
-    #' @param pg_load How a PostgreSQL load sends its rows, \code{"psql"} or
-    #'   \code{"json"}. NULL means \code{"psql"}. See the section
-    #'   "PostgreSQL loads".
-    #' @param pg_widen_doubles TRUE or FALSE. TRUE changes each \code{real}
-    #'   column that a table declares DOUBLE to \code{double precision}. NULL
-    #'   means FALSE. See the section "PostgreSQL double precision".
     #' @return A new `DBConnection_v9` object.
     initialize = function(
       driver = NULL,
@@ -477,9 +450,7 @@ DBConnection_v9 <- R6::R6Class(
       password = NULL,
       trusted_connection = NULL,
       sslmode = NULL,
-      role_create_table = NULL,
-      pg_load = "psql",
-      pg_widen_doubles = FALSE
+      role_create_table = NULL
     ) {
       force(driver)
       force(server)
@@ -491,25 +462,7 @@ DBConnection_v9 <- R6::R6Class(
       force(trusted_connection)
       force(sslmode)
       force(role_create_table)
-      force(pg_load)
-      force(pg_widen_doubles)
 
-      if (is.null(pg_load)) {
-        pg_load <- "psql"
-      }
-      if (
-        !is.character(pg_load) ||
-          length(pg_load) != 1L ||
-          !(pg_load %in% c("psql", "json"))
-      ) {
-        stop('pg_load MUST be "psql" or "json".', call. = FALSE)
-      }
-      if (is.null(pg_widen_doubles)) {
-        pg_widen_doubles <- FALSE
-      }
-      if (!isTRUE(pg_widen_doubles) && !isFALSE(pg_widen_doubles)) {
-        stop("pg_widen_doubles MUST be TRUE or FALSE.", call. = FALSE)
-      }
       if (is.null(trusted_connection)) {
         trusted_connection <- "x"
       }
@@ -531,9 +484,7 @@ DBConnection_v9 <- R6::R6Class(
           password = password,
           trusted_connection = trusted_connection,
           sslmode = sslmode,
-          role_create_table = role_create_table,
-          pg_load = pg_load,
-          pg_widen_doubles = pg_widen_doubles
+          role_create_table = role_create_table
         )
       )
     },
@@ -619,7 +570,7 @@ DBConnection_v9 <- R6::R6Class(
     #'
     #' The method tries again after any error, until it has made
     #' \code{attempts} attempts. It waits 2 s before attempt 2 and 10 s
-    #' before each later attempt, as a psql or bcp load does. Each failed
+    #' before each later attempt, as a bcp or a JSON load does. Each failed
     #' attempt emits a message with its number, the wait and the error.
     #' @param attempts The number of attempts to connect.
     connect = function(attempts = 3) {
@@ -628,8 +579,8 @@ DBConnection_v9 <- R6::R6Class(
       auth_hook_called <- FALSE
 
       for (i in 1:attempts) {
-        # The wait before attempt i + 1. retry_waits is shared with the psql
-        # and bcp loads. From attempt 4 on, the wait repeats its last value.
+        # The wait before attempt i + 1. retry_waits is shared with the bcp
+        # and JSON loads. From attempt 4 on, the wait repeats its last value.
         wait <- retry_waits[[min(i, length(retry_waits))]]
         tryCatch(
           {
@@ -841,10 +792,7 @@ DBConnection_v9 <- R6::R6Class(
       # A JSON load reads its failure classes from the English error text of
       # the server. Once for each new connection, csdb warns when the server
       # sends its messages in another language.
-      if (
-        identical(self$config$pg_load, "json") &&
-          isTRUE(self$config$driver == "PostgreSQL Unicode")
-      ) {
+      if (isTRUE(self$config$driver == "PostgreSQL Unicode")) {
         json_load_check_locale(private$pconnection)
       }
 

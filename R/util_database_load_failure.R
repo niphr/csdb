@@ -1,55 +1,7 @@
-# How a load sorts a failed psql or bcp call into a failure class, and the
-# text of the messages that report it. run_checked_load() in
-# "util_database_load.R" calls these helpers.
-#
-# psql prints the SQLSTATE because the load passes -v VERBOSITY=verbose, as
-# "ERROR:  23505: duplicate key value ...". The SQLSTATE does not depend on
-# the language of the server. A failed connection has no SQLSTATE, so the
-# libpq texts below cover it. 53300 is too_many_connections. The server
-# raises it while the connection starts, so psql prints only the text. psql
-# 14.24 printed "FATAL:  sorry, too many clients already" (PostgreSQL 16).
-pg_sqlstate_pattern <- "(^|\\s)\\S+:\\s+([0-9A-Z]{5}):\\s"
-
-# psql starts each error of a script that -f names with "psql:<file>:<line>: ",
-# as in "psql:/tmp/x.sql:2: ERROR:  23505: duplicate key value ...". The
-# psql session of insert_data_many() runs such a script. Without this prefix
-# removed, pg_sqlstate_pattern reads "ERROR" as the SQLSTATE. A connection
-# error has "psql: error: " with a space, so the prefix leaves it alone.
-pg_script_prefix <- "^psql:(?=\\S).*?:[0-9]+: "
-
-# psql starts every error that it meets while it connects with "psql: error: ".
-# No row is sent then, so a failed connection is safe to retry. Any other
-# error came while \copy ran. A broken connection there is ambiguous: the
-# server may have committed the COPY before the client heard the result.
-#
-# The Entra token proxy norsyss-pg-auth:5432 refuses some logins when many
-# psql clients connect at once. On 2026-10-12 psql printed this line for a
-# refused login and exited with status 2:
-#
-# psql: error: connection to server at "norsyss-pg-auth" (10.98.244.63), port 5432 failed: ERROR:  internal proxy error
-#
-# The line starts with "psql: error: ", so the refusal came while psql
-# connected. psql sent no row, so a retry is safe.
-pg_connect_phase <- "^psql: error: "
-pg_connect_retry_text <- paste0(
-  "Connection refused|Connection timed out|Connection reset by peer|",
-  "No route to host|could not translate host name|",
-  "Temporary failure in name resolution|timeout expired|",
-  "server closed the connection unexpectedly|",
-  "the database system is (starting up|shutting down|in recovery mode)|",
-  "sorry, too many clients already|remaining connection slots are reserved|",
-  "internal proxy error"
-)
-# The server rolls the statement back for these: serialization failure,
-# deadlock, too many connections, lock timeout, and cannot connect now.
-pg_retry_sqlstate <- "^(40001|40P01|53300|55P03|57P03)$"
-# A lost connection, or a shutdown that ended the session: ambiguous.
-pg_ambiguous_sqlstate <- "^(08[0-9A-Z]{3}|57P0[12])$"
-pg_lost_text <- paste0(
-  "server closed the connection unexpectedly|connection to server was lost|",
-  "could not receive data from server|could not send data to server|",
-  "SSL SYSCALL error|Connection reset by peer"
-)
+# How a load sorts a failed bcp call into a failure class, and the text of
+# the messages that report it. run_checked_load() in "util_database_load.R"
+# and the JSON load in "util_database_load_json.R" call these helpers. Until
+# 2026.10.17 this file also sorted the output of psql.
 
 # bcp prints "SQLState = <state>, NativeError = <number>" before each error.
 # A refused port, a host that does not resolve and a login timeout all give
@@ -162,15 +114,15 @@ load_output_excerpt <- function(
 #   * `rows_sent` is set and no line matches `rows_pattern`. The client then
 #     did not say how many rows it stored.
 #   * `rows_sent` is set and the number that `rows_pattern` captures differs
-#     from it. psql prints "COPY <n>" and bcp prints "<n> rows copied.".
+#     from it. bcp prints "<n> rows copied.".
 #
 # The last two come after the client exited with 0, so the server may have
 # committed rows. Their failure class is "ambiguous", and csdb does not retry.
 #
-# A psql session of insert_data_many() loads several tables. `rows_sent` and
-# `tables` then hold one element for each table, in the order of the \copy
-# commands, and the last length(rows_sent) counts are compared with them in
-# that order.
+# `rows_sent` and `tables` MAY hold one element for each of several tables.
+# The last length(rows_sent) counts are then compared with them in order.
+# Until 2026.10.17 the psql session of insert_data_many() used this. Every
+# caller now loads one table.
 load_failure_reason <- function(
   result,
   output,
@@ -230,46 +182,20 @@ load_failure_reason <- function(
   return(NULL)
 }
 
-# Sort the raw output of a failed psql or bcp call into "duplicate key",
+# Sort the raw output of a failed bcp call into "duplicate key",
 # "ambiguous", "transient" or "other". A duplicate key comes first, because a
 # retry cannot remove it. An ambiguous failure comes before a transient one,
 # because only a load that certainly stored nothing may run again.
-classify_load_failure <- function(command, output) {
+classify_load_failure <- function(output) {
   capture <- function(pattern, group) {
     m <- regmatches(output, regexec(pattern, output))
     return(vapply(m, `[`, character(1), group + 1L))
-  }
-  if (command == "psql") {
-    output <- sub(pg_script_prefix, "", output, perl = TRUE)
-    return(classify_psql_failure(output, capture(pg_sqlstate_pattern, 2L)))
   }
   return(classify_bcp_failure(
     output,
     states = capture(mssql_state_pattern, 1L),
     natives = capture(mssql_state_pattern, 2L)
   ))
-}
-
-classify_psql_failure <- function(output, codes) {
-  if (any(codes %in% "23505")) {
-    return("duplicate key")
-  }
-  if (any(grepl(pg_connect_phase, output))) {
-    if (any(grepl(pg_connect_retry_text, output))) {
-      return("transient")
-    }
-    return("other")
-  }
-  if (
-    any(grepl(pg_ambiguous_sqlstate, codes)) ||
-      any(grepl(pg_lost_text, output))
-  ) {
-    return("ambiguous")
-  }
-  if (any(grepl(pg_retry_sqlstate, codes))) {
-    return("transient")
-  }
-  return("other")
 }
 
 classify_bcp_failure <- function(output, states, natives) {
@@ -314,7 +240,11 @@ count_the_rows_text <- function(timed_out, reason, tool, where) {
   why <- if (timed_out) {
     " csdb killed the client, so the server may or may not have committed the rows to "
   } else if (isTRUE(reason$exited_ok)) {
-    paste0(" ", tool, " exited without an error, so the server may have committed rows to ")
+    paste0(
+      " ",
+      tool,
+      " exited without an error, so the server may have committed rows to "
+    )
   } else {
     " The connection broke after the load started, so the server may or may not have committed the rows to "
   }

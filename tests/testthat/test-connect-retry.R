@@ -1,6 +1,6 @@
 # DBConnection_v9$connect() retries every failed connection. From 2026.10.12
 # it makes 3 attempts by default and waits 2 s before attempt 2 and 10 s
-# before attempt 3, as the psql and bcp loads do. The Entra token proxy
+# before attempt 3, as the bcp and JSON loads do. The Entra token proxy
 # norsyss-pg-auth refused about 5 logins a minute under 4 parallel workers on
 # 2026-10-12, and 2 attempts 1 s apart were too few.
 #
@@ -24,6 +24,12 @@ local_flaky_connect <- function(failures, .local_envir = parent.frame()) {
       return(real_connect(RSQLite::SQLite(), ":memory:"))
     },
     .package = "DBI",
+    .env = .local_envir
+  )
+  # The SQLite stand-in has no lc_messages. A PostgreSQL connection reads it
+  # once, and an unknown value would give a warning.
+  local_mocked_bindings(
+    json_load_lc_messages = function(connection) "C",
     .env = .local_envir
   )
   return(rec)

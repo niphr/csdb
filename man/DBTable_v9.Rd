@@ -259,7 +259,7 @@ Other database classes:
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
-      \item{\code{dbconfig}}{Configuration details of the database (driver, server, port, db, schema, user, password, trusted_connection, sslmode, role_create_table, pg_load, pg_widen_doubles). \code{pg_load} is \code{"psql"} or \code{"json"}, and \code{pg_widen_doubles} is TRUE or FALSE, as in \code{\link{DBConnection_v9}}. They apply when this object creates its connection.}
+      \item{\code{dbconfig}}{Configuration details of the database (driver, server, port, db, schema, user, password, trusted_connection, sslmode, role_create_table).}
       \item{\code{table_name}}{Name of the table in the database.}
       \item{\code{field_types}}{The types of each column in the database table (INTEGER, DOUBLE, TEXT, BOOLEAN, DATE, DATETIME).}
       \item{\code{keys}}{The combination of these variables uniquely identifies each row of data in the table.}
@@ -360,10 +360,9 @@ exists".
 
 On PostgreSQL, a field type DOUBLE creates a \code{double precision}
 column. A \code{real} column declared DOUBLE in a table that exists
-counts as matching. With \code{pg_widen_doubles = TRUE}, it becomes
-\code{double precision} with one \code{ALTER TABLE}, and the table
-keeps its rows. See the section "PostgreSQL double precision" of
-\code{\link{DBConnection_v9}}.
+counts as matching. It becomes \code{double precision} with one
+\code{ALTER TABLE}, and the table keeps its rows. See the section
+"PostgreSQL double precision" of \code{\link{DBConnection_v9}}.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$create_table()}
@@ -404,14 +403,14 @@ keeps its rows. See the section "PostgreSQL double precision" of
       \item{\code{newdata}}{The data to insert.}
       \item{\code{confirm_insert_via_nrow}}{If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key is upserted once instead. Otherwise the method counts the rows after the insert, and upserts when the table holds fewer rows than \code{newdata}. It stops when the table still holds fewer rows than \code{newdata} after the upsert.}
       \item{\code{verbose}}{Boolean.}
-      \item{\code{load_timeout}}{The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task. For a connection with \code{pg_load = "json"}, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}.}
+      \item{\code{load_timeout}}{The longest time in seconds that one load MAY run. On SQL Server, csdb then kills \code{bcp} and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. On PostgreSQL, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.}
     }
     \if{html}{\out{</div>}}
   }
   \subsection{Details}{
-    For PostgreSQL, SQL Server and MySQL, the method writes \code{newdata} to a new load file in \code{tempdir()} for each call.
+    For SQL Server and MySQL, the method writes \code{newdata} to a new load file in \code{tempdir()} for each call.
 csdb deletes that file when the load returns, also after a failed load.
-A write that fails partway leaves the file in \code{tempdir()}. SQLite writes no file.
+A write that fails partway leaves the file in \code{tempdir()}. PostgreSQL and SQLite write no file.
 Called without \code{file}, the internal load methods default to a new file from \code{tempfile()}.
 They delete that default file in every case, also after a write that fails partway.
   }
@@ -438,7 +437,7 @@ They delete that default file in every case, also after a write that fails partw
       \item{\code{newdata}}{The data to insert.}
       \item{\code{drop_indexes}}{A vector of the indexes to drop before the upsert (can increase performance).}
       \item{\code{verbose}}{Boolean.}
-      \item{\code{load_timeout}}{The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task. For a connection with \code{pg_load = "json"}, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}.}
+      \item{\code{load_timeout}}{The longest time in seconds that one load MAY run. On SQL Server, csdb then kills \code{bcp} and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. On PostgreSQL, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.}
     }
     \if{html}{\out{</div>}}
   }
@@ -466,8 +465,8 @@ They delete that default file in every case, also after a write that fails partw
   Replaces every row of the database table with \code{newdata}, in one
 transaction. When a statement fails, the table keeps its old rows.
 
-The rows go through DBI, not through bcp or psql. Use this method for
-small tables.
+The rows go through \code{DBI::dbAppendTable()}, not through bcp or
+the JSON load. Use this method for small tables.
 
 The method stops before any statement unless \code{newdata} has each
 name in \code{names(field_types)} once, and no other column.
@@ -548,7 +547,7 @@ change can therefore start from an empty table.
       \item{\code{newdata}}{The data to insert.}
       \item{\code{drop_indexes}}{A vector of the indexes to drop before the upsert (can increase performance).}
       \item{\code{verbose}}{Boolean.}
-      \item{\code{load_timeout}}{The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task. For a connection with \code{pg_load = "json"}, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}.}
+      \item{\code{load_timeout}}{The longest time in seconds that one load MAY run. On SQL Server, csdb then kills \code{bcp} and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. On PostgreSQL, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.}
     }
     \if{html}{\out{</div>}}
   }
@@ -575,7 +574,7 @@ change can therefore start from an empty table.
       \item{\code{newdata}}{The data to insert.}
       \item{\code{confirm_insert_via_nrow}}{If TRUE, a PostgreSQL or SQL Server load that stops on a duplicate key is upserted once instead. Otherwise the method counts the rows after the insert, and upserts when the table holds fewer rows than \code{newdata}. It stops when the table still holds fewer rows than \code{newdata} after the upsert.}
       \item{\code{verbose}}{Boolean.}
-      \item{\code{load_timeout}}{The longest time in seconds that one psql or bcp call MAY run. csdb then kills the client and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task. For a connection with \code{pg_load = "json"}, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}.}
+      \item{\code{load_timeout}}{The longest time in seconds that one load MAY run. On SQL Server, csdb then kills \code{bcp} and stops with an error of class \code{csdb_load_ambiguous}, and it does not retry the load. On PostgreSQL, see the section "PostgreSQL loads" of \code{\link{DBConnection_v9}}. The default of 3600 s is the 60 minutes after which Airflow kills a norsyss task.}
     }
     \if{html}{\out{</div>}}
   }

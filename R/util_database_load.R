@@ -233,6 +233,11 @@ S7::method(load_data_infile, db_mssql) <- function(
   return(invisible())
 }
 
+# The PostgreSQL load sends the rows as JSON text over `connection`, and
+# starts no client. See util_database_load_json.R. The upsert method below
+# loads its staging table through this method. `file` and `force_tablock` are
+# accepted so the call sites in DBTable_v9 need no PostgreSQL arm, and are
+# then ignored. Until 2026.10.17 this method wrote a file and started psql.
 S7::method(load_data_infile, db_postgres) <- function(
   connection,
   dbconfig = NULL,
@@ -249,229 +254,12 @@ S7::method(load_data_infile, db_postgres) <- function(
     return()
   }
 
-  # pg_load = "json" sends the rows over `connection` and starts no psql. See
-  # util_database_load_json.R. The upsert method below loads its staging
-  # table through this method, so it follows the same setting. The upsert
-  # method has no default for `dbconfig`, so it can pass one that is missing.
-  if (!missing(dbconfig) && identical(dbconfig$pg_load, "json")) {
-    return(json_load_tables(
-      connection = connection,
-      dbconfig = dbconfig,
-      tables = list(table),
-      dts = list(dt),
-      load_timeout = load_timeout
-    ))
-  }
-
-  a <- Sys.time()
-
-  table_text <- DBI::dbQuoteIdentifier(connection, table)
-
-  # Registered before the write, so a partly written default file is also
-  # deleted. A file that the caller passed is deleted only after a full write.
-  if (missing(file)) {
-    on.exit(unlink(file), add = TRUE)
-  }
-  sql <- pg_write_copy_command(connection, table, dt, file)
-  on.exit(unlink(file), add = TRUE)
-
-  # application_name shows the caller in pg_stat_activity. The SET runs in
-  # the session, after the login, so the login carries no extra parameter.
-  # ON_ERROR_STOP=1 makes a failed SET stop psql before the copy, as in the
-  # session of insert_data_many().
-  app_sql <- pg_application_name_sql()
-  run_psql_load(
+  return(json_load_tables(
+    connection = connection,
     dbconfig = dbconfig,
-    command = c(if (!is.null(app_sql)) c("-c", app_sql), "-c", sql),
-    options = if (!is.null(app_sql)) c("-v", "ON_ERROR_STOP=1"),
-    table = as.character(table_text),
-    rows_sent = nrow(dt),
+    tables = list(table),
+    dts = list(dt),
     load_timeout = load_timeout
-  )
-
-  b <- Sys.time()
-  dif <- round(as.numeric(difftime(b, a, units = "secs")), 1)
-
-  return(invisible())
-}
-
-# Write `dt` to `file` in the format that psql \copy reads, and return the
-# \copy command for it. The PostgreSQL load of one table and the psql session
-# of insert_data_many() both use it.
-#
-# The file is in PostgreSQL's text format, and the command names each of its
-# options. A tab ends a field and a line end ends a row. NA is \N, which
-# PostgreSQL reads as NULL, and an empty string is an empty field.
-# pg_text_escape() writes a backslash, a tab, a line end and a carriage
-# return in a value as \\, \t, \n and \r. Until 2026.10.16 the file was
-# unquoted CSV. A value with a double quote then stopped the load, and an
-# empty string was stored as NULL.
-#
-# Quoted CSV was the other choice, and it fails in one case. psql 14 reads
-# the file line by line, and a line "\." ends the data even inside a quoted
-# value. In the text format a line end in a value is \n, so no line of the
-# file is "\.".
-pg_write_copy_command <- function(connection, table, dt, file) {
-  table_text <- DBI::dbQuoteIdentifier(connection, table)
-
-  correct_order <- DBI::dbListFields(connection, table)
-
-  # Always a new data.table, so the text columns below leave the caller's
-  # data.table unchanged.
-  if (length(correct_order) > 0) {
-    dt <- dt[, correct_order, with = FALSE]
-  } else {
-    dt <- dt[, names(dt), with = FALSE]
-  }
-  # enc2utf8() makes each text value UTF-8, which ENCODING 'UTF8' names.
-  for (j in seq_along(dt)) {
-    x <- dt[[j]]
-    if (is.character(x) || is.factor(x)) {
-      set(dt, j = j, value = pg_text_escape(enc2utf8(as.character(x))))
-    } else if (is.double(x) && !is.object(x)) {
-      set(dt, j = j, value = pg_double_text(x))
-    }
-  }
-
-  write_data_infile(
-    dt = dt,
-    file = file,
-    colnames = FALSE,
-    eol = "\n",
-    quote = FALSE,
-    na = "\\N",
-    sep = "\t"
-  )
-
-  # run_load_tool() quotes every argument, so this text reaches psql
-  # unchanged. psql reads the file name between single quotes, and a single
-  # quote inside it is written twice.
-  return(sprintf(
-    paste0(
-      "\\copy %s (%s) from '%s' ",
-      "(FORMAT TEXT, DELIMITER '\t', NULL '\\N', ENCODING 'UTF8')"
-    ),
-    table_text,
-    paste(DBI::dbQuoteIdentifier(connection, correct_order), collapse = ", "),
-    gsub("'", "''", file, fixed = TRUE)
-  ))
-}
-
-# The text of each double, which PostgreSQL reads back as the same double.
-#
-# fwrite() writes at most 15 significant digits, so 0.1 + 0.2 arrived as 0.3.
-# yyjsonr writes the shortest text that reads back as the same double, as
-# the JSON load does. On 2026-10-16 PostgreSQL 18 read that text and the
-# text of sprintf("%.17g") as the same float8 for each of 201,003 doubles.
-# For 600,000 doubles this function took 0.36 s, and sprintf() 0.77 s.
-#
-# yyjsonr writes a whole value as 5.0, and an INTEGER column refuses that.
-# So a whole value below 2^53 loses its ".0", and a whole value below 2^63
-# is written in full. Inf, -Inf, NaN and NA become NA, which the load stores
-# as NULL.
-pg_double_text <- function(x) {
-  out <- rep(NA_character_, length(x))
-  finite <- which(is.finite(x))
-  if (length(finite) == 0L) {
-    return(out)
-  }
-  json <- yyjsonr::write_json_str(
-    unname(x[finite]),
-    opts = yyjsonr::opts_write_json(digits = -1)
-  )
-  out[finite] <- strsplit(
-    substr(json, 2L, nchar(json) - 1L),
-    ",",
-    fixed = TRUE
-  )[[1]]
-  whole <- is.finite(x) & x == trunc(x)
-  small <- which(whole & abs(x) < 2^53)
-  out[small] <- sub(".0", "", out[small], fixed = TRUE)
-  large <- which(whole & abs(x) >= 2^53 & abs(x) < 2^63)
-  out[large] <- sprintf("%.0f", x[large])
-  return(out)
-}
-
-# Escape each text value for PostgreSQL's text format. A backslash becomes
-# \\, a tab \t, a line end \n and a carriage return \r. The backslash goes
-# first, so the other escapes keep their one backslash. NA stays NA.
-pg_text_escape <- function(x) {
-  special <- which(grepl("[\\\\\t\n\r]", x, perl = TRUE))
-  if (length(special) == 0L) {
-    return(x)
-  }
-  y <- x[special]
-  y <- gsub("\\", "\\\\", y, fixed = TRUE)
-  y <- gsub("\t", "\\t", y, fixed = TRUE)
-  y <- gsub("\n", "\\n", y, fixed = TRUE)
-  y <- gsub("\r", "\\r", y, fixed = TRUE)
-  x[special] <- y
-  return(x)
-}
-
-# Run psql once against the database of `dbconfig`, and check it with
-# run_checked_load().
-#
-# `command` is what psql runs: c("-c", sql) for one table, or c("-f", script)
-# for a session. `options` go before it. `table` and `rows_sent` have one
-# element for each \copy, in the order that psql runs them.
-run_psql_load <- function(
-  dbconfig,
-  command,
-  table,
-  rows_sent,
-  load_timeout,
-  options = NULL
-) {
-  # psql stops when it cannot connect within 30 s. The URI holds no password:
-  # an argument shows in the process list, so psql reads the password from
-  # PGPASSWORD. libpq decodes the percent-encoding of each URI part.
-  uri_part <- function(x) {
-    return(utils::URLencode(as.character(x), reserved = TRUE))
-  }
-  uri <- sprintf(
-    "postgresql://%s@%s:%s/%s?connect_timeout=30",
-    uri_part(dbconfig$user),
-    uri_part(dbconfig$server),
-    dbconfig$port,
-    uri_part(dbconfig$db)
-  )
-
-  # VERBOSITY=verbose makes psql print the SQLSTATE of an error, which
-  # classify_load_failure() reads. It sends no query.
-  args <- c(
-    "-v",
-    "VERBOSITY=verbose",
-    options,
-    "-U",
-    dbconfig$user,
-    command,
-    uri
-  )
-
-  if (Sys.which("psql") == "") {
-    stop(
-      "psql command not found. Please install PostgreSQL command line tools.",
-      call. = FALSE
-    )
-  }
-
-  # The password hook, when one is set, gives the password for this load.
-  password <- password_hook_value()
-  if (is.null(password)) {
-    password <- dbconfig$password
-  }
-
-  return(run_checked_load(
-    command = "psql",
-    args = args,
-    tool = "psql \\copy",
-    table = table,
-    secrets = password,
-    rows_sent = rows_sent,
-    rows_pattern = "^COPY ([0-9]+)\\s*$",
-    timeout = load_timeout,
-    env = c(PGPASSWORD = password)
   ))
 }
 
@@ -930,11 +718,13 @@ S7::method(upsert_load_data_infile, db_sqlite) <- function(
   return(invisible())
 }
 
-# The external load clients: psql for PostgreSQL, bcp for SQL Server.
+# The external load client: bcp for SQL Server. The PostgreSQL load starts no
+# client, and util_database_load_json.R gives it the same failure classes.
 #
-# Until 2026.10.3 both methods called system2() and ignored the result. A load
-# that the database refused, such as a duplicate key, returned normally and
-# lost the rows. bcp writes its errors to stdout, which was discarded.
+# Until 2026.10.3 the bcp and the psql method called system2() and ignored
+# the result. A load that the database refused, such as a duplicate key,
+# returned normally and lost the rows. bcp writes its errors to stdout, which
+# was discarded.
 #
 # From 2026.10.3 run_checked_load() runs the client, checks the result, and
 # sorts a failure into one of four classes:
@@ -950,15 +740,15 @@ S7::method(upsert_load_data_infile, db_sqlite) <- function(
 #     insert_data(confirm_insert_via_nrow = TRUE) catches it and upserts.
 #   * other: everything else. The load stops at once.
 #
-# A retry is safe only because a failed load stores no row. psql \copy is one
-# COPY statement, and bcp sends every row in one batch because csdb passes no
-# -b. Both were verified against real servers on 2026-10-03.
+# A retry is safe only because a failed load stores no row. bcp sends every
+# row in one batch because csdb passes no -b. This was verified against a
+# real server on 2026-10-03.
 
 # A line that bcp starts with "Error = " reports a refused row or batch.
 bcp_error_pattern <- "^\\s*Error = "
 
-# The waits before the second and the third attempt, in seconds. A psql or
-# bcp load and DBConnection_v9$connect() all use them. Until 2026.10.12 the
+# The waits before the second and the third attempt, in seconds. A bcp load,
+# a JSON load and DBConnection_v9$connect() all use them. Until 2026.10.12 the
 # loads waited 1 s and 3 s, and connect() made 2 attempts 1 s apart by
 # default. A proxy that refuses logins, such as norsyss-pg-auth below, needs
 # seconds to recover, not 1 s.
@@ -971,20 +761,20 @@ retry_waits <- c(2, 10)
 # locked".
 sqlite_busy_timeout_ms <- 60000L
 
-# The longest time in seconds that the psql session of insert_data_many() waits
-# for one lock. The session script starts with SET lock_timeout. A longer wait
-# stops the session with SQLSTATE 55P03, the server rolls back the whole
-# transaction, and run_checked_load() runs the session again after the waits
-# above. One table, for example, waits behind a TRUNCATE or a CREATE INDEX
-# that another connection has not committed.
+# The longest time in seconds that the JSON load of insert_data_many() waits
+# for one lock. Its transaction starts with SET LOCAL lock_timeout. A longer
+# wait stops the load, the server rolls back the whole transaction, and
+# json_load_tables() runs the load again after the waits above. One table,
+# for example, waits behind a TRUNCATE or a CREATE INDEX that another
+# connection has not committed. The ALTER TABLE of widen_declared_doubles()
+# waits at most as long.
 load_lock_timeout_seconds <- 60
 
 # Run one external load client and capture everything it prints.
 #
-# Every psql and bcp call in the load path goes through this function, so a
-# test can replace it with testthat::local_mocked_bindings() and needs no
-# server. psql writes its errors to stderr and bcp writes them to stdout, so
-# both streams are captured.
+# Every bcp call in the load path goes through this function, so a test can
+# replace it with testthat::local_mocked_bindings() and needs no server. bcp
+# writes its errors to stdout, and both streams are captured.
 #
 # `timeout` is in seconds, and 0 means no limit. system2() kills a client
 # that runs longer and returns the status 124.
@@ -1001,30 +791,7 @@ load_lock_timeout_seconds <- 60
 # the OS. A table name, a file name or a password can hold a space, a quote,
 # `;` or `$(...)`. In quotes, none of these can split an argument or run a
 # command.
-#
-# `env` is a named character vector of environment variables that the client
-# needs, such as PGPASSWORD. run_load_tool() sets them only while the client
-# runs. Afterwards it restores the old value, or the absence of one, also
-# after an error.
-# system2(env = ) is not used: on Windows it puts "NAME=value" into the
-# arguments.
-run_load_tool <- function(command, args, timeout = 0, env = NULL) {
-  if (length(env) > 0) {
-    old <- Sys.getenv(names(env), unset = NA, names = TRUE)
-    on.exit(
-      {
-        was_set <- !is.na(old)
-        if (any(was_set)) {
-          do.call(Sys.setenv, as.list(old[was_set]))
-        }
-        if (any(!was_set)) {
-          Sys.unsetenv(names(old)[!was_set])
-        }
-      },
-      add = TRUE
-    )
-    do.call(Sys.setenv, as.list(env))
-  }
+run_load_tool <- function(command, args, timeout = 0) {
   output <- tryCatch(
     suppressWarnings(
       system2(
@@ -1068,11 +835,9 @@ retry_wait <- function(seconds) {
 # The final failure stops with an error of class csdb_load_<class> and
 # csdb_load_error. Its message holds the output of the client after
 # load_output_excerpt(), and the error carries `table`, `tool`, `attempts` and
-# `failure_class`. `env` goes to run_load_tool().
+# `failure_class`.
 #
-# `table` holds one name for each table that the client loads. A psql session
-# of insert_data_many() loads several tables in one transaction, and the
-# messages then name all of them.
+# `table` holds one name for each table that the client loads.
 run_checked_load <- function(
   command,
   args,
@@ -1082,8 +847,7 @@ run_checked_load <- function(
   rows_sent = NULL,
   rows_pattern = NULL,
   error_pattern = NULL,
-  timeout = 0,
-  env = NULL
+  timeout = 0
 ) {
   max_attempts <- length(retry_waits) + 1L
   words <- load_target_words(table)
@@ -1091,7 +855,7 @@ run_checked_load <- function(
   attempt <- 0L
   repeat {
     attempt <- attempt + 1L
-    result <- run_load_tool(command, args, timeout = timeout, env = env)
+    result <- run_load_tool(command, args, timeout = timeout)
     timed_out <- timeout > 0 && result$status == 124L
     if (timed_out) {
       # Check the timeout before the output. A killed client may have printed
@@ -1115,7 +879,7 @@ run_checked_load <- function(
       # A row count that differs after the client exited with 0: the server
       # may have committed rows, so the load is ambiguous, not retried.
       failure_class <- if (reason$classify) {
-        classify_load_failure(command, result$output)
+        classify_load_failure(result$output)
       } else {
         "ambiguous"
       }
