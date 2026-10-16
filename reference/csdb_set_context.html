@@ -11,7 +11,7 @@ of each csdb connection in pg_stat_activity.'><meta property="og:image" content=
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.16</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.17</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -82,13 +82,12 @@ of each csdb connection in <code>pg_stat_activity</code>.</p>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>With a non-empty context, csdb runs <code>SET application_name</code> with the
-context:</p><ul><li><p>right after each PostgreSQL connection that <code>DBConnection_v9</code>
-    opens. After a failed SET, csdb runs <code>SELECT 1</code>. A connection
-    that answers stays open and reports nothing. A connection that does
-    not answer counts as a failed connect attempt.</p></li>
-<li><p>as the first statement of each <code>psql</code> load, after the login.
-    A failed SET stops the load.</p></li>
-</ul><p>The name keeps only the letters A-Z and a-z, the digits 0-9 and the
+context right after each PostgreSQL connection that
+<code>DBConnection_v9</code> opens. After a failed SET, csdb runs
+<code>SELECT 1</code>. A connection that answers stays open and reports nothing.
+A connection that does not answer counts as a failed connect attempt. A
+PostgreSQL load uses that connection, so it shows the same name.</p>
+<p>The name keeps only the letters A-Z and a-z, the digits 0-9 and the
 characters <code>_ | . : -</code>. csdb drops every other character, and then
 keeps the first 63 characters, the limit of PostgreSQL. A context that
 keeps no character sends no SET.</p>

@@ -11,7 +11,7 @@ connection management, authentication, and automatic reconnection."><meta proper
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.16</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.17</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -101,34 +101,20 @@ garbage collector, would close the other process's socket.</p>
     <h2 id="postgresql-loads">PostgreSQL loads<a class="anchor" aria-label="anchor" href="#postgresql-loads"></a></h2>
 
 
-<p><code>pg_load</code> selects how <code>DBTable_v9$insert_data()</code>,
-<code>$upsert_data()</code> and <code><a href="insert_data_many.html">insert_data_many</a></code> send rows to
-PostgreSQL. Other drivers ignore it.</p><dl><dt><code>"psql"</code>, the default</dt>
-<dd><p>csdb writes a load file and starts
-    <code>psql</code>. Each <code>psql</code> process logs in again.</p></dd>
-
-  <dt><code>"json"</code></dt>
-<dd><p>csdb sends the rows as JSON text over this
-    connection, and starts no <code>psql</code>. A load therefore makes no new
-    login. One statement sends at most 500,000 rows, and every statement
-    of one load runs in one transaction.</p></dd>
-
-
-</dl><p>Until 2026.10.16 the <code>psql</code> load differed from <code>"json"</code> in three
-cases, and it now stores these values unchanged too:</p><ul><li><p>It stored an empty string as <code>NULL</code>.</p></li>
-<li><p>It stopped on some texts with a quote, a tab or a line break.</p></li>
-<li><p>It sent 15 significant digits of a double.</p></li>
-</ul><p>With <code>"json"</code>, csdb finds the failure class in the English error text
-of the server. Each new connection warns once when the <code>lc_messages</code>
-of the server is not C, POSIX or English. A failed load is
-<code>csdb_load_ambiguous</code> unless its ROLLBACK succeeded and the connection
-then answered <code>SELECT 1</code>. Only then can a known English text give
-<code>csdb_load_duplicate_key</code> or <code>csdb_load_transient</code>. Any other
-text gives <code>csdb_load_other</code>. The COMMIT and a broken connection also
-give <code>csdb_load_ambiguous</code>.</p>
-<p>The classes differ from those of <code>psql</code> in three cases:</p><ul><li><p>A statement that runs past <code>load_timeout</code> stops on the server,
-    which stores no row. The error has class <code>csdb_load_other</code>, not
-    <code>csdb_load_ambiguous</code>.</p></li>
+<p><code>DBTable_v9$insert_data()</code>, <code>$upsert_data()</code> and
+<code><a href="insert_data_many.html">insert_data_many</a></code> send rows to PostgreSQL as JSON text over
+this connection. csdb starts no client, so a load makes no new login. One
+statement sends at most 500,000 rows, and every statement of one load runs
+in one transaction.</p>
+<p>csdb finds the failure class in the English error text of the server. Each
+new connection warns once when the <code>lc_messages</code> of the server is not
+C, POSIX or English. A failed load is <code>csdb_load_ambiguous</code> unless its
+ROLLBACK succeeded and the connection then answered <code>SELECT 1</code>. Only
+then can a known English text give <code>csdb_load_duplicate_key</code> or
+<code>csdb_load_transient</code>. Any other text gives <code>csdb_load_other</code>.
+The COMMIT and a broken connection also give <code>csdb_load_ambiguous</code>.</p>
+<p>Three more rules apply:</p><ul><li><p>A statement that runs past <code>load_timeout</code> stops on the server,
+    which stores no row. The error has class <code>csdb_load_other</code>.</p></li>
 <li><p>A statement that stores fewer rows than csdb sent stops the load
     before the commit. The error has class <code>csdb_load_other</code>, and the
     server stores no row.</p></li>
@@ -144,16 +130,13 @@ it. PostgreSQL refuses a value of 1 GB or more. The error has class
 
 
 <p>The field type DOUBLE creates a <code>double precision</code> column. Until
-2026.10.16 it created <code>real</code>, which keeps about 7 significant digits.
-A <code>real</code> column declared DOUBLE in a table that exists counts as
-matching, and csdb leaves it as it is. Each session gives one message for
-each such table.</p>
-<p>With <code>pg_widen_doubles = TRUE</code>, <code>DBTable_v9$create_table()</code>
-changes each such column to <code>double precision</code> with one
-<code>ALTER TABLE</code>. PostgreSQL rewrites the table and its indexes, and
-blocks every other access to the table until the rewrite ends. The
-<code>ALTER</code> waits at most 60 s for its lock, and then stops with an error.
-The table then stays as it was.</p>
+2026.10.16 it created <code>real</code>, which keeps about 7 significant digits.</p>
+<p><code>DBTable_v9$create_table()</code> changes each <code>real</code> column that a
+table declares DOUBLE to <code>double precision</code> with one
+<code>ALTER TABLE</code>, and the table keeps its rows. PostgreSQL rewrites the
+table and its indexes, and blocks every other access to the table until the
+rewrite ends. The <code>ALTER</code> waits at most 60 s for its lock, and then
+stops with an error. The table then stays as it was.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
@@ -212,9 +195,7 @@ possible. After a fork it opens a connection for the current process.</p></dd>
 <span>  password <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  trusted_connection <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  sslmode <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  role_create_table <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  pg_load <span class="op">=</span> <span class="st">"psql"</span>,</span>
-<span>  pg_widen_doubles <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  role_create_table <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
 <h4 id="arguments">Arguments<a class="anchor" aria-label="anchor" href="#arguments"></a></h4>
@@ -247,16 +228,6 @@ possible. After a fork it opens a connection for the current process.</p></dd>
 
       <dt><code>role_create_table</code></dt>
 <dd><p>NULL or the role to take when creating tables.</p></dd>
-
-      <dt><code>pg_load</code></dt>
-<dd><p>How a PostgreSQL load sends its rows, <code>"psql"</code> or
-<code>"json"</code>. NULL means <code>"psql"</code>. See the section
-"PostgreSQL loads".</p></dd>
-
-      <dt><code>pg_widen_doubles</code></dt>
-<dd><p>TRUE or FALSE. TRUE changes each <code>real</code>
-column that a table declares DOUBLE to <code>double precision</code>. NULL
-means FALSE. See the section "PostgreSQL double precision".</p></dd>
 
 
 </dl><p></p></div>
@@ -304,7 +275,7 @@ drops that connection first, and then reports FALSE.</p><div class="section">
 opens a connection for the current process.</p>
 <p>The method tries again after any error, until it has made
 <code>attempts</code> attempts. It waits 2 s before attempt 2 and 10 s
-before each later attempt, as a psql or bcp load does. Each failed
+before each later attempt, as a bcp or a JSON load does. Each failed
 attempt emits a message with its number, the wait and the error.</p><div class="section">
 <h4 id="usage-3">Usage<a class="anchor" aria-label="anchor" href="#usage-3"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBConnection_v9</span><span class="op">$</span><span class="fu">connect</span><span class="op">(</span>attempts <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span></code></pre></div><p></p></div>

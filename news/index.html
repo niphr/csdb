@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.16</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.17</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -51,6 +51,13 @@
       <small>Source: <a href="https://github.com/niphr/csdb/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="2026.10.17" id="version-20261017">Version 2026.10.17<a class="anchor" aria-label="anchor" href="#version-20261017"></a></h2>
+<div class="section level3">
+<h3 id="breaking-changes-2026-10-17">Breaking Changes<a class="anchor" aria-label="anchor" href="#breaking-changes-2026-10-17"></a></h3>
+<ul><li>csdb removes the <code>psql</code> load and the arguments <code>pg_load</code> and <code>pg_widen_doubles</code>. Every PostgreSQL insert, upsert and <code><a href="../reference/insert_data_many.html">insert_data_many()</a></code> sends its rows as JSON over the open connection. <code>create_table()</code> always widens a <code>real</code> column declared DOUBLE to <code>double precision</code> in place.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="2026.10.16" id="version-20261016">Version 2026.10.16<a class="anchor" aria-label="anchor" href="#version-20261016"></a></h2>
 <div class="section level3">

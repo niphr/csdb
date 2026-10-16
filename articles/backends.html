@@ -23,7 +23,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.16</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.17</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -220,22 +220,20 @@ type.</td>
 <code>NA</code> in all three size columns.</td>
 </tr>
 <tr class="even">
-<td>External client binary</td>
-<td>
-<code>psql</code> must be on <code>PATH</code>. Bulk loads are
-staged to a CSV file and shelled out.</td>
-<td>None: no <code>psql</code> and no <code>bcp</code>. Rows go straight
-through <code><a href="https://dbi.r-dbi.org/reference/dbAppendTable.html" class="external-link">DBI::dbAppendTable()</a></code>.</td>
+<td>Bulk load</td>
+<td>Rows go as JSON text through <code>json_populate_recordset()</code>,
+over the connection that csdb holds. No client binary is needed.</td>
+<td>Rows go straight through <code><a href="https://dbi.r-dbi.org/reference/dbAppendTable.html" class="external-link">DBI::dbAppendTable()</a></code>. No
+client binary is needed.</td>
 </tr>
 <tr class="odd">
 <td>A failed bulk load</td>
-<td>csdb reads the SQLSTATE that <code>psql</code> prints. A failure
-that certainly stored nothing runs again, at most 3 attempts in total.
-That is a connection that never started, such as too many connections,
-or a deadlock, a serialization failure or a lock timeout. A connection
-that broke during <code>\copy</code> stops at once with class
-<code>csdb_load_ambiguous</code>, because the server may have committed
-the rows. A duplicate key stops with class
+<td>csdb reads the English error text of the server. A deadlock, a
+serialization failure or a lock timeout runs again after the server
+rolled it back, at most 3 attempts in total. A connection that broke
+during the load, or a failed <code>COMMIT</code>, stops at once with
+class <code>csdb_load_ambiguous</code>, because the server may have
+committed the rows. A duplicate key stops with class
 <code>csdb_load_duplicate_key</code>, and
 <code>$insert_data(confirm_insert_via_nrow = TRUE)</code> then upserts
 the rows once.</td>

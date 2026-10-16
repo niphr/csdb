@@ -51,45 +51,24 @@ or by the garbage collector, would close the other process's socket.
 
 ## PostgreSQL loads
 
-`pg_load` selects how `DBTable_v9$insert_data()`, `$upsert_data()` and
+`DBTable_v9$insert_data()`, `$upsert_data()` and
 [`insert_data_many`](https://niphr.github.io/csdb/reference/insert_data_many.md)
-send rows to PostgreSQL. Other drivers ignore it.
+send rows to PostgreSQL as JSON text over this connection. csdb starts
+no client, so a load makes no new login. One statement sends at most
+500,000 rows, and every statement of one load runs in one transaction.
 
-- `"psql"`, the default:
+csdb finds the failure class in the English error text of the server.
+Each new connection warns once when the `lc_messages` of the server is
+not C, POSIX or English. A failed load is `csdb_load_ambiguous` unless
+its ROLLBACK succeeded and the connection then answered `SELECT 1`. Only
+then can a known English text give `csdb_load_duplicate_key` or
+`csdb_load_transient`. Any other text gives `csdb_load_other`. The
+COMMIT and a broken connection also give `csdb_load_ambiguous`.
 
-  csdb writes a load file and starts `psql`. Each `psql` process logs in
-  again.
-
-- `"json"`:
-
-  csdb sends the rows as JSON text over this connection, and starts no
-  `psql`. A load therefore makes no new login. One statement sends at
-  most 500,000 rows, and every statement of one load runs in one
-  transaction.
-
-Until 2026.10.16 the `psql` load differed from `"json"` in three cases,
-and it now stores these values unchanged too:
-
-- It stored an empty string as `NULL`.
-
-- It stopped on some texts with a quote, a tab or a line break.
-
-- It sent 15 significant digits of a double.
-
-With `"json"`, csdb finds the failure class in the English error text of
-the server. Each new connection warns once when the `lc_messages` of the
-server is not C, POSIX or English. A failed load is
-`csdb_load_ambiguous` unless its ROLLBACK succeeded and the connection
-then answered `SELECT 1`. Only then can a known English text give
-`csdb_load_duplicate_key` or `csdb_load_transient`. Any other text gives
-`csdb_load_other`. The COMMIT and a broken connection also give
-`csdb_load_ambiguous`.
-
-The classes differ from those of `psql` in three cases:
+Three more rules apply:
 
 - A statement that runs past `load_timeout` stops on the server, which
-  stores no row. The error has class `csdb_load_other`, not
-  `csdb_load_ambiguous`.
+  stores no row. The error has class `csdb_load_other`.
 
 - A statement that stores fewer rows than csdb sent stops the load
   before the commit. The error has class `csdb_load_other`, and the
@@ -105,16 +84,14 @@ class `csdb_load_other`.
 ## PostgreSQL double precision
 
 The field type DOUBLE creates a `double precision` column. Until
-2026.10.16 it created `real`, which keeps about 7 significant digits. A
-`real` column declared DOUBLE in a table that exists counts as matching,
-and csdb leaves it as it is. Each session gives one message for each
-such table.
+2026.10.16 it created `real`, which keeps about 7 significant digits.
 
-With `pg_widen_doubles = TRUE`, `DBTable_v9$create_table()` changes each
-such column to `double precision` with one `ALTER TABLE`. PostgreSQL
-rewrites the table and its indexes, and blocks every other access to the
-table until the rewrite ends. The `ALTER` waits at most 60 s for its
-lock, and then stops with an error. The table then stays as it was.
+`DBTable_v9$create_table()` changes each `real` column that a table
+declares DOUBLE to `double precision` with one `ALTER TABLE`, and the
+table keeps its rows. PostgreSQL rewrites the table and its indexes, and
+blocks every other access to the table until the rewrite ends. The
+`ALTER` waits at most 60 s for its lock, and then stops with an error.
+The table then stays as it was.
 
 ## See also
 
@@ -179,9 +156,7 @@ Create a new DBConnection_v9 object.
       password = NULL,
       trusted_connection = NULL,
       sslmode = NULL,
-      role_create_table = NULL,
-      pg_load = "psql",
-      pg_widen_doubles = FALSE
+      role_create_table = NULL
     )
 
 #### Arguments
@@ -225,17 +200,6 @@ Create a new DBConnection_v9 object.
 - `role_create_table`:
 
   NULL or the role to take when creating tables.
-
-- `pg_load`:
-
-  How a PostgreSQL load sends its rows, `"psql"` or `"json"`. NULL means
-  `"psql"`. See the section "PostgreSQL loads".
-
-- `pg_widen_doubles`:
-
-  TRUE or FALSE. TRUE changes each `real` column that a table declares
-  DOUBLE to `double precision`. NULL means FALSE. See the section
-  "PostgreSQL double precision".
 
 #### Returns
 
@@ -285,8 +249,8 @@ opens a connection for the current process.
 
 The method tries again after any error, until it has made `attempts`
 attempts. It waits 2 s before attempt 2 and 10 s before each later
-attempt, as a psql or bcp load does. Each failed attempt emits a message
-with its number, the wait and the error.
+attempt, as a bcp or a JSON load does. Each failed attempt emits a
+message with its number, the wait and the error.
 
 #### Usage
 

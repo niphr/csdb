@@ -23,15 +23,11 @@ Invisibly returns the previous context.
 ## Details
 
 With a non-empty context, csdb runs `SET application_name` with the
-context:
-
-- right after each PostgreSQL connection that `DBConnection_v9` opens.
-  After a failed SET, csdb runs `SELECT 1`. A connection that answers
-  stays open and reports nothing. A connection that does not answer
-  counts as a failed connect attempt.
-
-- as the first statement of each `psql` load, after the login. A failed
-  SET stops the load.
+context right after each PostgreSQL connection that `DBConnection_v9`
+opens. After a failed SET, csdb runs `SELECT 1`. A connection that
+answers stays open and reports nothing. A connection that does not
+answer counts as a failed connect attempt. A PostgreSQL load uses that
+connection, so it shows the same name.
 
 The name keeps only the letters A-Z and a-z, the digits 0-9 and the
 characters `_ | . : -`. csdb drops every other character, and then keeps

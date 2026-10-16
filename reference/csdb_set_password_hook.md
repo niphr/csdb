@@ -1,8 +1,8 @@
 # Set the password hook for PostgreSQL connections
 
 Registers a function that returns the password for each new PostgreSQL
-connection and each `psql` load. Use it for a password that expires,
-such as an Entra access token.
+connection. Use it for a password that expires, such as an Entra access
+token.
 
 ## Usage
 
@@ -23,17 +23,14 @@ Invisibly returns the previous hook, or NULL when no hook was set.
 
 ## Details
 
-csdb calls the hook with no arguments, and uses its current return value
-as the password:
-
-- once for each attempt of `DBConnection_v9$connect()` with the driver
-  `"PostgreSQL Unicode"`.
-
-- once for each PostgreSQL load or upsert that runs `psql`.
+csdb calls the hook with no arguments, once for each attempt of
+`DBConnection_v9$connect()` with the driver `"PostgreSQL Unicode"`. It
+uses the current return value as the password. A PostgreSQL load uses
+the connection, and calls the hook only when it opens a new one.
 
 The hook MUST return a single non-empty string. Any other value stops
-the connection or the load with an error that names the hook. The error
-does not show the value.
+the connection with an error that names the hook. The error does not
+show the value.
 
 The hook applies to PostgreSQL only. A SQL Server, SQLite or other
 connection, and a `bcp` load, use the `password` in their settings. csdb
