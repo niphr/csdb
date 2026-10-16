@@ -123,13 +123,26 @@ json_load_tables <- function(
 # chunk.
 json_load_plan <- function(connection, table, dt, max_rows, max_bytes) {
   table_text <- as.character(DBI::dbQuoteIdentifier(connection, table))
-  # The columns and their order, as the table has them. A column that the
-  # table has and `dt` lacks stops here, before the transaction starts.
+  # The columns of the table that `dt` has, in the order of the table. The
+  # INSERT lists only these. A column that `dt` lacks MUST be one whose value
+  # PostgreSQL generates: an identity column, or a column whose default calls
+  # nextval(), as a serial does. Any other column that `dt` lacks stops the
+  # load here, before the transaction starts. A column of `dt` that the table
+  # lacks is not sent, and names match exactly.
   columns <- DBI::dbListFields(connection, table)
   if (length(columns) == 0) {
     columns <- names(dt)
   }
-  dt[0L, columns, with = FALSE]
+  json_load_check_missing(connection, table_text, setdiff(columns, names(dt)))
+  columns <- columns[columns %in% names(dt)]
+  if (length(columns) == 0) {
+    stop(
+      "csdb: the data for table ",
+      table_text,
+      " has no column of the table. csdb did not send it.",
+      call. = FALSE
+    )
+  }
   columns_text <- paste(
     DBI::dbQuoteIdentifier(connection, columns),
     collapse = ", "
@@ -153,6 +166,45 @@ json_load_plan <- function(connection, table, dt, max_rows, max_bytes) {
     chunks = json_load_chunks(dt, columns, max_rows, max_bytes),
     max_bytes = max_bytes
   ))
+}
+
+# Stop when a column in `missing` is not one whose value PostgreSQL
+# generates. csdb reads the generated columns of the table with one catalog
+# query, and only when `missing` has a column.
+json_load_check_missing <- function(connection, table_text, missing) {
+  if (length(missing) == 0) {
+    return(invisible(NULL))
+  }
+  bad <- setdiff(missing, json_load_generated_columns(connection, table_text))
+  if (length(bad) > 0) {
+    stop(
+      "csdb: the data for table ",
+      table_text,
+      " lacks these columns of the table: ",
+      paste(bad, collapse = ", "),
+      ". Only an identity column or a column whose default calls nextval()",
+      " MAY be missing. csdb did not send a row.",
+      call. = FALSE
+    )
+  }
+  return(invisible(NULL))
+}
+
+# The columns of the table whose value PostgreSQL generates: an identity
+# column (attidentity 'a' or 'd', which information_schema.columns shows as
+# is_identity = 'YES'), or a column whose default calls nextval(). Tests
+# replace this function.
+json_load_generated_columns <- function(connection, table_text) {
+  sql <- paste0(
+    "SELECT a.attname AS name FROM pg_attribute a ",
+    "LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum ",
+    "WHERE a.attrelid = CAST(",
+    DBI::dbQuoteString(connection, table_text),
+    " AS regclass) AND a.attnum > 0 AND NOT a.attisdropped ",
+    "AND (a.attidentity IN ('a', 'd') ",
+    "OR pg_get_expr(d.adbin, d.adrelid) LIKE 'nextval(%')"
+  )
+  return(as.character(DBI::dbGetQuery(connection, sql)$name))
 }
 
 # The rows of each chunk of `dt`, as a list of integer vectors. A chunk has

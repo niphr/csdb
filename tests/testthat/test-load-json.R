@@ -310,6 +310,122 @@ test_that("json_load_tables() loads every chunk of every table in one transactio
   expect_identical(rec$client, 0L)
 })
 
+# The generated columns of each table, as json_load_generated_columns()
+# reads them on PostgreSQL. `generated` maps a table name to its generated
+# columns. The returned environment holds the table of each catalog query in
+# `asked`.
+local_json_generated <- function(generated, .local_envir = parent.frame()) {
+  rec <- new.env()
+  rec$asked <- character()
+  local_mocked_bindings(
+    json_load_generated_columns = function(connection, table_text) {
+      rec$asked <- c(rec$asked, table_text)
+      name <- gsub("[`\"]", "", table_text)
+      return(if (is.null(generated[[name]])) character() else generated[[name]])
+    },
+    .env = .local_envir
+  )
+  return(rec)
+}
+
+# A SQLite connection that holds the table of the statement `create`.
+json_one_table <- function(create, .local_envir = parent.frame()) {
+  cfg <- sqlite_dbconfig(.local_envir = .local_envir)
+  conn <- sqlite_connection(cfg)
+  withr::defer(conn$disconnect(), envir = .local_envir)
+  DBI::dbExecute(conn$autoconnection, create)
+  return(list(cfg = cfg, con = conn$autoconnection))
+}
+
+# json_load_tables() of `data` into the one table `name`.
+json_load_one <- function(db, name, data) {
+  return(json_conditions(json_load_tables(
+    connection = db$con,
+    dbconfig = db$cfg,
+    tables = list(name),
+    dts = list(data)
+  )))
+}
+
+test_that("an identity column that the data lacks is left out of the INSERT and gets its value", {
+  rec <- local_json_server()
+  gen <- local_json_generated(list(d = "id"))
+  db <- json_one_table(
+    "CREATE TABLE d (id INTEGER PRIMARY KEY, a INTEGER, b TEXT)"
+  )
+  data <- data.table::data.table(b = c("p", "q", "r"), extra = "z", a = 11:13)
+  got <- json_load_one(db, "d", data)
+  expect_null(got$error)
+  expect_identical(gen$asked, "`d`")
+  expect_identical(
+    insert_statements(rec),
+    "INSERT INTO `d` (`a`, `b`) SELECT `a`, `b` FROM json_populate_recordset(NULL::`d`, CAST(? AS json))"
+  )
+  expect_identical(
+    DBI::dbGetQuery(db$con, "SELECT id, a, b FROM d ORDER BY id"),
+    data.frame(id = 1:3, a = 11:13, b = c("p", "q", "r"))
+  )
+})
+
+test_that("a column whose name differs only in case stops the load before csdb sends any SQL", {
+  rec <- local_json_server()
+  gen <- local_json_generated(list())
+  db <- json_one_table("CREATE TABLE d (a INTEGER, b TEXT DEFAULT 'x')")
+  got <- json_load_one(
+    db,
+    "d",
+    data.table::data.table(a = 1:2, B = c("u", "v"))
+  )
+  expect_identical(
+    got$message,
+    paste0(
+      "csdb: the data for table `d` lacks these columns of the table: b.",
+      " Only an identity column or a column whose default calls nextval()",
+      " MAY be missing. csdb did not send a row."
+    )
+  )
+  expect_length(rec$sql, 0)
+  expect_identical(DBI::dbGetQuery(db$con, "SELECT count(*) AS n FROM d")$n, 0L)
+})
+
+test_that("a DEFAULT column that the data lacks stops the load before csdb sends any SQL", {
+  rec <- local_json_server()
+  gen <- local_json_generated(list(d = "id"))
+  db <- json_one_table(
+    "CREATE TABLE d (id INTEGER PRIMARY KEY, a INTEGER, v TEXT DEFAULT 'x', w TEXT)"
+  )
+  got <- json_load_one(db, "d", data.table::data.table(a = 1:2))
+  expect_match(
+    got$message,
+    "lacks these columns of the table: v, w.",
+    fixed = TRUE
+  )
+  expect_length(rec$sql, 0)
+  expect_identical(DBI::dbGetQuery(db$con, "SELECT count(*) AS n FROM d")$n, 0L)
+})
+
+test_that("data that has every table column asks no catalog query", {
+  rec <- local_json_server()
+  gen <- local_json_generated(list())
+  tables <- json_tables()
+  got <- json_conditions(json_load_fixture(tables, json_data()))
+  expect_null(got$error)
+  expect_identical(gen$asked, character())
+})
+
+test_that("data that has no column of the table stops the load before csdb sends a row", {
+  rec <- local_json_server()
+  gen <- local_json_generated(list(t1 = c("id", "x")))
+  tables <- json_tables()
+  got <- json_conditions(json_load_fixture(
+    tables[1],
+    list(data.table::data.table(y = 1:2))
+  ))
+  expect_match(got$message, "has no column of the table", fixed = TRUE)
+  expect_length(rec$sql, 0)
+  expect_identical(json_rows_of(tables[[1]]), character())
+})
+
 test_that("json_load_tables() locks every table IN ROW EXCLUSIVE MODE before the first INSERT", {
   rec <- local_json_server()
   tables <- json_tables()
