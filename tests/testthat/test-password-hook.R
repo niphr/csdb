@@ -263,9 +263,18 @@ test_that("a PostgreSQL load and upsert do not call the hook", {
       return(invisible(NULL))
     }
   )
+  # The upsert reads the name of its temporary schema. Every other query goes
+  # to the SQLite connection, as before.
+  real_get_query <- DBI::dbGetQuery
   local_mocked_bindings(
     dbExecute = function(conn, statement, ...) {
       return(0L)
+    },
+    dbGetQuery = function(conn, statement, ...) {
+      if (grepl("pg_my_temp_schema()", statement, fixed = TRUE)) {
+        return(data.frame(nspname = "pg_temp_1"))
+      }
+      return(real_get_query(conn, statement, ...))
     },
     dbListFields = function(conn, name, ...) {
       return(c("a", "b"))

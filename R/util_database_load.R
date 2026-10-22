@@ -334,7 +334,15 @@ S7::method(upsert_load_data_infile, db_default) <- function(
     on.exit(unlink(file), add = TRUE)
   }
   temp_name <- random_uuid()
-  on.exit(DBI::dbRemoveTable(connection, temp_name), add = TRUE, after = FALSE)
+  # A connection that lost its server gets no DROP: see
+  # csdb_connection_is_alive(). The table is TEMPORARY, so the server drops it.
+  on.exit(
+    if (csdb_connection_is_alive(connection)) {
+      DBI::dbRemoveTable(connection, temp_name)
+    },
+    add = TRUE,
+    after = FALSE
+  )
 
   sql <- glue::glue("CREATE TEMPORARY TABLE {temp_name} LIKE {table};")
   DBI::dbExecute(connection, sql)
@@ -405,7 +413,16 @@ S7::method(upsert_load_data_infile, db_mssql) <- function(
     on.exit(unlink(file), add = TRUE)
   }
   temp_name <- paste0("tmp", random_uuid())
-  on.exit(DBI::dbRemoveTable(connection, temp_name), add = TRUE, after = FALSE)
+  # A connection that lost its server gets no DROP: see
+  # csdb_connection_is_alive(). SELECT INTO makes a plain table, so the table
+  # then stays. The DROP could not remove it on that connection either.
+  on.exit(
+    if (csdb_connection_is_alive(connection)) {
+      DBI::dbRemoveTable(connection, temp_name)
+    },
+    add = TRUE,
+    after = FALSE
+  )
 
   sql <- glue::glue("SELECT * INTO {temp_name} FROM {table} WHERE 1 = 0;")
   DBI::dbExecute(connection, sql)
@@ -486,29 +503,48 @@ S7::method(upsert_load_data_infile, db_postgres) <- function(
   if (missing(file)) {
     on.exit(unlink(file), add = TRUE)
   }
-  temp_name <- DBI::Id(
-    schema = table@name[["schema"]],
-    paste0("tmp", random_uuid())
-  )
-  temp_name_text <- DBI::dbQuoteIdentifier(connection, temp_name)
   table_text <- DBI::dbQuoteIdentifier(connection, table)
 
+  # The rows go through a TEMPORARY table. PostgreSQL drops it when the session
+  # ends, also when the server drops the connection. Until 2026.10.23 a plain
+  # table in the schema of `table` held them, and a lost connection left it
+  # there. The load and every later statement run on this one connection, so
+  # they all see the table.
+  #
+  # The table is created as "pg_temp"."tmp...", and then named by its real
+  # schema, pg_temp_N. The catalog calls of odbc, such as dbListFields() in the
+  # JSON load, find no table under the name pg_temp. Measured on 2026-10-22.
+  #
   # A connection that lost its server gets no DROP, because a second statement
-  # on it crashes R: see csdb_connection_is_alive(). SELECT INTO makes a
-  # plain table, not a temporary one, so the table then stays in the schema.
-  # The DROP could not remove it on that connection either.
+  # on it crashes R: see csdb_connection_is_alive().
+  temp_name <- NULL
   on.exit(
-    if (csdb_connection_is_alive(connection)) {
+    if (!is.null(temp_name) && csdb_connection_is_alive(connection)) {
       DBI::dbRemoveTable(connection, temp_name)
     },
     add = TRUE,
     after = FALSE
   )
-
-  sql <- glue::glue(
-    "SELECT * INTO {temp_name_text} FROM {table_text} WHERE 1 = 0;"
+  temp_table <- paste0("tmp", random_uuid())
+  DBI::dbExecute(
+    connection,
+    paste0(
+      "CREATE TABLE ",
+      DBI::dbQuoteIdentifier(
+        connection,
+        DBI::Id(schema = "pg_temp", table = temp_table)
+      ),
+      " AS SELECT * FROM ",
+      table_text,
+      " WHERE 1 = 0"
+    )
   )
-  DBI::dbExecute(connection, sql)
+  temp_schema <- DBI::dbGetQuery(
+    connection,
+    "SELECT nspname FROM pg_namespace WHERE oid = pg_my_temp_schema()"
+  )$nspname
+  temp_name <- DBI::Id(schema = temp_schema, table = temp_table)
+  temp_name_text <- DBI::dbQuoteIdentifier(connection, temp_name)
 
   load_data_infile(
     connection = connection,

@@ -182,6 +182,59 @@ test_that("PostgreSQL upsert and insert_data_many(): every value round-trips, an
   expect_identical(proc$n, 0L)
 })
 
+test_that("PostgreSQL upsert: the rows go through a TEMPORARY table, and the upsert updates and inserts", {
+  tab <- pg_it_table(c(id = "INTEGER", txt = "TEXT"))
+  suppressMessages(tab$connect())
+  suppressMessages(tab$insert_data(
+    data.table::data.table(id = 1:2, txt = c("a", "b")),
+    verbose = FALSE
+  ))
+  # The persistence of the table that the upsert loads: "t" is temporary,
+  # "p" is a plain table. The probe also keeps the connection and the name.
+  seen <- character()
+  staging <- NULL
+  real_load <- load_data_infile
+  local_mocked_bindings(load_data_infile = function(connection, table, ...) {
+    staging <<- list(
+      connection = connection,
+      text = DBI::dbQuoteString(
+        connection,
+        as.character(DBI::dbQuoteIdentifier(connection, table))
+      )
+    )
+    seen <<- c(
+      seen,
+      DBI::dbGetQuery(
+        connection,
+        paste0(
+          "SELECT relpersistence FROM pg_class WHERE oid = CAST(",
+          staging$text,
+          " AS regclass)"
+        )
+      )$relpersistence
+    )
+    return(real_load(connection = connection, table = table, ...))
+  })
+  suppressMessages(tab$upsert_data(
+    data.table::data.table(id = 2:3, txt = c("B", "c")),
+    verbose = FALSE
+  ))
+  expect_identical(seen, "t")
+  got <- pg_it_query(tab, "SELECT id, txt FROM {table} ORDER BY id")
+  expect_identical(got$id, 1:3)
+  expect_identical(got$txt, c("a", "B", "c"))
+  # The upsert dropped its staging table.
+  gone <- DBI::dbGetQuery(
+    staging$connection,
+    paste0(
+      "SELECT CASE WHEN to_regclass(",
+      staging$text,
+      ") IS NULL THEN 1 ELSE 0 END AS gone"
+    )
+  )$gone
+  expect_identical(as.integer(gone), 1L)
+})
+
 test_that("PostgreSQL: a new table gets double precision for DOUBLE", {
   tab <- pg_it_table(c(id = "INTEGER", x = "DOUBLE"))
   suppressMessages(tab$connect())
@@ -387,6 +440,52 @@ pg_it_dead_child <- function(path, cfg) {
     fields = c("k", "v"),
     keys = "k"
   ))
+  # The server ends the session during the load, after the upsert created its
+  # staging table. A temporary table goes with the session. A plain table
+  # would stay in the schema.
+  DBI::dbExecute(
+    admin,
+    paste0(
+      "CREATE TABLE IF NOT EXISTS ",
+      cfg$schema,
+      ".csdb_it_dead (k integer PRIMARY KEY, v double precision)"
+    )
+  )
+  count_left <- function() {
+    return(
+      DBI::dbGetQuery(
+        admin,
+        paste0(
+          "SELECT count(*)::int AS n FROM pg_class c JOIN pg_namespace n ",
+          "ON n.oid = c.relnamespace WHERE n.nspname = ",
+          DBI::dbQuoteString(admin, cfg$schema),
+          " AND c.relname LIKE 'tmp%'"
+        )
+      )$n
+    )
+  }
+  left_before <- count_left()
+  late_conn <- open()
+  late <- late_conn$autoconnection
+  real_load <- ns$load_data_infile
+  utils::assignInNamespace(
+    "load_data_infile",
+    function(...) {
+      kill(late)
+      return(real_load(...))
+    },
+    "csdb"
+  )
+  out$late_upsert <- outcome(ns$upsert_load_data_infile(
+    connection = late,
+    dbconfig = cfg,
+    table = DBI::Id(schema = cfg$schema, table = "csdb_it_dead"),
+    dt = data.table::data.table(k = 1L, v = 2),
+    fields = c("k", "v"),
+    keys = "k"
+  ))
+  out$left_in_schema <- count_left() - left_before
+  DBI::dbExecute(admin, paste0("DROP TABLE ", cfg$schema, ".csdb_it_dead"))
   return(out)
 }
 
@@ -403,4 +502,6 @@ test_that("PostgreSQL: a ROLLBACK and an upsert on a connection that the server 
   expect_identical(out$statement, "R error")
   expect_false(out$rolled_back)
   expect_identical(out$upsert, "R error")
+  expect_identical(out$late_upsert, "R error")
+  expect_identical(out$left_in_schema, 0L)
 })

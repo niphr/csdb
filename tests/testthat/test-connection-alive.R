@@ -76,3 +76,43 @@ test_that("json_load_alive() sends no SELECT 1 on a connection that is not alive
   expect_false(json_load_alive(con))
   expect_identical(sent, character())
 })
+
+# The upsert methods of SQL Server and of the default backend drop their
+# staging table in on.exit. Each method is called directly, on a SQLite handle,
+# with a first statement that fails.
+upsert_drops <- function(method, alive) {
+  con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  dropped <- character()
+  local_mocked_bindings(csdb_connection_is_alive = function(connection) alive)
+  local_mocked_bindings(
+    dbExecute = function(conn, statement, ...) {
+      stop("csdb test: the statement failed", call. = FALSE)
+    },
+    dbRemoveTable = function(conn, name, ...) {
+      dropped <<- c(dropped, as.character(name))
+      return(TRUE)
+    },
+    .package = "DBI"
+  )
+  expect_error(
+    method(
+      connection = con,
+      dbconfig = list(),
+      table = "t",
+      dt = data.table::data.table(k = 1L),
+      fields = "k",
+      keys = "k"
+    ),
+    "the statement failed"
+  )
+  return(dropped)
+}
+
+test_that("the SQL Server and default upserts send no DROP on a connection that is not alive", {
+  for (cls in list(db_mssql, db_default)) {
+    method <- S7::method(upsert_load_data_infile, cls)
+    expect_length(upsert_drops(method, alive = FALSE), 0)
+    expect_length(upsert_drops(method, alive = TRUE), 1)
+  }
+})
