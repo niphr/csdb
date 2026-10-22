@@ -1,7 +1,7 @@
 # Version 2026.10.23
 
 ## New Features
-* `csdb_connection_is_alive()` reports whether a connection still reaches its server. It asks with an ODBC catalog call, which gives an R error on a lost connection and does not crash R.
+* `csdb_connection_is_alive()` reports whether a connection still reaches its server. It asks with an ODBC catalog call, which does not crash R. Only a condition whose message shows a lost connection gives FALSE, so a live connection keeps its cleanup SQL.
 
 ## Bug Fixes
 * After the PostgreSQL server ends the session, the ROLLBACK of a JSON load and the cleanup of an upsert send no more SQL. The load then stops with an R error. Before, odbc 1.7.0 crashed R with a segfault at that second statement. The upsert then leaves its `tmp` table in the schema.

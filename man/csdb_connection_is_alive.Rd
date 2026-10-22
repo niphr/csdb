@@ -11,12 +11,12 @@ csdb_connection_is_alive(connection)
 }
 \value{
 TRUE or FALSE. FALSE for NULL, for a closed connection, and when the
-  catalog request gives an error or a warning.
+  catalog request gives a condition that shows a lost connection.
 }
 \description{
-Returns TRUE when the server answers a catalog request on
-\code{connection}. Use it before cleanup SQL on a connection that MAY have
-lost its server.
+Returns FALSE when a catalog request on \code{connection} shows that the
+connection lost its server. Use it before cleanup SQL on a connection that
+MAY have lost its server.
 }
 \details{
 \code{DBI::dbIsValid()} cannot answer this question. It reports TRUE on an
@@ -30,9 +30,14 @@ exists. odbc sends that request as an ODBC catalog call, not as a
 statement. On a lost connection it gives an R error, also after a failed
 statement. This was measured on 2026-10-22 against PostgreSQL 16.15.
 
+Only a condition whose message shows a lost connection gives FALSE. Any
+other error or warning of the request gives TRUE, so a live connection
+still gets its cleanup SQL. See \code{csdb_connection_lost_pattern} in the
+source for the messages.
+
 PostgreSQL releases the advisory locks, the role and the temporary tables
 of a session when the session ends. Cleanup SQL for them then has nothing
-to do. A plain table that the session created stays.
+to do.
 }
 \examples{
 con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
