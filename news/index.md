@@ -1,5 +1,13 @@
 # Changelog
 
+## Version 2026.10.22
+
+### Bug Fixes
+
+- On Windows, a PostgreSQL load writes a Date before 1970, or
+  9999-12-31, as `YYYY-MM-DD`, as on Linux. Until now it wrote an empty
+  string.
+
 ## Version 2026.10.18
 
 ### New Features
