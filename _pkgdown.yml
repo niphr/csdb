@@ -36,6 +36,7 @@ reference:
   - csdb_get_password_hook
   - csdb_set_context
   - csdb_get_context
+  - csdb_connection_is_alive
 
 - title: "Data Validation"
   desc: "Functions for validating field types and data contents"

@@ -299,7 +299,13 @@ json_load_rollback_once <- function(connection) {
   return(invisible(TRUE))
 }
 
+# A connection that lost its server MUST NOT get the SELECT 1. After the failed
+# statement of the load, the SELECT 1 would be the second statement on that
+# connection, and that crashes R: see csdb_connection_is_alive().
 json_load_alive <- function(connection) {
+  if (!csdb_connection_is_alive(connection)) {
+    return(FALSE)
+  }
   return(tryCatch(
     {
       DBI::dbGetQuery(connection, "SELECT 1")

@@ -493,7 +493,17 @@ S7::method(upsert_load_data_infile, db_postgres) <- function(
   temp_name_text <- DBI::dbQuoteIdentifier(connection, temp_name)
   table_text <- DBI::dbQuoteIdentifier(connection, table)
 
-  on.exit(DBI::dbRemoveTable(connection, temp_name), add = TRUE, after = FALSE)
+  # A connection that lost its server gets no DROP, because a second statement
+  # on it crashes R: see csdb_connection_is_alive(). SELECT INTO makes a
+  # plain table, not a temporary one, so the table then stays in the schema.
+  # The DROP could not remove it on that connection either.
+  on.exit(
+    if (csdb_connection_is_alive(connection)) {
+      DBI::dbRemoveTable(connection, temp_name)
+    },
+    add = TRUE,
+    after = FALSE
+  )
 
   sql <- glue::glue(
     "SELECT * INTO {temp_name_text} FROM {table_text} WHERE 1 = 0;"

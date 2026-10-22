@@ -297,3 +297,110 @@ test_that("PostgreSQL insert: a column that the data lacks or names in another c
     0L
   )
 })
+
+# Runs fn(args) in a new Rscript process. Returns the exit status of the
+# process, and the value of fn when the status is 0. A segfault in the child
+# gives a status other than 0. Base R starts the child, not callr. With callr,
+# the whole suite ended with "Error while shutting down parallel: unable to
+# terminate some child processes", measured on 2026-10-22.
+pg_it_in_child <- function(fn, args) {
+  script <- withr::local_tempfile(fileext = ".R")
+  result <- withr::local_tempfile(fileext = ".txt")
+  writeLines(
+    c(
+      paste0(".libPaths(", paste(deparse(.libPaths()), collapse = ""), ")"),
+      paste0("fn <- ", paste(deparse(fn), collapse = "\n")),
+      paste0("args <- ", paste(deparse(args), collapse = "\n")),
+      paste0("dput(do.call(fn, args), file = ", deparse(result), ")")
+    ),
+    script
+  )
+  status <- system2(
+    file.path(R.home("bin"), "Rscript"),
+    shQuote(script),
+    stdout = FALSE,
+    stderr = FALSE
+  )
+  value <- if (identical(status, 0L)) dget(result) else NULL
+  return(list(status = status, value = value))
+}
+
+# The child process of the next test. A connection that lost its server
+# crashes R at its second statement. A regression therefore ends the child
+# with a segfault, and the test fails. The child loads the csdb under test: the
+# source tree after load_all(), or else the installed package.
+pg_it_dead_child <- function(path, cfg) {
+  if (nzchar(path)) {
+    pkgload::load_all(path, quiet = TRUE)
+  } else {
+    loadNamespace("csdb")
+  }
+  ns <- asNamespace("csdb")
+  open <- function() {
+    return(ns$DBConnection_v9$new(
+      driver = cfg$driver,
+      server = cfg$server,
+      port = cfg$port,
+      db = cfg$db,
+      user = cfg$user,
+      password = cfg$password
+    ))
+  }
+  admin_conn <- open()
+  admin <- admin_conn$autoconnection
+  # The server ends the session, as a failover ends every session. The
+  # timeout makes pg_terminate_backend() wait until the session is gone.
+  kill <- function(con) {
+    pid <- DBI::dbGetQuery(con, "SELECT pg_backend_pid() AS pid")$pid
+    DBI::dbGetQuery(
+      admin,
+      paste0("SELECT pg_terminate_backend(", pid, ", 10000) AS killed")
+    )
+  }
+  outcome <- function(expr) {
+    return(tryCatch(
+      {
+        force(expr)
+        "returned"
+      },
+      error = function(e) "R error"
+    ))
+  }
+  out <- list()
+  # The state of json_load_attempt() when a statement of the load fails.
+  rollback_conn <- open()
+  con <- rollback_conn$autoconnection
+  DBI::dbBegin(con)
+  kill(con)
+  out$statement <- outcome(DBI::dbExecute(con, "SELECT 1"))
+  out$rolled_back <- ns$json_load_rollback(con)
+  # The upsert creates its table first, which fails, and its on.exit drops
+  # the table.
+  upsert_conn <- open()
+  con <- upsert_conn$autoconnection
+  kill(con)
+  out$upsert <- outcome(ns$upsert_load_data_infile(
+    connection = con,
+    dbconfig = cfg,
+    table = DBI::Id(schema = cfg$schema, table = "csdb_it_dead"),
+    dt = data.table::data.table(k = 1L, v = 2),
+    fields = c("k", "v"),
+    keys = "k"
+  ))
+  return(out)
+}
+
+test_that("PostgreSQL: a ROLLBACK and an upsert on a connection that the server ended give an R error, not a segfault", {
+  cfg <- pg_it_config()
+  dev <- exists(".__DEVTOOLS__", envir = asNamespace("csdb"), inherits = FALSE)
+  if (dev) {
+    skip_if_not_installed("pkgload")
+  }
+  path <- if (dev) getNamespaceInfo("csdb", "path") else ""
+  child <- pg_it_in_child(pg_it_dead_child, list(path = path, cfg = cfg))
+  expect_identical(child$status, 0L)
+  out <- child$value
+  expect_identical(out$statement, "R error")
+  expect_false(out$rolled_back)
+  expect_identical(out$upsert, "R error")
+})
