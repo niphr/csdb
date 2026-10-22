@@ -450,7 +450,7 @@ json_load_values <- function(dt) {
 # A character value is sent unchanged, so an empty string stays an empty
 # string. A logical becomes 1 or 0, as fwrite(logical01 = TRUE) writes it:
 # csdb creates BIT(1) for BOOLEAN, and BIT(1) refuses JSON true. A
-# factor becomes its labels. A Date is written as "YYYY-MM-DD". A double goes
+# factor becomes its labels. A Date becomes as.character(). A double goes
 # to json_load_double(). Any other class becomes as.character().
 json_load_column <- function(x) {
   if (is.character(x) || identical(class(x), "integer")) {
@@ -476,8 +476,10 @@ json_load_double_class <- function(x) {
   if (inherits(x, "POSIXt")) {
     return(as.character(x))
   }
+  # R writes a Date as "YYYY-MM-DD" on every platform. yyjsonr writes "" on
+  # Windows for a Date before 1970, such as 1900-01-01, and for 9999-12-31.
   if (inherits(x, "Date")) {
-    return(x)
+    return(as.character(x))
   }
   if (identical(class(x), "numeric")) {
     return(json_load_double(x))
