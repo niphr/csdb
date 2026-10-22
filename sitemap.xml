@@ -9,6 +9,7 @@
 <url><loc>https://niphr.github.io/csdb/news/index.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/DBConnection_v9.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/DBTable_v9.html</loc></url>
+<url><loc>https://niphr.github.io/csdb/reference/csdb_connection_is_alive.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/csdb_get_auth_hook.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/csdb_get_context.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/csdb_get_password_hook.html</loc></url>

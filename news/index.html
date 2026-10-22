@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.22</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.10.23</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -51,6 +51,20 @@
       <small>Source: <a href="https://github.com/niphr/csdb/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="2026.10.23" id="version-20261023">Version 2026.10.23<a class="anchor" aria-label="anchor" href="#version-20261023"></a></h2>
+<div class="section level3">
+<h3 id="new-features-2026-10-23">New Features<a class="anchor" aria-label="anchor" href="#new-features-2026-10-23"></a></h3>
+<ul><li>
+<code><a href="../reference/csdb_connection_is_alive.html">csdb_connection_is_alive()</a></code> reports whether a connection still reaches its server. It asks with an ODBC catalog call, which does not crash R. Only a condition whose message shows a lost connection gives FALSE, so a live connection keeps its cleanup SQL.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="bug-fixes-2026-10-23">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-2026-10-23"></a></h3>
+<ul><li>After the PostgreSQL server ends the session, the ROLLBACK of a JSON load and the cleanup of an upsert send no more SQL. The load then stops with an R error. Before, odbc 1.7.0 crashed R with a segfault at that second statement.</li>
+<li>The PostgreSQL upsert loads its rows through a TEMPORARY table, which PostgreSQL drops when the session ends. Before, a plain <code>tmp</code> table in the schema of the table held them, and a lost connection left it there. The database user needs the TEMP privilege.</li>
+<li>The upserts of SQL Server and of the other backends send no DROP on a connection that lost its server.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="2026.10.22" id="version-20261022">Version 2026.10.22<a class="anchor" aria-label="anchor" href="#version-20261022"></a></h2>
 <div class="section level3">

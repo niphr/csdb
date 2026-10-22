@@ -29,6 +29,8 @@ Helper functions for database operations and metadata
   : Set the caller context
 - [`csdb_get_context()`](https://niphr.github.io/csdb/reference/csdb_get_context.md)
   : Get the caller context
+- [`csdb_connection_is_alive()`](https://niphr.github.io/csdb/reference/csdb_connection_is_alive.md)
+  : Does a database connection still reach its server?
 
 ## Data Validation
 

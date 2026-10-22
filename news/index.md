@@ -1,5 +1,28 @@
 # Changelog
 
+## Version 2026.10.23
+
+### New Features
+
+- [`csdb_connection_is_alive()`](https://niphr.github.io/csdb/reference/csdb_connection_is_alive.md)
+  reports whether a connection still reaches its server. It asks with an
+  ODBC catalog call, which does not crash R. Only a condition whose
+  message shows a lost connection gives FALSE, so a live connection
+  keeps its cleanup SQL.
+
+### Bug Fixes
+
+- After the PostgreSQL server ends the session, the ROLLBACK of a JSON
+  load and the cleanup of an upsert send no more SQL. The load then
+  stops with an R error. Before, odbc 1.7.0 crashed R with a segfault at
+  that second statement.
+- The PostgreSQL upsert loads its rows through a TEMPORARY table, which
+  PostgreSQL drops when the session ends. Before, a plain `tmp` table in
+  the schema of the table held them, and a lost connection left it
+  there. The database user needs the TEMP privilege.
+- The upserts of SQL Server and of the other backends send no DROP on a
+  connection that lost its server.
+
 ## Version 2026.10.22
 
 ### Bug Fixes
