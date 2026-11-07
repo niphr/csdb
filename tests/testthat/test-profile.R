@@ -69,10 +69,63 @@ test_that("full BOOLEAN above max_levels publishes n_distinct", {
 })
 
 test_that("full DATE publishes counts per day", {
-  d <- data.frame(day = as.Date("2024-03-01") + c(rep(0, 6), rep(1, 5), 2))
+  d <- data.frame(day = as.Date("2024-03-01") + c(rep(0, 6), rep(1, 5), rep(3, 5)))
   p <- profile_data(d, c(day = "DATE"), columns = c(day = "full"))
-  expect_identical(p$columns$day$days, as.Date(c("2024-03-01", "2024-03-02")))
-  expect_identical(p$columns$day$n, c(6L, 5L))
+  expect_identical(
+    p$columns$day$days,
+    as.Date(c("2024-03-01", "2024-03-02", "2024-03-04"))
+  )
+  expect_identical(p$columns$day$n, c(6L, 5L, 5L))
+})
+
+test_that("a year of sparse days merges into weeks rather than disappearing", {
+  # 365 days from Tuesday 2024-01-02, 3 rows a day. The first ISO week
+  # holds 6 days and the last week 2 days, so every week holds 6 rows or
+  # more, and no day holds k = 5.
+  d <- data.frame(day = as.Date("2024-01-02") + rep(0:364, each = 3))
+  p <- profile_data(d, c(day = "DATE"), columns = c(day = "full"), k = 5L)
+  day <- p$columns$day
+  expect_identical(
+    names(day),
+    c("type", "sensitivity", "missing_share", "weeks", "n")
+  )
+  expect_length(day$weeks, 53L)
+  expect_identical(format(day$weeks, "%u"), rep("1", 53))
+  expect_true(all(day$n >= 5L))
+  expect_identical(sum(day$n), p$n_rows)
+  expect_identical(p$n_rows, 1095L)
+})
+
+test_that("days and weeks merge into months, quarters and runs of quarters", {
+  day <- function(x) as.Date(x)
+  rows <- function(...) {
+    x <- c(...)
+    return(rep(day(names(x)), x))
+  }
+  # Each column holds 400 rows. The small cell decides the resolution.
+  d <- data.frame(
+    mo = rows("2024-01-01" = 98, "2024-01-31" = 2, "2024-02-15" = 100,
+      "2024-03-15" = 100, "2024-04-15" = 100),
+    qu = rows("2024-01-01" = 97, "2024-02-15" = 3, "2024-04-01" = 100,
+      "2024-07-01" = 100, "2024-10-01" = 100),
+    runs = rows("2024-01-01" = 300, "2024-07-01" = 3, "2025-01-01" = 97)
+  )
+  p <- profile_data(
+    d,
+    c(mo = "DATE", qu = "DATE", runs = "DATE"),
+    columns = c(mo = "full", qu = "full", runs = "coarsen")
+  )
+  expect_identical(p$columns$mo$months, day(c("2024-01-01", "2024-02-01",
+    "2024-03-01", "2024-04-01")))
+  expect_identical(p$columns$mo$n, rep(100L, 4))
+  expect_identical(p$columns$qu$quarters, day(c("2024-01-01", "2024-04-01",
+    "2024-07-01", "2024-10-01")))
+  expect_null(p$columns$qu$quarters_to)
+  expect_identical(p$columns$runs$quarters, day(c("2024-01-01", "2024-07-01")))
+  # runs is coarsen, so its days go to weeks first. The week of 2025-01-01
+  # starts on Monday 2024-12-30 and so merges into the quarter of that day.
+  expect_identical(p$columns$runs$quarters_to, day(c("2024-01-01", "2024-10-01")))
+  expect_identical(p$columns$runs$n, c(300L, 100L))
 })
 
 test_that("full DATETIME publishes levels to the second, or counts per UTC day above max_levels", {
@@ -116,7 +169,7 @@ test_that("coarsen DATE and DATETIME publish counts per ISO week keyed by its Mo
   expect_identical(format(p$columns$day$weeks, "%u"), c("1", "1"))
 })
 
-test_that("INTEGER and DOUBLE bins merge small edge bins inward and mark small inner bins NA", {
+test_that("INTEGER and DOUBLE bins merge every bin below k with its neighbours", {
   # 0 to 59, 10 rows each, then one row of 100. pretty() gives breaks 0 to
   # 100 by 5, and the end breaks move outward to -5 and 105.
   x <- c(rep(0:59, each = 10), 100L)
@@ -127,8 +180,9 @@ test_that("INTEGER and DOUBLE bins merge small edge bins inward and mark small i
   )
   expect_identical(p$columns$x$breaks, c(-5, seq(5, 55, by = 5), 105))
   expect_identical(p$columns$x$n, c(rep(50L, 11), 51L))
-  # A gap from 20 to 39 gives inner bins of 0 rows. The 40 distinct values
-  # are above max_levels, so the full column is binned.
+  # A gap from 20 to 39 gives inner bins of 0 rows. They merge with the
+  # next bin, [40, 45). The 40 distinct values are above max_levels, so the
+  # full column is binned.
   y <- c(rep(0:19, each = 10), rep(40:59, each = 10), 0L, 59L)
   q <- profile_data(
     data.frame(y = y),
@@ -136,11 +190,9 @@ test_that("INTEGER and DOUBLE bins merge small edge bins inward and mark small i
     columns = c(y = "full"),
     max_levels = 39L
   )
-  expect_identical(q$columns$y$breaks, c(-5, seq(5, 60, by = 5)))
-  expect_identical(
-    q$columns$y$n,
-    c(51L, 50L, 50L, 50L, NA, NA, NA, NA, 50L, 50L, 50L, 51L)
-  )
+  expect_identical(q$columns$y$breaks, c(-5, 5, 10, 15, 20, 45, 50, 55, 60))
+  expect_identical(q$columns$y$n, c(51L, rep(50L, 6), 51L))
+  expect_false(anyNA(q$columns$y$n))
   expect_false("suppressed_n" %in% names(q$columns$y))
   # A full column at most max_levels publishes its values instead.
   r <- profile_data(
@@ -149,6 +201,15 @@ test_that("INTEGER and DOUBLE bins merge small edge bins inward and mark small i
     columns = c(z = "full")
   )
   expect_identical(r$columns$z$levels, c(1.5, 2.5))
+  # A level below k is not dropped: the column is binned instead.
+  s <- profile_data(
+    data.frame(z = rep(c(1L, 2L, 3L), c(10, 3, 10))),
+    c(z = "INTEGER"),
+    columns = c(z = "full")
+  )
+  expect_null(s$columns$z$levels)
+  expect_identical(sum(s$columns$z$n), 23L)
+  expect_true(all(s$columns$z$n >= 5L))
 })
 
 test_that("a column of one value gets breaks that differ from that value", {
@@ -219,8 +280,9 @@ test_that("dependencies hold one logical and store no mapping", {
   )
 })
 
-test_that("group_sizes count the values of a column per row count, suppressed", {
-  d <- data.frame(id = rep(1:8, c(2, 2, 2, 2, 2, 3, 3, 9)))
+test_that("group_sizes count the values of a column per range of row counts", {
+  # Row counts 2, 3, 5, 8 and 9, held by 3, 3, 5, 2 and 4 ids.
+  d <- data.frame(id = rep(1:17, rep(c(2, 3, 5, 8, 9), c(3, 3, 5, 2, 4))))
   p <- profile_data(
     d,
     c(id = "INTEGER"),
@@ -229,8 +291,52 @@ test_that("group_sizes count the values of a column per row count, suppressed", 
   )
   expect_identical(
     p$group_sizes,
-    list(rows_per_id = list(column = "id", size = 2L, n = 5L))
+    list(rows_per_id = list(
+      column = "id",
+      size_from = c(1L, 5L, 8L),
+      size_to = c(4L, 7L),
+      n = c(6L, 5L, 6L)
+    ))
   )
+})
+
+test_that("group sizes merge into ranges", {
+  size_ranges <- function(sizes) {
+    d <- data.frame(id = rep(seq_along(sizes), sizes))
+    p <- profile_data(
+      d,
+      c(id = "INTEGER"),
+      columns = c(id = "exclude"),
+      group_sizes = list(g = "id"),
+      k = 5L
+    )
+    return(p$group_sizes$g)
+  }
+  withr::local_seed(5)
+  fixtures <- list(
+    # 80 ids: two of each size from 1 to 40 rows.
+    every_size = rep(1:40, 2),
+    # Sizes 2, 3, 5, 8 and 9, with gaps at 4, 6 and 7.
+    gaps = rep(c(2L, 3L, 5L, 8L, 9L), c(3, 3, 5, 2, 4)),
+    # A skewed draw with wide gaps between sizes.
+    skewed = sample(c(1:5, 12L, 40L, 41L, 90L), 60, TRUE, prob = 9:1)
+  )
+  for (name in names(fixtures)) {
+    sizes <- fixtures[[name]]
+    g <- size_ranges(sizes)
+    m <- length(g$n)
+    expect_gt(m, 1, label = name)
+    expect_true(all(g$n >= 5L), label = name)
+    expect_identical(sum(g$n), length(sizes), label = name)
+    # The ranges tile the row counts from 1: each size_to is one below the
+    # next size_from, and the last range has no size_to.
+    expect_identical(g$size_from[1], 1L, label = name)
+    expect_length(g$size_to, m - 1L)
+    for (i in seq_len(m - 1)) {
+      expect_identical(g$size_to[i] + 1L, g$size_from[i + 1], label = paste(name, i))
+    }
+    expect_true(all(g$size_from[-m] <= g$size_to), label = name)
+  }
 })
 
 roundtrip_data <- function() {
@@ -289,7 +395,7 @@ test_that("a profile survives write_profile() and read_profile() unchanged", {
   expect_identical(read_profile(path), p)
 })
 
-test_that("a profile with noise, NA bins and suppressed_n survives the round trip", {
+test_that("a profile with noise, merged bins and suppressed_n survives the round trip", {
   set.seed(20261107)
   x <- c(rep(0:19, each = 10), rep(40:59, each = 10))
   d <- data.frame(
@@ -303,8 +409,9 @@ test_that("a profile with noise, NA bins and suppressed_n survives the round tri
     noise = list(epsilon = 2),
     k = 2L
   )
-  expect_true(anyNA(p$columns$x$n))
-  expect_type(p$columns$x$suppressed_n, "integer")
+  # The gap from 20 to 39 merges into a wider bin.
+  expect_lt(length(p$columns$x$n), 12L)
+  expect_false(anyNA(p$columns$x$n))
   expect_type(p$columns$g$suppressed_n, "integer")
   expect_identical(p$provenance$noise, list(epsilon = 2))
   path <- withr::local_tempfile(fileext = ".yaml")

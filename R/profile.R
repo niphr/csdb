@@ -55,15 +55,21 @@ profile_field_type_names <- c(
 #' Each column of `field_types` gets a summary from its sensitivity:
 #'
 #' - `schema_only`: `type`, `sensitivity` and `missing_share`. All other
-#'   summaries hold these three fields too.
+#'   summaries hold these three fields too. An `INTEGER` or `DOUBLE` column
+#'   also holds `nonnegative`, which is `TRUE` when its SQL minimum is at
+#'   least 0.
 #' - `exclude`: no entry in `columns`. The column is in `field_types` only.
-#' - `full`, at most `max_levels` distinct values: `levels` and `n`.
+#' - `full` `TEXT` or `BOOLEAN`, at most `max_levels` distinct values:
+#'   `levels` and `n`.
+#' - `full` `INTEGER`, `DOUBLE` or `DATETIME`, at most `max_levels` distinct
+#'   values: `levels` and `n` when every level holds at least `k` rows.
+#'   Otherwise the column takes the summary that it has above `max_levels`.
 #' - `full` `TEXT`, above `max_levels`: `n_distinct`, rounded down to a
 #'   multiple of `k`.
 #' - `full` `DATE`: counts per day, as `days` and `n`.
-#' - `full` `DATETIME`: `levels` and `n` when the column has at most
-#'   `max_levels` distinct values, otherwise counts per UTC day as `days` and
-#'   `n`. The function truncates each level to the whole second.
+#' - `full` `DATETIME`: `levels` and `n`, as above, otherwise counts per UTC
+#'   day as `days` and `n`. The function truncates each level to the whole
+#'   second.
 #' - `coarsen` `DATE` or `DATETIME`: counts per ISO week, as `weeks` and `n`.
 #'   The Monday of each week is its key. A `DATETIME` falls in the week of
 #'   its UTC day.
@@ -74,21 +80,51 @@ profile_field_type_names <- c(
 #' The breaks come from `pretty(c(min, max), n = 20)`. An end break that
 #' equals the observed minimum or maximum moves one step outward. The
 #' function removes an inner break that equals either extreme. So no break
-#' equals an observed extreme. An edge bin below `k` merges inward. An inner
-#' bin below `k` holds `NA` in `n`.
+#' equals an observed extreme.
 #'
-#' Suppression removes every count below `k`. A column sums its removed
-#' counts into `suppressed_n`, and it keeps `suppressed_n` only when that
-#' sum is at least `k`. `missing_share` is `"suppressed"` when the count of
-#' missing values, or the count of values present, is from 1 to `k - 1`.
-#' `n_rows` holds no noise. A query with fewer than `k` rows is an error.
+#' Suppression keeps every published count at `k` or above. On an ordered
+#' dimension, a cell below `k` merges with its neighbours:
+#'
+#' - Days merge into ISO weeks, then calendar months, then calendar
+#'   quarters. Weeks merge into months, then quarters. The column takes the
+#'   finest of these resolutions at which every cell holds `k`. The field
+#'   name gives the resolution: `days`, `weeks`, `months` or `quarters`.
+#'   Each key is the first day of its cell. A week merges into the month of
+#'   its Monday.
+#' - When a quarter holds fewer than `k` rows, adjacent quarters merge into
+#'   runs. Each run takes quarters in order until it holds `k`. A last run
+#'   below `k` joins the run before it. `quarters` then holds the first
+#'   quarter of each run and `quarters_to` the last.
+#' - Bins merge into runs in the same way. A merged bin keeps the outer
+#'   breaks of its run, so no break is added.
+#' - Group sizes merge into runs in the same way. Each run is published as
+#'   `size_from`, `size_to` and `n`, the number of values with a row count
+#'   in that range. The ranges tile the row counts from 1 up with no gap.
+#'   The first range starts at 1. Every other `size_from` is an observed row
+#'   count, the smallest in its run. Each `size_to` is one below the next
+#'   `size_from`. The last range has no `size_to`, so it runs from its
+#'   `size_from` up.
+#' - A first run that holds only the smallest row count merges with the
+#'   next run. A last run that holds only the largest merges with the run
+#'   before it. So no exact smallest or largest row count is published.
+#'
+#' A table whose present values number fewer than `k` publishes no cell.
+#' Unordered cells, which are the `levels` of a `TEXT` or `BOOLEAN` column
+#' and the cells of a crosstab, do not merge. Each cell below `k` is
+#' removed. A column sums its removed counts into `suppressed_n`, and it
+#' keeps `suppressed_n` only when that sum is at least `k`. With `noise`,
+#' the function adds the noise to the finest cells, before it merges or
+#' removes any cell.
+#'
+#' `missing_share` is `"suppressed"` when the count of missing values, or
+#' the count of values present, is from 1 to `k - 1`. `n_rows` holds no
+#' noise. A query with fewer than `k` rows is an error.
 #'
 #' A crosstab counts the rows where both columns hold a value. Each of its
-#' columns MUST have `levels` or be a `DATE`. A group-size `size` is a row
-#' count used as a level, so it can be below `k`. Suppression applies only to
-#' `n`, the number of values with that size. A dependency holds when each
-#' value of the first column, `NULL` included, goes with one value of the
-#' second. The profile stores no mapping.
+#' columns MUST have `levels` or be a `DATE`. A group-size range is a range
+#' of row counts, so it can be below `k`. Only `n` must reach `k`. A
+#' dependency holds when each value of the first column, `NULL` included,
+#' goes with one value of the second. The profile stores no mapping.
 #'
 #' @return A list of class `csdb_profile`, with the elements `provenance`,
 #'   `field_types`, `keys`, `n_rows`, `columns`, `group_sizes`, `crosstabs`,
@@ -565,6 +601,9 @@ profile_column <- function(ctx, column) {
     sensitivity = ctx$sensitivity[[column]],
     missing_share = profile_missing_share(ctx$missing[[column]], ctx)
   )
+  if (entry$type %in% c("INTEGER", "DOUBLE")) {
+    entry$nonnegative <- profile_nonnegative(ctx, column)
+  }
   summary <- switch(
     entry$sensitivity,
     schema_only = list(),
@@ -574,20 +613,31 @@ profile_column <- function(ctx, column) {
   return(c(entry, summary))
 }
 
+# TRUE when the SQL minimum of a numeric column is at least 0. A column with
+# no value gives FALSE.
+profile_nonnegative <- function(ctx, column) {
+  lo <- sql_range(ctx$con, ctx$sql, column)[["lo"]]
+  return(isTRUE(lo >= 0))
+}
+
 profile_full <- function(ctx, column) {
   type <- ctx$field_types[[column]]
   if (type == "DATE") {
-    return(profile_days(ctx, column))
+    return(profile_dates(ctx, column, profile_date_units))
   }
   n_distinct <- sql_count_distinct(ctx$con, ctx$sql, column)
   if (n_distinct <= ctx$max_levels) {
     return(profile_levels(ctx, column))
   }
+  return(profile_above_max_levels(ctx, column, n_distinct))
+}
+
+profile_above_max_levels <- function(ctx, column, n_distinct) {
   return(switch(
-    type,
+    ctx$field_types[[column]],
     TEXT = profile_n_distinct(ctx, n_distinct),
     BOOLEAN = profile_n_distinct(ctx, n_distinct),
-    DATETIME = profile_days(ctx, column),
+    DATETIME = profile_dates(ctx, column, profile_date_units),
     profile_bins(ctx, column)
   ))
 }
@@ -595,7 +645,7 @@ profile_full <- function(ctx, column) {
 profile_coarsen <- function(ctx, column) {
   type <- ctx$field_types[[column]]
   if (type %in% c("DATE", "DATETIME")) {
-    return(profile_weeks(ctx, column))
+    return(profile_dates(ctx, column, profile_date_units[-1]))
   }
   return(profile_bins(ctx, column))
 }
@@ -615,22 +665,134 @@ profile_cells <- function(ctx, values, n, name) {
   return(out)
 }
 
+# Levels of an ordered type do not lose a small cell. When a level is below
+# k, the column takes the summary it has above max_levels.
 profile_levels <- function(ctx, column) {
   v <- profile_values(ctx, column)
-  return(profile_cells(ctx, v$values, v$n, "levels"))
+  type <- ctx$field_types[[column]]
+  if (type %in% c("TEXT", "BOOLEAN")) {
+    return(profile_cells(ctx, v$values, v$n, "levels"))
+  }
+  agg <- profile_aggregate(list(v$values), v$n)
+  n <- profile_noise(agg$n, ctx$noise)
+  if (all(n >= ctx$k)) {
+    return(list(levels = agg$keys[[1]], n = n))
+  }
+  return(profile_above_max_levels(ctx, column, NA))
 }
 
-profile_days <- function(ctx, column) {
+profile_dates <- function(ctx, column, units) {
   v <- profile_values(ctx, column)
-  return(profile_cells(ctx, profile_as_date(v$values), v$n, "days"))
+  return(profile_date_cells(profile_as_date(v$values), v$n, units, ctx))
 }
 
-profile_weeks <- function(ctx, column) {
-  v <- profile_values(ctx, column)
-  days <- profile_as_date(v$values)
-  # 1970-01-01 was a Thursday, so (days + 3) %% 7 is 0 on a Monday.
-  mondays <- .Date(as.numeric(days) - (as.numeric(days) + 3) %% 7)
-  return(profile_cells(ctx, mondays, v$n, "weeks"))
+# date resolutions ----
+
+# The resolutions of a date summary, finest first. Each name is the field
+# that holds the first day of each published cell.
+profile_date_units <- c("days", "weeks", "months", "quarters")
+
+# Counts at the finest of `units` at which every cell holds k, or merged
+# quarters. The noise goes on the cells of the first unit.
+profile_date_cells <- function(days, n, units, ctx) {
+  base <- profile_sum_by(profile_period_start(days, units[1]), n)
+  counts <- profile_noise(base$n, ctx$noise)
+  for (unit in units) {
+    cells <- profile_sum_by(profile_period_start(base$keys, unit), counts)
+    if (all(cells$n >= ctx$k)) {
+      out <- list(.Date(cells$keys), cells$n)
+      names(out) <- c(unit, "n")
+      return(out)
+    }
+  }
+  runs <- profile_run_cells(cells$keys, cells$n, ctx$k)
+  return(list(
+    quarters = .Date(runs$from),
+    quarters_to = .Date(runs$to),
+    n = runs$n
+  ))
+}
+
+# The sum of `n` for each distinct number in `keys`, in increasing order.
+profile_sum_by <- function(keys, n) {
+  keys <- as.numeric(keys)
+  u <- sort(unique(keys))
+  if (length(u) == 0) {
+    return(list(keys = numeric(0), n = integer(0)))
+  }
+  sums <- rowsum(as.numeric(n), match(keys, u))
+  return(list(keys = u, n = as.integer(sums[, 1])))
+}
+
+# The first day of the period of each day, as a number of days.
+profile_period_start <- function(days, unit) {
+  days <- as.numeric(days)
+  if (unit == "days" || length(days) == 0) {
+    return(days)
+  }
+  if (unit == "weeks") {
+    # 1970-01-01 was a Thursday, so (days + 3) %% 7 is 0 on a Monday.
+    return(days - (days + 3) %% 7)
+  }
+  lt <- as.POSIXlt(.Date(days))
+  lt$mday <- 1L
+  if (unit == "quarters") {
+    lt$mon <- (lt$mon %/% 3L) * 3L
+  }
+  return(as.numeric(as.Date(lt)))
+}
+
+# The first day after the period that starts on each of `starts`.
+profile_period_next <- function(starts, unit) {
+  starts <- as.numeric(starts)
+  if (unit == "days") {
+    return(starts + 1)
+  }
+  if (unit == "weeks") {
+    return(starts + 7)
+  }
+  if (length(starts) == 0) {
+    return(starts)
+  }
+  lt <- as.POSIXlt(.Date(starts))
+  lt$mon <- lt$mon + ifelse(unit == "quarters", 3L, 1L)
+  return(as.numeric(as.Date(lt)))
+}
+
+# Ordered cells merge into runs. A run takes cells in order until it holds
+# k. A last run below k joins the run before it. So a run below k is left
+# only when all cells together hold fewer than k.
+profile_runs <- function(n, k) {
+  runs <- integer(length(n))
+  run <- 1L
+  held <- 0
+  for (i in seq_along(n)) {
+    runs[i] <- run
+    held <- held + n[i]
+    if (held >= k && i < length(n)) {
+      run <- run + 1L
+      held <- 0
+    }
+  }
+  if (held < k && run > 1L) {
+    runs[runs == run] <- run - 1L
+  }
+  return(runs)
+}
+
+# The first key, the last key and the count of each run of ordered cells.
+# A run below k is not kept.
+profile_run_cells <- function(keys, n, k, runs = profile_runs(n, k)) {
+  if (length(n) == 0) {
+    return(list(from = keys, to = keys, n = integer(0)))
+  }
+  sums <- as.integer(rowsum(as.numeric(n), runs, reorder = FALSE)[, 1])
+  keep <- sums >= k
+  return(list(
+    from = keys[!duplicated(runs)][keep],
+    to = keys[!duplicated(runs, fromLast = TRUE)][keep],
+    n = sums[keep]
+  ))
 }
 
 profile_n_distinct <- function(ctx, n_distinct) {
@@ -649,14 +811,19 @@ profile_bins <- function(ctx, column) {
     sql_bin_counts(ctx$con, ctx$sql, column, breaks),
     ctx$noise
   )
-  bins <- profile_merge_edges(breaks, n, ctx$k)
-  small <- bins$n < ctx$k
-  out <- list(breaks = bins$breaks, n = replace(bins$n, small, NA_integer_))
-  suppressed <- sum(bins$n[small])
-  if (suppressed >= ctx$k) {
-    out$suppressed_n <- suppressed
+  return(profile_merge_bins(breaks, n, ctx$k))
+}
+
+# Adjacent bins merge into runs that hold k each. A merged bin keeps the
+# outer breaks of its run. Fewer than k values in all bins give no bin.
+profile_merge_bins <- function(breaks, n, k) {
+  if (sum(n) < k) {
+    return(list(breaks = numeric(0), n = integer(0)))
   }
-  return(out)
+  runs <- profile_runs(n, k)
+  sums <- as.integer(rowsum(as.numeric(n), runs, reorder = FALSE)[, 1])
+  first <- which(!duplicated(runs))
+  return(list(breaks = c(breaks[first], breaks[length(breaks)]), n = sums))
 }
 
 # Breaks from pretty() that never equal the observed minimum or maximum.
@@ -684,21 +851,6 @@ profile_extend_breaks <- function(breaks, lo, hi) {
     breaks[m] <- breaks[m] + step
   }
   return(breaks)
-}
-
-# Merge an edge bin with a count below k into its inner neighbour, until both
-# edge bins reach k or one bin is left.
-profile_merge_edges <- function(breaks, n, k) {
-  while (length(n) > 1 && n[1] < k) {
-    n <- c(n[1] + n[2], n[-(1:2)])
-    breaks <- breaks[-2]
-  }
-  while (length(n) > 1 && n[length(n)] < k) {
-    m <- length(n)
-    n <- c(n[seq_len(m - 2)], n[m - 1] + n[m])
-    breaks <- breaks[-m]
-  }
-  return(list(breaks = breaks, n = n))
 }
 
 # joint structure ----
@@ -740,10 +892,37 @@ profile_group_size <- function(ctx, column) {
   }
   r <- sql_group_sizes(ctx$con, ctx$sql, column)
   agg <- profile_aggregate(list(profile_as_count(r$size)), r$n)
-  cells <- profile_suppress(agg$keys, agg$n, ctx)
-  out <- list(column = column, size = as.integer(cells$keys[[1]]), n = cells$n)
-  out$suppressed_n <- cells$suppressed_n
-  return(out)
+  ranges <- profile_size_ranges(agg$keys[[1]], agg$n, ctx)
+  return(c(list(column = column), ranges))
+}
+
+# Adjacent row counts merge into ranges that hold k values each. The ranges
+# tile from 1 up: each ends one below the start of the next, and the last
+# has no end. So no exact smallest or largest row count is published.
+profile_size_ranges <- function(sizes, n, ctx) {
+  n <- profile_noise(n, ctx$noise)
+  runs <- profile_end_runs(profile_runs(n, ctx$k))
+  cells <- profile_run_cells(as.integer(sizes), n, ctx$k, runs)
+  size_from <- c(1L, cells$from[-1])[seq_along(cells$n)]
+  return(list(
+    size_from = size_from,
+    size_to = size_from[-1] - 1L,
+    n = cells$n
+  ))
+}
+
+# A first run of the smallest row count alone would end on that count, and
+# a last run of the largest alone would start on it. Each such run merges
+# with its neighbour.
+profile_end_runs <- function(runs) {
+  m <- length(runs)
+  if (m > 1 && sum(runs == runs[m]) == 1) {
+    runs[m] <- runs[m - 1]
+  }
+  if (length(unique(runs)) > 1 && sum(runs == runs[1]) == 1) {
+    runs[1] <- runs[2]
+  }
+  return(match(runs, unique(runs)))
 }
 
 profile_crosstabs <- function(ctx, crosstabs, column_profiles) {

@@ -4,7 +4,8 @@
 # character(0) (it comes back as list()), the class, and digits past the
 # seventh. So the writer encodes explicitly and the reader decodes each field
 # by its name and by its column's type. Each value of `levels`, `days`,
-# `weeks` and `breaks` is written as text.
+# `weeks`, `months`, `quarters`, `quarters_to` and `breaks` is written as
+# text.
 
 #' Write a profile to a YAML file
 #'
@@ -79,6 +80,9 @@ profile_value_type <- function(name, type) {
     levels = type,
     days = "DATE",
     weeks = "DATE",
+    months = "DATE",
+    quarters = "DATE",
+    quarters_to = "DATE",
     breaks = "DOUBLE",
     NULL
   ))
@@ -214,6 +218,9 @@ profile_decode_field <- function(name, x, type) {
   if (name %in% c("type", "sensitivity", "missing_share")) {
     return(as.character(x))
   }
+  if (name == "nonnegative") {
+    return(as.logical(x))
+  }
   stop("Unknown field in a profile column: ", name, call. = FALSE)
 }
 
@@ -228,10 +235,11 @@ profile_decode_suppressed <- function(out, x) {
 profile_decode_group_size <- function(x) {
   out <- list(
     column = as.character(x$column),
-    size = profile_decode_count(x$size),
+    size_from = profile_decode_count(x$size_from),
+    size_to = profile_decode_count(x$size_to),
     n = profile_decode_count(x$n)
   )
-  return(profile_decode_suppressed(out, x))
+  return(out)
 }
 
 profile_decode_crosstab <- function(x, field_types) {

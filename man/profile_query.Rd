@@ -79,15 +79,21 @@ keeps no count below `k`.
 Each column of `field_types` gets a summary from its sensitivity:
 
 - `schema_only`: `type`, `sensitivity` and `missing_share`. All other
-  summaries hold these three fields too.
+  summaries hold these three fields too. An `INTEGER` or `DOUBLE` column
+  also holds `nonnegative`, which is `TRUE` when its SQL minimum is at
+  least 0.
 - `exclude`: no entry in `columns`. The column is in `field_types` only.
-- `full`, at most `max_levels` distinct values: `levels` and `n`.
+- `full` `TEXT` or `BOOLEAN`, at most `max_levels` distinct values:
+  `levels` and `n`.
+- `full` `INTEGER`, `DOUBLE` or `DATETIME`, at most `max_levels` distinct
+  values: `levels` and `n` when every level holds at least `k` rows.
+  Otherwise the column takes the summary that it has above `max_levels`.
 - `full` `TEXT`, above `max_levels`: `n_distinct`, rounded down to a
   multiple of `k`.
 - `full` `DATE`: counts per day, as `days` and `n`.
-- `full` `DATETIME`: `levels` and `n` when the column has at most
-  `max_levels` distinct values, otherwise counts per UTC day as `days` and
-  `n`. The function truncates each level to the whole second.
+- `full` `DATETIME`: `levels` and `n`, as above, otherwise counts per UTC
+  day as `days` and `n`. The function truncates each level to the whole
+  second.
 - `coarsen` `DATE` or `DATETIME`: counts per ISO week, as `weeks` and `n`.
   The Monday of each week is its key. A `DATETIME` falls in the week of
   its UTC day.
@@ -98,21 +104,51 @@ Each column of `field_types` gets a summary from its sensitivity:
 The breaks come from `pretty(c(min, max), n = 20)`. An end break that
 equals the observed minimum or maximum moves one step outward. The
 function removes an inner break that equals either extreme. So no break
-equals an observed extreme. An edge bin below `k` merges inward. An inner
-bin below `k` holds `NA` in `n`.
+equals an observed extreme.
 
-Suppression removes every count below `k`. A column sums its removed
-counts into `suppressed_n`, and it keeps `suppressed_n` only when that
-sum is at least `k`. `missing_share` is `"suppressed"` when the count of
-missing values, or the count of values present, is from 1 to `k - 1`.
-`n_rows` holds no noise. A query with fewer than `k` rows is an error.
+Suppression keeps every published count at `k` or above. On an ordered
+dimension, a cell below `k` merges with its neighbours:
+
+- Days merge into ISO weeks, then calendar months, then calendar
+  quarters. Weeks merge into months, then quarters. The column takes the
+  finest of these resolutions at which every cell holds `k`. The field
+  name gives the resolution: `days`, `weeks`, `months` or `quarters`.
+  Each key is the first day of its cell. A week merges into the month of
+  its Monday.
+- When a quarter holds fewer than `k` rows, adjacent quarters merge into
+  runs. Each run takes quarters in order until it holds `k`. A last run
+  below `k` joins the run before it. `quarters` then holds the first
+  quarter of each run and `quarters_to` the last.
+- Bins merge into runs in the same way. A merged bin keeps the outer
+  breaks of its run, so no break is added.
+- Group sizes merge into runs in the same way. Each run is published as
+  `size_from`, `size_to` and `n`, the number of values with a row count
+  in that range. The ranges tile the row counts from 1 up with no gap.
+  The first range starts at 1. Every other `size_from` is an observed row
+  count, the smallest in its run. Each `size_to` is one below the next
+  `size_from`. The last range has no `size_to`, so it runs from its
+  `size_from` up.
+- A first run that holds only the smallest row count merges with the
+  next run. A last run that holds only the largest merges with the run
+  before it. So no exact smallest or largest row count is published.
+
+A table whose present values number fewer than `k` publishes no cell.
+Unordered cells, which are the `levels` of a `TEXT` or `BOOLEAN` column
+and the cells of a crosstab, do not merge. Each cell below `k` is
+removed. A column sums its removed counts into `suppressed_n`, and it
+keeps `suppressed_n` only when that sum is at least `k`. With `noise`,
+the function adds the noise to the finest cells, before it merges or
+removes any cell.
+
+`missing_share` is `"suppressed"` when the count of missing values, or
+the count of values present, is from 1 to `k - 1`. `n_rows` holds no
+noise. A query with fewer than `k` rows is an error.
 
 A crosstab counts the rows where both columns hold a value. Each of its
-columns MUST have `levels` or be a `DATE`. A group-size `size` is a row
-count used as a level, so it can be below `k`. Suppression applies only to
-`n`, the number of values with that size. A dependency holds when each
-value of the first column, `NULL` included, goes with one value of the
-second. The profile stores no mapping.
+columns MUST have `levels` or be a `DATE`. A group-size range is a range
+of row counts, so it can be below `k`. Only `n` must reach `k`. A
+dependency holds when each value of the first column, `NULL` included,
+goes with one value of the second. The profile stores no mapping.
 }
 \examples{
 con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:", extended_types = TRUE)

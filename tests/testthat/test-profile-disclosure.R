@@ -170,11 +170,13 @@ test_that("a group_sizes id column's values are not written", {
   text <- disclosure_text(path)
   expect_false(any(grepl("SENTINEL_ID_42", text, fixed = TRUE)))
   expect_false(any(grepl("SENTINEL_ID", text, fixed = TRUE)))
-  # The group sizes are written: 48 ids hold 4 rows.
+  # The group sizes are written. 48 ids hold 4 rows, one id 3 rows and one
+  # id 5 rows, so the sizes merge into one open range of 50 ids from 1 up.
   gs <- yaml::read_yaml(path)$group_sizes$rows_per_id
   expect_identical(gs$column, "person_id")
-  expect_identical(gs$size, 4L)
-  expect_identical(gs$n, 48L)
+  expect_identical(gs$size_from, 1L)
+  expect_length(gs$size_to, 0)
+  expect_identical(gs$n, 50L)
 })
 
 test_that("a full TEXT level with a count of k - 1 is not written", {
@@ -216,4 +218,90 @@ test_that("a small count of missing values is suppressed", {
   # The positive controls: no missing value, and 10 of 200 missing.
   expect_identical(columns$sex$missing_share, 0)
   expect_identical(columns$many_missing$missing_share, 10 / 200)
+})
+
+# 400 rows. Each column needs a coarser resolution than the one before, so
+# the written profile holds weeks, months, quarters, runs of quarters,
+# merged bins and ranges of group sizes.
+merged_data <- function() {
+  rows <- function(...) {
+    x <- c(...)
+    return(rep(as.Date(names(x)), x))
+  }
+  sizes <- c(rep(1:15, each = 2), rep(20L, 8))
+  return(data.frame(
+    id = paste0("SENTINEL_ID_", rep(seq_along(sizes), sizes)),
+    wk = as.Date("2024-01-01") + rep(0:55, length.out = 400),
+    mo = rows("2024-01-01" = 98, "2024-01-31" = 2, "2024-02-15" = 100,
+      "2024-03-15" = 100, "2024-04-15" = 100),
+    qu = rows("2024-01-01" = 97, "2024-02-15" = 3, "2024-04-01" = 100,
+      "2024-07-01" = 100, "2024-10-01" = 100),
+    runs = rows("2024-01-01" = 300, "2024-07-01" = 3, "2025-01-01" = 97),
+    x = c(rep(0:19, each = 10), rep(40:59, each = 10))
+  ))
+}
+
+test_that("merged weeks, months, quarters and size ranges write no count below k", {
+  d <- merged_data()
+  expect_identical(nrow(d), 400L)
+  p <- profile_data(
+    d,
+    c(id = "TEXT", wk = "DATE", mo = "DATE", qu = "DATE", runs = "DATE",
+      x = "INTEGER"),
+    columns = c(id = "exclude", wk = "coarsen", mo = "full", qu = "full",
+      runs = "full", x = "coarsen"),
+    group_sizes = list(rows_per_id = "id"),
+    k = disclosure_k
+  )
+  path <- withr::local_tempfile(fileext = ".yaml")
+  write_profile(p, path)
+  expect_identical(read_profile(path), p)
+  expect_false(any(grepl("SENTINEL_ID", disclosure_text(path), fixed = TRUE)))
+  parsed <- yaml::read_yaml(path)
+  columns <- parsed$columns
+  # Each merged form is present, so the scan below reaches it.
+  expect_true(all(c("weeks", "n") %in% names(columns$wk)))
+  expect_true(all(c("months", "n") %in% names(columns$mo)))
+  expect_true(all(c("quarters", "n") %in% names(columns$qu)))
+  expect_true(all(c("quarters", "quarters_to", "n") %in% names(columns$runs)))
+  expect_lt(length(columns$x$n), length(columns$x$breaks))
+  gs <- parsed$group_sizes$rows_per_id
+  expect_true(all(c("size_from", "size_to", "n") %in% names(gs)))
+  expect_gt(length(gs$n), 1)
+  cells <- disclosure_counts(parsed)
+  expect_gt(length(cells), 20)
+  expect_identical(cells[cells < disclosure_k], numeric(0))
+  # Merging drops no row: each table counts every row or every id.
+  for (x in c("wk", "mo", "qu", "runs", "x")) {
+    expect_identical(sum(unlist(columns[[x]]$n)), 400L, label = x)
+  }
+  expect_identical(sum(unlist(gs$n)), 38L)
+})
+
+test_that("group-size ranges publish no exact smallest or largest size", {
+  # Row counts from 3 to 25. Ten ids hold the smallest count, 3, and ten
+  # ids the largest, 25, so each alone fills a range of k ids.
+  sizes <- c(rep(3L, 10), rep(4:20, each = 3), rep(25L, 10))
+  d <- data.frame(id = paste0("SENTINEL_ID_", rep(seq_along(sizes), sizes)))
+  p <- profile_data(
+    d,
+    c(id = "TEXT"),
+    columns = c(id = "exclude"),
+    group_sizes = list(rows_per_id = "id"),
+    k = disclosure_k
+  )
+  path <- withr::local_tempfile(fileext = ".yaml")
+  write_profile(p, path)
+  expect_identical(read_profile(path), p)
+  gs <- yaml::read_yaml(path)$group_sizes$rows_per_id
+  ends <- c(unlist(gs$size_from), unlist(gs$size_to))
+  expect_gt(length(gs$n), 2)
+  expect_identical(gs$size_from[[1]], 1L)
+  expect_length(gs$size_to, length(gs$n) - 1L)
+  expect_false(any(ends %in% c(min(sizes), max(sizes))))
+  expect_identical(sum(unlist(gs$n)), length(sizes))
+  # The fixture of disclosure_yaml() too: row counts 3 to 5.
+  fixture <- yaml::read_yaml(disclosure_yaml())$group_sizes$rows_per_id
+  fixture_ends <- c(unlist(fixture$size_from), unlist(fixture$size_to))
+  expect_false(any(fixture_ends %in% c(3, 5)))
 })
