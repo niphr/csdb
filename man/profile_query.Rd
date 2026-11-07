@@ -88,6 +88,9 @@ Each column of `field_types` gets a summary from its sensitivity:
 - `full` `INTEGER`, `DOUBLE` or `DATETIME`, at most `max_levels` distinct
   values: `levels` and `n` when every level holds at least `k` rows.
   Otherwise the column takes the summary that it has above `max_levels`.
+  An `INTEGER` or `DOUBLE` column with one distinct value always
+  publishes `levels`. When that value holds fewer than `k` rows, the
+  function removes its cell, so `levels` and `n` are empty.
 - `full` `TEXT`, above `max_levels`: `n_distinct`, rounded down to a
   multiple of `k`.
 - `full` `DATE`: counts per day, as `days` and `n`.
@@ -98,7 +101,8 @@ Each column of `field_types` gets a summary from its sensitivity:
   The Monday of each week is its key. A `DATETIME` falls in the week of
   its UTC day.
 - `INTEGER` and `DOUBLE`, `full` above `max_levels` or `coarsen`: `breaks`
-  and `n`, for the bins `[breaks[i], breaks[i + 1])`.
+  and `n`, for the bins `[breaks[i], breaks[i + 1])`. The breaks are
+  always double.
 - `coarsen` `TEXT` or `BOOLEAN`: an error that names the column.
 
 The breaks come from `pretty(c(min, max), n = 20)`. An end break that
@@ -143,6 +147,30 @@ removes any cell.
 `missing_share` is `"suppressed"` when the count of missing values, or
 the count of values present, is from 1 to `k - 1`. `n_rows` holds no
 noise. A query with fewer than `k` rows is an error.
+
+The function reads the data with several queries. It runs them in one
+read snapshot where the driver gives one:
+
+- SQLite: one read transaction.
+- PostgreSQL: a transaction at `REPEATABLE READ`, `READ ONLY`.
+- SQL Server: a transaction at `SNAPSHOT` when the database allows it,
+  otherwise at `REPEATABLE READ`. `REPEATABLE READ` does not stop the
+  rows that other sessions insert. The function puts back the isolation
+  level of the session after the profile.
+- Other drivers, or a connection on which `DBI::dbBegin()` fails, for
+  example because a transaction is open: no snapshot, and a message says
+  so.
+
+The function sends only `SELECT` and transaction-control statements, and
+ends the transaction with a rollback.
+
+The function always refuses a torn profile, with or without a snapshot.
+The check covers each column with `levels`, `days`, `weeks`, `months`,
+`quarters` or `breaks`. Its counts before noise and suppression, plus its
+count of missing values, MUST equal `n_rows`. For a group-size column,
+the row counts of its values plus its missing count MUST equal `n_rows`. Otherwise the function stops with an error that
+names the column and both totals. A crosstab and an `n_distinct` have no
+total to check.
 
 A crosstab counts the rows where both columns hold a value. Each of its
 columns MUST have `levels` or be a `DATE`. A group-size range is a range

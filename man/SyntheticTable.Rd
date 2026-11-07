@@ -11,10 +11,12 @@ datasets. Every data.table that a \code{SyntheticTable} returns passed
 A generator is a \verb{function(profile, n, seed, world)} that returns a
 data.table. \code{generator = NULL} uses \code{\link[=simulate_from_profile]{simulate_from_profile()}} on \code{profile},
 or on \code{\link[=profile_schema]{profile_schema()}} of \code{field_types} and \code{keys} when \code{profile} is
-\code{NULL}.
+\code{NULL}. \code{n = NULL} means the generator's own size. A generator MAY then
+choose its row count, for example a complete grid of series and weeks.
+\code{\link[=simulate_from_profile]{simulate_from_profile()}} gives 1000 rows for \code{n = NULL}.
 
-\verb{$validate(d)} checks \code{d} in this order, and stops at the first check that
-fails. The error names the check.
+\verb{$validate(d, world)} checks \code{d} in this order, and stops at the first
+check that fails. The error names the check.
 \enumerate{
 \item \code{columns}: \code{d} is a data.table, and its column names and order equal
 \code{names(field_types)}.
@@ -27,10 +29,17 @@ logical, \code{DATE} Date and \code{DATETIME} POSIXct.
 return is the error message.
 }
 
+An invariant is a \verb{function(d)} or a \verb{function(d, world)}. The class calls
+an invariant with two or more formal arguments as \code{f(d, world)}, and any
+other invariant as \code{f(d)}. \verb{$random()}, \verb{$dataset()} and \verb{$add_dataset()}
+give the invariants their \code{world}.
+
 The directory \code{dir} holds the datasets of the table:
 \itemize{
 \item \code{datasets.yaml}: one entry for each recipe, with \code{name}, \code{kind}, \code{n},
-\code{seed}, \code{description}, \code{overrides} and \code{md5}.
+\code{seed}, \code{description}, \code{overrides}, \code{world_md5}, \code{rows} and \code{md5}. \code{n}
+is empty for \code{n = NULL}. \code{world_md5} is absent for \code{world = NULL}.
+\code{rows} is the row count of the data.
 \item \verb{handmade/<name>.csv}: one handmade dataset. Each column is read as
 text and converted to its field type. An empty cell is \code{NA}.
 \item \code{profile.yaml}: optional. \code{\link[=synthetic_table_from_dir]{synthetic_table_from_dir()}} reads it.
@@ -38,17 +47,26 @@ text and converted to its field type. An empty cell is \code{NA}.
 }
 
 A dataset name is lower snake case. The name \code{default} is the generator
-output at \code{n = 1000} and \code{seed = 1}.
+output at \code{seed = 1} and \code{n = 1000} or \code{n = NULL}.
 
 The md5 of a recipe comes from \code{\link[tools:md5sum]{tools::md5sum()}} of the data that
 \code{\link[data.table:fwrite]{data.table::fwrite()}} writes with \code{eol = "\\n"}. The columns are in
 \code{field_types} order, the rows are sorted by every column, dates are
 ISO 8601 and \code{NA} is empty.
 
-\verb{$dataset()} regenerates a recipe with \code{world = NULL}, and stops with an
-error that names the dataset when the md5 does not match. A non-\code{NULL}
-\code{world} is the one exception. The recipe is then generated with \code{world}
-and validated, but its md5 is not checked, and a message says so.
+The md5 of a world comes from \code{\link[tools:md5sum]{tools::md5sum()}} of the text that
+\code{\link[yaml:as.yaml]{yaml::as.yaml()}} gives for the world, written with LF line ends. The
+names are sorted in C-locale order. Each value is text: a date or a
+datetime in ISO 8601, any other value by \code{\link[=as.character]{as.character()}}. The order of
+the values within a name counts. Every element of the world counts, also
+an element that names no column of the table.
+
+\verb{$dataset(name, world)} regenerates a recipe with \code{world}. When the md5 of
+\code{world} equals \code{world_md5}, it checks the data against the recipe. It
+stops with an error that names the dataset when the row count differs
+from \code{rows}, or the md5 differs from \code{md5}. For any other \code{world}, the
+recipe is validated, its md5 is not checked, and a message says so. Two
+\code{NULL} worlds are equal. A recipe without \code{rows} has no row check.
 }
 \examples{
 st <- SyntheticTable$new(
@@ -114,8 +132,9 @@ st$random(n = 5, seed = 1)
       \item{\code{keys}}{A character vector of key column names, or \code{NULL}.}
       \item{\code{validator_field_contents}}{A function of a data.table that
 returns \code{TRUE} for valid contents.}
-      \item{\code{invariants}}{A named list of \verb{function(d)}. Each returns \code{TRUE},
-or a message that says why \code{d} fails.}
+      \item{\code{invariants}}{A named list of \verb{function(d)} or
+\verb{function(d, world)}. Each returns \code{TRUE}, or a message that says
+why \code{d} fails.}
       \item{\code{profile}}{A \code{csdb_profile}, or \code{NULL}.}
       \item{\code{generator}}{A \verb{function(profile, n, seed, world)} that returns a
 data.table, or \code{NULL} for \code{\link[=simulate_from_profile]{simulate_from_profile()}}.}
@@ -132,13 +151,15 @@ data.table, or \code{NULL} for \code{\link[=simulate_from_profile]{simulate_from
   Check a data.table against the contract.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
-    \preformatted{SyntheticTable$validate(d)}
+    \preformatted{SyntheticTable$validate(d, world = NULL)}
     \if{html}{\out{</div>}}
   }
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{d}}{A data.table.}
+      \item{\code{world}}{\code{NULL}, or the list that each \verb{function(d, world)}
+invariant receives.}
     }
     \if{html}{\out{</div>}}
   }
@@ -161,7 +182,7 @@ fails, and the error names it.
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
-      \item{\code{n}}{The number of rows.}
+      \item{\code{n}}{The number of rows, or \code{NULL} for the generator's own size.}
       \item{\code{seed}}{The seed. \code{NULL} draws a seed and reports it in a
 message, so you can replay a failure.}
       \item{\code{world}}{\code{NULL}, or a list that the generator receives.}
@@ -187,8 +208,9 @@ message, so you can replay a failure.}
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{name}}{The name of the dataset.}
-      \item{\code{world}}{\code{NULL}, or a list that the generator receives. A
-non-\code{NULL} \code{world} turns off the md5 check.}
+      \item{\code{world}}{\code{NULL}, or a list that the generator receives. The md5
+check runs only when the md5 of \code{world} equals the \code{world_md5} of
+the recipe.}
     }
     \if{html}{\out{</div>}}
   }
@@ -218,21 +240,30 @@ non-\code{NULL} \code{world} turns off the md5 check.}
 \if{html}{\out{<a id="method-SyntheticTable-add_dataset"></a>}}
 \if{latex}{\out{\hypertarget{method-SyntheticTable-add_dataset}{}}}
 \subsection{\code{SyntheticTable$add_dataset()}}{
-  Add a recipe and its md5 to \code{datasets.yaml}.
+  Add a recipe, its row count and its md5 to \code{datasets.yaml}.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
-    \preformatted{SyntheticTable$add_dataset(name, n, seed, description, overrides = list())}
+    \preformatted{SyntheticTable$add_dataset(
+  name,
+  n,
+  seed,
+  description,
+  overrides = list(),
+  world = NULL
+)}
     \if{html}{\out{</div>}}
   }
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{name}}{The name of the dataset, lower snake case and new.}
-      \item{\code{n}}{The number of rows.}
+      \item{\code{n}}{The number of rows, or \code{NULL} for the generator's own size.}
       \item{\code{seed}}{The seed.}
       \item{\code{description}}{One string that says what the dataset is for.}
       \item{\code{overrides}}{A named list that maps a column to one fixed value.
 The value replaces the column after generation.}
+      \item{\code{world}}{\code{NULL}, or a list that the generator receives. The
+recipe stores its md5 as \code{world_md5}.}
     }
     \if{html}{\out{</div>}}
   }
@@ -245,14 +276,23 @@ The value replaces the column after generation.}
 \if{html}{\out{<a id="method-SyntheticTable-check_hashes"></a>}}
 \if{latex}{\out{\hypertarget{method-SyntheticTable-check_hashes}{}}}
 \subsection{\code{SyntheticTable$check_hashes()}}{
-  Regenerate every recipe with \code{world = NULL} and compare its md5.
+  Regenerate each recipe that \code{world} made, and compare its row count
+and its md5.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
-    \preformatted{SyntheticTable$check_hashes()}
+    \preformatted{SyntheticTable$check_hashes(world = NULL)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{world}}{\code{NULL}, or the world of the recipes to check.}
+    }
     \if{html}{\out{</div>}}
   }
   \subsection{Returns}{
-    A data.table with \code{name} and \code{pass}.
+    A data.table with \code{name} and \code{pass}. \code{pass} is \code{NA} for a
+recipe that another world made.
   }
 }
 

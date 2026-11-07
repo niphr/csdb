@@ -7,11 +7,14 @@
 #'
 #' @param profile A `csdb_profile`, from [profile_query()], [read_profile()]
 #'   or [profile_schema()].
-#' @param n The number of rows, a whole number of at least 1.
+#' @param n The number of rows, a whole number of at least 1. `NULL` gives
+#'   1000 rows, the default.
 #' @param seed The seed for [set.seed()]. The function restores the random
 #'   state of the caller on exit.
 #' @param world `NULL`, or a named list that maps a column to its allowed
-#'   values. The function converts the values to the column's type.
+#'   values. The function converts the values to the column's type. It
+#'   ignores, without a message, each element that names no column of
+#'   `profile$field_types`, so one world can serve several tables.
 #'
 #' @details
 #' The R type of each column follows its field type: `TEXT` character,
@@ -62,6 +65,30 @@
 #'    of the second column that is furthest below its drawn row count. This
 #'    keeps the drawn frequencies of the second column close.
 #'
+#' Before it draws, the function computes the key space. That is the
+#' product, over the key columns, of the number of values each column can
+#' take. When `n` is larger, it stops with an error that names the keys, the
+#' key space and `n`. A key column can take:
+#'
+#' - a `world` column: its allowed values.
+#' - `levels` or `days`: the values with a count above 0. A `DATETIME` from
+#'   `days` can take every second of those days.
+#' - `weeks`, `months` or `quarters`: every day of the cells with a count
+#'   above 0. A `DATETIME` can take every second of those days.
+#' - `breaks`: an `INTEGER` takes every whole number of the bins with a
+#'   count above 0, from 0 up when `nonnegative` is `TRUE`. A `DOUBLE` has
+#'   no limit.
+#' - `n_distinct` of a `TEXT` column: `n_distinct` values.
+#' - a group-size column: no limit, because each group gets a fresh
+#'   identifier.
+#' - schema values: no limit for a `TEXT`, `INTEGER` or `DOUBLE` key
+#'   column, and 2 for `BOOLEAN`. A `DATE` takes the 1827 days from
+#'   2020-01-01 to 2024-12-31, and a `DATETIME` every second of those days.
+#'
+#' A crosstab replaces its columns, so a key column of a crosstab can take
+#' the values that it has in the cells left after `world`. The key space
+#' does not count crosstab pairs or dependencies, so it is an upper bound.
+#'
 #' The function redraws each row whose keys repeat an earlier row. After 20
 #' redraws it stops with an error that names the keys and `n`. A redrawn row
 #' keeps the values of its group-size columns.
@@ -98,8 +125,12 @@ simulate_from_profile <- function(
   if (!inherits(profile, "csdb_profile")) {
     stop("profile must be a csdb_profile.", call. = FALSE)
   }
+  if (is.null(n)) {
+    n <- 1000L
+  }
   n <- profile_check_count(n, "n", 1)
   world <- simulate_check_world(world, profile$field_types)
+  simulate_check_key_space(profile, n, world)
   return(simulate_with_seed(seed, function() {
     return(simulate_table(profile, n, world))
   }))
@@ -128,6 +159,8 @@ simulate_restore_seed <- function(had_seed, old_seed, genv) {
 }
 
 # The allowed values of each world column, converted to the column's type.
+# An element that names no column of field_types is ignored, so one world
+# serves every table.
 simulate_check_world <- function(world, field_types) {
   if (is.null(world)) {
     return(list())
@@ -135,19 +168,10 @@ simulate_check_world <- function(world, field_types) {
   if (!is.list(world) || is.null(names(world)) || any(!nzchar(names(world)))) {
     stop("world must be NULL or a named list.", call. = FALSE)
   }
-  unknown <- setdiff(names(world), names(field_types))
-  if (length(unknown) > 0) {
-    stop(
-      "world names unknown column(s): ",
-      paste0(unknown, collapse = ", "),
-      call. = FALSE
-    )
-  }
-  out <- lapply(names(world), function(x) {
+  columns <- intersect(names(world), names(field_types))
+  return(profile_named(columns, function(x) {
     return(simulate_check_allowed(world[[x]], field_types[[x]], x))
-  })
-  names(out) <- names(world)
-  return(out)
+  }))
 }
 
 simulate_check_allowed <- function(allowed, type, column) {
@@ -464,4 +488,172 @@ simulate_redraw <- function(d, dup, profile, world) {
   columns <- names(d)
   d[dup, (columns) := as.list(new)]
   return(simulate_dependencies(d, profile))
+}
+
+# key space ----
+
+# Stops before any draw when `n` exceeds the number of distinct key rows that
+# the profile and the world can give.
+simulate_check_key_space <- function(profile, n, world) {
+  if (length(profile$keys) == 0) {
+    return(invisible(NULL))
+  }
+  sizes <- simulate_key_sizes(profile, world)
+  space <- prod(sizes)
+  if (n > space) {
+    stop(
+      "simulate_from_profile() cannot draw ",
+      n,
+      " rows unique on the keys ",
+      paste0(profile$keys, collapse = ", "),
+      ": the key space holds ",
+      format(space, scientific = FALSE),
+      " combinations (",
+      paste0(
+        names(sizes),
+        " ",
+        format(sizes, scientific = FALSE, trim = TRUE),
+        collapse = ", "
+      ),
+      "), and n is ",
+      n,
+      ".",
+      call. = FALSE
+    )
+  }
+  return(invisible(NULL))
+}
+
+# The number of values that each key column can take, in the order in which
+# simulate_rows() sets them: column, crosstab, group size.
+simulate_key_sizes <- function(profile, world) {
+  keys <- profile$keys
+  sizes <- vapply(
+    keys,
+    function(x) simulate_column_space(profile, x, world),
+    numeric(1)
+  )
+  names(sizes) <- keys
+  for (crosstab in profile$crosstabs) {
+    sizes <- simulate_crosstab_space(sizes, crosstab, world)
+  }
+  for (group in profile$group_sizes) {
+    if (group$column %in% keys) {
+      sizes[[group$column]] <- simulate_group_space(world[[group$column]])
+    }
+  }
+  return(sizes)
+}
+
+simulate_column_space <- function(profile, column, world) {
+  if (!is.null(world[[column]])) {
+    return(as.numeric(length(world[[column]])))
+  }
+  type <- profile$field_types[[column]]
+  space <- simulate_summary_space(profile$columns[[column]], type)
+  if (is.na(space)) {
+    space <- simulate_schema_key_space(type)
+  }
+  return(space)
+}
+
+# The number of values that simulate_summary() can draw, or NA when the
+# summary has no published cell.
+simulate_summary_space <- function(entry, type) {
+  if (!is.null(entry$breaks)) {
+    return(simulate_bins_space(entry, type))
+  }
+  unit <- simulate_period_unit(entry)
+  if (!is.na(unit)) {
+    return(simulate_periods_space(entry, unit, type))
+  }
+  if (!is.null(entry$n_distinct)) {
+    ok <- type == "TEXT" && entry$n_distinct >= 1
+    return(if (ok) as.numeric(entry$n_distinct) else NA_real_)
+  }
+  return(simulate_frequency_space(entry, type))
+}
+
+# The values of `levels` or `days` with a count above 0. A DATETIME from
+# `days` takes every second of those days.
+simulate_frequency_space <- function(entry, type) {
+  table <- simulate_frequency(entry)
+  if (is.null(table)) {
+    return(NA_real_)
+  }
+  space <- as.numeric(sum(table$n > 0))
+  if (!is.null(entry$days) && type == "DATETIME") {
+    space <- space * 86400
+  }
+  return(space)
+}
+
+simulate_bins_space <- function(entry, type) {
+  w <- simulate_weights(entry$n)
+  if (sum(w) == 0) {
+    return(NA_real_)
+  }
+  if (type != "INTEGER") {
+    return(Inf)
+  }
+  i <- which(w > 0)
+  lo <- entry$breaks[i]
+  if (isTRUE(entry$nonnegative)) {
+    lo <- pmax(lo, 0)
+  }
+  # simulate_in_bins() draws ceiling(lo) to ceiling(hi) - 1, and at least one
+  # value from a bin.
+  return(sum(pmax(ceiling(entry$breaks[i + 1]) - ceiling(lo), 1)))
+}
+
+simulate_periods_space <- function(entry, unit, type) {
+  w <- simulate_weights(entry$n)
+  if (sum(w) == 0) {
+    return(NA_real_)
+  }
+  cells <- simulate_period_cells(entry, unit)
+  days <- sum((cells$hi - cells$lo)[w > 0])
+  if (type == "DATETIME") {
+    return(days * 86400)
+  }
+  return(days)
+}
+
+# The schema values of a key column: row numbers for TEXT and INTEGER.
+simulate_schema_key_space <- function(type) {
+  days <- as.numeric(diff(simulate_schema_days)) + 1
+  return(switch(
+    type,
+    TEXT = Inf,
+    INTEGER = Inf,
+    DOUBLE = Inf,
+    BOOLEAN = 2,
+    DATE = days,
+    DATETIME = days * 86400
+  ))
+}
+
+# A crosstab replaces both of its columns with the values of its cells that
+# world allows. With no such cell it has no effect.
+simulate_crosstab_space <- function(sizes, crosstab, world) {
+  keep <- simulate_weights(crosstab$n) > 0
+  for (x in intersect(crosstab$columns, names(world))) {
+    keep <- keep &
+      simulate_key(crosstab$levels[[x]]) %in% simulate_key(world[[x]])
+  }
+  if (!any(keep)) {
+    return(sizes)
+  }
+  for (x in intersect(crosstab$columns, names(sizes))) {
+    sizes[[x]] <- as.numeric(length(unique(crosstab$levels[[x]][keep])))
+  }
+  return(sizes)
+}
+
+# Fresh identifiers have no limit. World identifiers are its allowed values.
+simulate_group_space <- function(allowed) {
+  if (is.null(allowed)) {
+    return(Inf)
+  }
+  return(as.numeric(length(allowed)))
 }

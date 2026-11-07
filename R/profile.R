@@ -64,6 +64,9 @@ profile_field_type_names <- c(
 #' - `full` `INTEGER`, `DOUBLE` or `DATETIME`, at most `max_levels` distinct
 #'   values: `levels` and `n` when every level holds at least `k` rows.
 #'   Otherwise the column takes the summary that it has above `max_levels`.
+#'   An `INTEGER` or `DOUBLE` column with one distinct value always
+#'   publishes `levels`. When that value holds fewer than `k` rows, the
+#'   function removes its cell, so `levels` and `n` are empty.
 #' - `full` `TEXT`, above `max_levels`: `n_distinct`, rounded down to a
 #'   multiple of `k`.
 #' - `full` `DATE`: counts per day, as `days` and `n`.
@@ -74,7 +77,8 @@ profile_field_type_names <- c(
 #'   The Monday of each week is its key. A `DATETIME` falls in the week of
 #'   its UTC day.
 #' - `INTEGER` and `DOUBLE`, `full` above `max_levels` or `coarsen`: `breaks`
-#'   and `n`, for the bins `[breaks[i], breaks[i + 1])`.
+#'   and `n`, for the bins `[breaks[i], breaks[i + 1])`. The breaks are
+#'   always double.
 #' - `coarsen` `TEXT` or `BOOLEAN`: an error that names the column.
 #'
 #' The breaks come from `pretty(c(min, max), n = 20)`. An end break that
@@ -119,6 +123,30 @@ profile_field_type_names <- c(
 #' `missing_share` is `"suppressed"` when the count of missing values, or
 #' the count of values present, is from 1 to `k - 1`. `n_rows` holds no
 #' noise. A query with fewer than `k` rows is an error.
+#'
+#' The function reads the data with several queries. It runs them in one
+#' read snapshot where the driver gives one:
+#'
+#' - SQLite: one read transaction.
+#' - PostgreSQL: a transaction at `REPEATABLE READ`, `READ ONLY`.
+#' - SQL Server: a transaction at `SNAPSHOT` when the database allows it,
+#'   otherwise at `REPEATABLE READ`. `REPEATABLE READ` does not stop the
+#'   rows that other sessions insert. The function puts back the isolation
+#'   level of the session after the profile.
+#' - Other drivers, or a connection on which `DBI::dbBegin()` fails, for
+#'   example because a transaction is open: no snapshot, and a message says
+#'   so.
+#'
+#' The function sends only `SELECT` and transaction-control statements, and
+#' ends the transaction with a rollback.
+#'
+#' The function always refuses a torn profile, with or without a snapshot.
+#' The check covers each column with `levels`, `days`, `weeks`, `months`,
+#' `quarters` or `breaks`. Its counts before noise and suppression, plus its
+#' count of missing values, MUST equal `n_rows`. For a group-size column,
+#' the row counts of its values plus its missing count MUST equal `n_rows`. Otherwise the function stops with an error that
+#' names the column and both totals. A crosstab and an `n_distinct` have no
+#' total to check.
 #'
 #' A crosstab counts the rows where both columns hold a value. Each of its
 #' columns MUST have `levels` or be a `DATE`. A group-size range is a range
@@ -166,6 +194,8 @@ profile_query <- function(
 ) {
   con <- profile_dbi(connection)
   sql <- profile_check_sql(sql)
+  snapshot <- profile_snapshot_begin(con)
+  on.exit(profile_snapshot_end(con, snapshot), add = TRUE)
   if (is.null(field_types)) {
     field_types <- sql_field_types(con, sql)
   }
@@ -178,7 +208,8 @@ profile_query <- function(
     sensitivity,
     k,
     noise,
-    max_levels
+    max_levels,
+    group_sizes
   )
   profiled <- names(sensitivity)[sensitivity != "exclude"]
   column_profiles <- profile_named(profiled, function(x) profile_column(ctx, x))
@@ -469,11 +500,15 @@ profile_context <- function(
   sensitivity,
   k,
   noise,
-  max_levels
+  max_levels,
+  group_sizes = NULL
 ) {
   k <- profile_check_count(k, "k", 1)
   profiled <- names(sensitivity)[sensitivity != "exclude"]
-  counts <- sql_missing_counts(con, sql, profiled)
+  # A group-size column MAY be exclude. Its missing count is read too, for
+  # the check of a torn profile, and is not published.
+  grouped <- intersect(as.character(unlist(group_sizes)), names(field_types))
+  counts <- sql_missing_counts(con, sql, union(profiled, grouped))
   if (counts$n_rows < k) {
     stop(
       "The query returns fewer than k rows, so no profile can be published.",
@@ -560,6 +595,31 @@ profile_missing_share <- function(n_missing, ctx) {
 
 profile_is_small <- function(n, k) {
   return(n > 0 && n < k)
+}
+
+# A torn profile holds counts read from two states of the table. The raw
+# counts of a column, before noise and suppression, plus its missing count
+# MUST equal n_rows.
+profile_check_total <- function(ctx, column, cells) {
+  missing <- ctx$missing[[column]]
+  total <- sum(as.numeric(cells)) + missing
+  if (total != ctx$n_rows) {
+    stop(
+      "Torn profile: the counts of column ",
+      column,
+      " sum to ",
+      total,
+      " (",
+      total - missing,
+      " in cells and ",
+      missing,
+      " missing), but n_rows is ",
+      ctx$n_rows,
+      ". The data changed while profile_query() read it.",
+      call. = FALSE
+    )
+  }
+  return(invisible(cells))
 }
 
 # R values of a field type ----
@@ -653,6 +713,7 @@ profile_coarsen <- function(ctx, column) {
 # The values of one column, converted to its type, with their row counts.
 profile_values <- function(ctx, column) {
   r <- sql_value_counts(ctx$con, ctx$sql, column)
+  profile_check_total(ctx, column, r$n)
   return(list(values = profile_typed_values(ctx, column, r[[1]]), n = r$n))
 }
 
@@ -666,11 +727,13 @@ profile_cells <- function(ctx, values, n, name) {
 }
 
 # Levels of an ordered type do not lose a small cell. When a level is below
-# k, the column takes the summary it has above max_levels.
+# k, the column takes the summary it has above max_levels. A numeric column
+# of one value keeps `levels`, and a count below k removes its one cell.
 profile_levels <- function(ctx, column) {
   v <- profile_values(ctx, column)
   type <- ctx$field_types[[column]]
-  if (type %in% c("TEXT", "BOOLEAN")) {
+  one_number <- type %in% c("INTEGER", "DOUBLE") && length(v$n) == 1
+  if (type %in% c("TEXT", "BOOLEAN") || one_number) {
     return(profile_cells(ctx, v$values, v$n, "levels"))
   }
   agg <- profile_aggregate(list(v$values), v$n)
@@ -804,13 +867,13 @@ profile_n_distinct <- function(ctx, n_distinct) {
 profile_bins <- function(ctx, column) {
   range <- sql_range(ctx$con, ctx$sql, column)
   if (is.na(range[["lo"]])) {
+    profile_check_total(ctx, column, 0)
     return(list(breaks = numeric(0), n = integer(0)))
   }
   breaks <- profile_breaks(range[["lo"]], range[["hi"]])
-  n <- profile_noise(
-    sql_bin_counts(ctx$con, ctx$sql, column, breaks),
-    ctx$noise
-  )
+  counts <- sql_bin_counts(ctx$con, ctx$sql, column, breaks)
+  profile_check_total(ctx, column, counts)
+  n <- profile_noise(counts, ctx$noise)
   return(profile_merge_bins(breaks, n, ctx$k))
 }
 
@@ -827,8 +890,10 @@ profile_merge_bins <- function(breaks, n, k) {
 }
 
 # Breaks from pretty() that never equal the observed minimum or maximum.
+# pretty() returns integer breaks for some integer ranges, for example
+# c(2024, 2024), and read_profile() returns double. So the breaks are double.
 profile_breaks <- function(lo, hi) {
-  breaks <- pretty(c(lo, hi), n = 20)
+  breaks <- as.numeric(pretty(c(lo, hi), n = 20))
   breaks <- profile_drop_inner_extremes(breaks, lo, hi)
   return(profile_extend_breaks(breaks, lo, hi))
 }
@@ -891,6 +956,7 @@ profile_group_size <- function(ctx, column) {
     )
   }
   r <- sql_group_sizes(ctx$con, ctx$sql, column)
+  profile_check_total(ctx, column, as.numeric(r$size) * as.numeric(r$n))
   agg <- profile_aggregate(list(profile_as_count(r$size)), r$n)
   ranges <- profile_size_ranges(agg$keys[[1]], agg$n, ctx)
   return(c(list(column = column), ranges))

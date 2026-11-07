@@ -69,7 +69,9 @@ test_that("full BOOLEAN above max_levels publishes n_distinct", {
 })
 
 test_that("full DATE publishes counts per day", {
-  d <- data.frame(day = as.Date("2024-03-01") + c(rep(0, 6), rep(1, 5), rep(3, 5)))
+  d <- data.frame(
+    day = as.Date("2024-03-01") + c(rep(0, 6), rep(1, 5), rep(3, 5))
+  )
   p <- profile_data(d, c(day = "DATE"), columns = c(day = "full"))
   expect_identical(
     p$columns$day$days,
@@ -104,10 +106,20 @@ test_that("days and weeks merge into months, quarters and runs of quarters", {
   }
   # Each column holds 400 rows. The small cell decides the resolution.
   d <- data.frame(
-    mo = rows("2024-01-01" = 98, "2024-01-31" = 2, "2024-02-15" = 100,
-      "2024-03-15" = 100, "2024-04-15" = 100),
-    qu = rows("2024-01-01" = 97, "2024-02-15" = 3, "2024-04-01" = 100,
-      "2024-07-01" = 100, "2024-10-01" = 100),
+    mo = rows(
+      "2024-01-01" = 98,
+      "2024-01-31" = 2,
+      "2024-02-15" = 100,
+      "2024-03-15" = 100,
+      "2024-04-15" = 100
+    ),
+    qu = rows(
+      "2024-01-01" = 97,
+      "2024-02-15" = 3,
+      "2024-04-01" = 100,
+      "2024-07-01" = 100,
+      "2024-10-01" = 100
+    ),
     runs = rows("2024-01-01" = 300, "2024-07-01" = 3, "2025-01-01" = 97)
   )
   p <- profile_data(
@@ -115,16 +127,23 @@ test_that("days and weeks merge into months, quarters and runs of quarters", {
     c(mo = "DATE", qu = "DATE", runs = "DATE"),
     columns = c(mo = "full", qu = "full", runs = "coarsen")
   )
-  expect_identical(p$columns$mo$months, day(c("2024-01-01", "2024-02-01",
-    "2024-03-01", "2024-04-01")))
+  expect_identical(
+    p$columns$mo$months,
+    day(c("2024-01-01", "2024-02-01", "2024-03-01", "2024-04-01"))
+  )
   expect_identical(p$columns$mo$n, rep(100L, 4))
-  expect_identical(p$columns$qu$quarters, day(c("2024-01-01", "2024-04-01",
-    "2024-07-01", "2024-10-01")))
+  expect_identical(
+    p$columns$qu$quarters,
+    day(c("2024-01-01", "2024-04-01", "2024-07-01", "2024-10-01"))
+  )
   expect_null(p$columns$qu$quarters_to)
   expect_identical(p$columns$runs$quarters, day(c("2024-01-01", "2024-07-01")))
   # runs is coarsen, so its days go to weeks first. The week of 2025-01-01
   # starts on Monday 2024-12-30 and so merges into the quarter of that day.
-  expect_identical(p$columns$runs$quarters_to, day(c("2024-01-01", "2024-10-01")))
+  expect_identical(
+    p$columns$runs$quarters_to,
+    day(c("2024-01-01", "2024-10-01"))
+  )
   expect_identical(p$columns$runs$n, c(300L, 100L))
 })
 
@@ -291,12 +310,14 @@ test_that("group_sizes count the values of a column per range of row counts", {
   )
   expect_identical(
     p$group_sizes,
-    list(rows_per_id = list(
-      column = "id",
-      size_from = c(1L, 5L, 8L),
-      size_to = c(4L, 7L),
-      n = c(6L, 5L, 6L)
-    ))
+    list(
+      rows_per_id = list(
+        column = "id",
+        size_from = c(1L, 5L, 8L),
+        size_to = c(4L, 7L),
+        n = c(6L, 5L, 6L)
+      )
+    )
   )
 })
 
@@ -333,7 +354,11 @@ test_that("group sizes merge into ranges", {
     expect_identical(g$size_from[1], 1L, label = name)
     expect_length(g$size_to, m - 1L)
     for (i in seq_len(m - 1)) {
-      expect_identical(g$size_to[i] + 1L, g$size_from[i + 1], label = paste(name, i))
+      expect_identical(
+        g$size_to[i] + 1L,
+        g$size_from[i + 1],
+        label = paste(name, i)
+      )
     }
     expect_true(all(g$size_from[-m] <= g$size_to), label = name)
   }
@@ -504,4 +529,281 @@ test_that("profile_query() takes a DBConnection_v9 and infers field_types from a
 test_that("a query with fewer than k rows is an error", {
   d <- data.frame(a = c("x", "y", "z"))
   expect_error(profile_data(d, c(a = "TEXT")), "fewer than k rows")
+})
+
+# Item 1 of phase 7: one snapshot, and the refusal of a torn profile ----
+
+# 100 rows that give every column kind that publishes counts. `note` holds 20
+# missing values and `score` 10, so the totals include a missing count.
+torn_data <- function() {
+  i <- 0:99
+  return(data.frame(
+    sex = rep(c("f", "m"), 50),
+    age = rep(c(10L, 20L), 50),
+    note = ifelse(i < 20, NA, rep(c("a", "b"), 50)),
+    score = ifelse(i < 10, NA, i / 3),
+    on_day = as.Date("2024-01-01") + (i %% 5),
+    in_week = as.Date("2024-01-01") + (i %% 14),
+    in_month = as.Date("2024-01-01") + (i %% 60),
+    in_quarter = as.Date("2024-01-01") + i * 9,
+    id = rep(1:20, each = 5)
+  ))
+}
+
+torn_field_types <- c(
+  sex = "TEXT",
+  age = "INTEGER",
+  note = "TEXT",
+  score = "DOUBLE",
+  on_day = "DATE",
+  in_week = "DATE",
+  in_month = "DATE",
+  in_quarter = "DATE",
+  id = "INTEGER"
+)
+
+torn_columns <- c(
+  sex = "full",
+  age = "full",
+  note = "full",
+  score = "coarsen",
+  on_day = "full",
+  in_week = "coarsen",
+  in_month = "full",
+  in_quarter = "full",
+  id = "exclude"
+)
+
+# A SQLite file that holds torn_data() as the table t.
+torn_connection <- function(.local_envir = parent.frame()) {
+  path <- withr::local_tempfile(
+    fileext = ".sqlite",
+    .local_envir = .local_envir
+  )
+  con <- DBI::dbConnect(RSQLite::SQLite(), path, extended_types = TRUE)
+  withr::defer(DBI::dbDisconnect(con), envir = .local_envir)
+  DBI::dbWriteTable(con, "t", torn_data())
+  return(list(con = con, path = path))
+}
+
+# Profiles the column `x` of t. With `torn = TRUE`, 10 rows are added to t
+# through the same connection just after the first read, so every later read
+# sees 110 rows and n_rows is 100. Returns the profile, or the error message.
+torn_profile <- function(con, x, torn) {
+  real <- csdb:::sql_missing_counts
+  local_mocked_bindings(sql_missing_counts = function(con, sql, columns) {
+    out <- real(con, sql, columns)
+    if (torn) {
+      DBI::dbExecute(
+        con,
+        "INSERT INTO t SELECT * FROM t ORDER BY rowid DESC LIMIT 10"
+      )
+    }
+    return(out)
+  })
+  group_sizes <- NULL
+  if (x == "id") {
+    group_sizes <- list(rows_per_id = "id")
+  }
+  return(tryCatch(
+    profile_query(
+      con,
+      "SELECT * FROM t",
+      columns = torn_columns[x],
+      field_types = torn_field_types[x],
+      group_sizes = group_sizes
+    ),
+    error = function(e) conditionMessage(e)
+  ))
+}
+
+# A field of a profile, or NULL when `p` is an error message. So a refused
+# profile fails the assertions that read it, and does not error in them.
+torn_field <- function(p, ...) {
+  if (!inherits(p, "csdb_profile")) {
+    return(NULL)
+  }
+  return(p[[c(...)]])
+}
+
+test_that("item 1: a consistent profile passes the torn-profile check, missing counts included", {
+  db <- torn_connection()
+  summaries <- c(
+    sex = "levels",
+    age = "levels",
+    note = "levels",
+    score = "breaks",
+    on_day = "days",
+    in_week = "weeks",
+    in_month = "months",
+    in_quarter = "quarters"
+  )
+  for (x in names(summaries)) {
+    p <- torn_profile(db$con, x, torn = FALSE)
+    expect_s3_class(p, "csdb_profile")
+    expect_true(
+      summaries[[x]] %in% names(torn_field(p, "columns", x)),
+      label = x
+    )
+  }
+  p <- torn_profile(db$con, "id", torn = FALSE)
+  expect_s3_class(p, "csdb_profile")
+  expect_identical(sum(torn_field(p, "group_sizes", "rows_per_id", "n")), 20L)
+})
+
+test_that("item 1: a torn profile is refused, naming the column and both totals", {
+  db <- torn_connection()
+  # The 10 added rows are the last 10 of t, so note and score hold a value
+  # in each, and the cells gain 10 while the missing count stays.
+  expected <- c(
+    sex = "110 \\(110 in cells and 0 missing\\)",
+    age = "110 \\(110 in cells and 0 missing\\)",
+    note = "110 \\(90 in cells and 20 missing\\)",
+    score = "110 \\(100 in cells and 10 missing\\)",
+    on_day = "110 \\(110 in cells and 0 missing\\)",
+    in_week = "110 \\(110 in cells and 0 missing\\)",
+    in_month = "110 \\(110 in cells and 0 missing\\)",
+    in_quarter = "110 \\(110 in cells and 0 missing\\)",
+    id = "110 \\(110 in cells and 0 missing\\)"
+  )
+  for (x in names(expected)) {
+    res <- torn_profile(db$con, x, torn = TRUE)
+    expect_type(res, "character")
+    expect_match(
+      paste0(res, collapse = " "),
+      paste0(
+        "Torn profile: the counts of column ",
+        x,
+        " sum to ",
+        expected[[x]],
+        ", but n_rows is 100\\."
+      ),
+      label = x
+    )
+  }
+  # The refusal rolled the transaction back, and the added rows with it.
+  expect_identical(
+    DBI::dbGetQuery(db$con, "SELECT COUNT(*) AS n FROM t")$n,
+    100L
+  )
+})
+
+test_that("item 1: a profile is read in one snapshot while another connection writes", {
+  db <- torn_connection()
+  DBI::dbGetQuery(db$con, "PRAGMA journal_mode = WAL")
+  writer <- DBI::dbConnect(RSQLite::SQLite(), db$path)
+  withr::defer(DBI::dbDisconnect(writer))
+  real <- csdb:::sql_value_counts
+  wrote <- FALSE
+  local_mocked_bindings(sql_value_counts = function(con, sql, columns) {
+    if (!wrote) {
+      DBI::dbExecute(writer, "INSERT INTO t SELECT * FROM t LIMIT 10")
+      wrote <<- TRUE
+    }
+    return(real(con, sql, columns))
+  })
+  p <- tryCatch(
+    profile_query(
+      db$con,
+      "SELECT sex, age FROM t",
+      columns = c(sex = "full", age = "full")
+    ),
+    error = function(e) conditionMessage(e)
+  )
+  expect_true(wrote)
+  expect_identical(
+    DBI::dbGetQuery(writer, "SELECT COUNT(*) AS n FROM t")$n,
+    110L
+  )
+  expect_s3_class(p, "csdb_profile")
+  expect_identical(torn_field(p, "n_rows"), 100L)
+  expect_identical(sum(torn_field(p, "columns", "sex", "n")), 100L)
+  expect_identical(sum(torn_field(p, "columns", "age", "n")), 100L)
+})
+
+test_that("item 1: the snapshot sends only transaction-control statements", {
+  control <- "^SET TRANSACTION ISOLATION LEVEL [A-Z ,]+$"
+  sqlite <- csdb:::profile_snapshot_statements("SQLite")
+  expect_identical(lengths(sqlite), c(before = 0L, inside = 0L, after = 0L))
+  pg <- csdb:::profile_snapshot_statements("PostgreSQL")
+  expect_identical(
+    pg$inside,
+    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+  )
+  snap <- csdb:::profile_snapshot_statements(
+    "Microsoft SQL Server",
+    mssql_snapshot = TRUE,
+    mssql_level = "READ COMMITTED"
+  )
+  expect_identical(snap$before, "SET TRANSACTION ISOLATION LEVEL SNAPSHOT")
+  expect_identical(snap$after, "SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+  rr <- csdb:::profile_snapshot_statements(
+    "Microsoft SQL Server",
+    mssql_snapshot = FALSE,
+    mssql_level = "SERIALIZABLE"
+  )
+  expect_identical(rr$before, "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+  expect_identical(rr$after, "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+  for (s in unlist(list(sqlite, pg, snap, rr))) {
+    expect_match(s, control)
+  }
+  # A connection class with no known snapshot gets none, and a message.
+  fake <- structure(list(), class = "UnknownConnection")
+  expect_message(
+    expect_null(csdb:::profile_snapshot_begin(fake)),
+    "runs without a snapshot"
+  )
+  # SQLite profiles in a transaction and leaves none open.
+  con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+  withr::defer(DBI::dbDisconnect(con))
+  DBI::dbWriteTable(con, "t", data.frame(a = rep(c("x", "y"), 5)))
+  real <- csdb:::sql_missing_counts
+  transacting <- NA
+  local_mocked_bindings(sql_missing_counts = function(con, sql, columns) {
+    transacting <<- RSQLite::sqliteIsTransacting(con)
+    return(real(con, sql, columns))
+  })
+  profile_query(con, "SELECT * FROM t", columns = c(a = "full"))
+  expect_true(transacting)
+  expect_false(RSQLite::sqliteIsTransacting(con))
+  # A transaction that the caller opened gets no snapshot, and stays open.
+  DBI::dbBegin(con)
+  expect_message(
+    profile_query(con, "SELECT * FROM t", columns = c(a = "full")),
+    "runs without a snapshot"
+  )
+  expect_true(RSQLite::sqliteIsTransacting(con))
+  DBI::dbRollback(con)
+})
+
+# Item 2 of phase 7: one distinct value, and double breaks ----
+
+test_that("item 2: a full numeric column of one value publishes levels, and breaks are double", {
+  d <- data.frame(
+    border = rep(2024L, 10),
+    x = rep(c(1L, 9L), 5),
+    few = c(rep(7, 3), rep(NA, 7))
+  )
+  ft <- c(border = "INTEGER", x = "INTEGER", few = "DOUBLE")
+  p <- profile_data(
+    d,
+    ft,
+    columns = c(border = "full", x = "coarsen", few = "full")
+  )
+  expect_identical(p$columns$border$levels, 2024L)
+  expect_identical(p$columns$border$n, 10L)
+  expect_null(p$columns$border$breaks)
+  # 3 rows of one value are below k, so the one cell is removed.
+  expect_identical(p$columns$few$levels, numeric(0))
+  expect_identical(p$columns$few$n, integer(0))
+  expect_null(p$columns$few$breaks)
+  # The repro of phase 5: pretty(c(2024, 2024)) is integer.
+  q <- profile_data(d, ft, columns = c(border = "coarsen", x = "coarsen"))
+  expect_type(q$columns$border$breaks, "double")
+  expect_type(q$columns$x$breaks, "double")
+  for (profile in list(p, q)) {
+    path <- withr::local_tempfile(fileext = ".yaml")
+    write_profile(profile, path)
+    expect_identical(read_profile(path), profile)
+  }
 })

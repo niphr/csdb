@@ -172,9 +172,10 @@ test_that("add_dataset() then dataset() reproduces the data and its md5", {
   expect_identical(unique(d$born), as.Date("2024-05-06"))
   entry <- yaml::read_yaml(file.path(dir, "datasets.yaml"))[[1]]
   expect_identical(entry$md5, csdb:::synthetic_hash(d, st_field_types))
+  expect_identical(entry$rows, 25L)
   expect_identical(
     names(entry),
-    c("name", "kind", "n", "seed", "description", "overrides", "md5")
+    c("name", "kind", "n", "seed", "description", "overrides", "rows", "md5")
   )
   raw <- readBin(file.path(dir, "datasets.yaml"), "raw", 1e5)
   expect_false(any(raw == as.raw(13)))
@@ -253,7 +254,7 @@ test_that("add_dataset() refuses an existing name", {
   )
   expect_error(
     st$add_dataset("default", n = 5, seed = 1, description = "x"),
-    "n = 1000, seed = 1"
+    "n = 1000 or n = NULL, seed = 1"
   )
 })
 
@@ -274,7 +275,7 @@ test_that("world validates without the hash check and says so", {
   )
   expect_message(
     d <- st$dataset("small", world = list(sex = "f")),
-    "world is not NULL, so the hash is not checked"
+    "world is not the world that made the recipe, so the hash is not checked"
   )
   expect_identical(unique(d$sex), "f")
   expect_error(
@@ -321,4 +322,154 @@ test_that("synthetic_table_from_dir() reads handmade CSV columns as their field 
   expect_identical(res$value$id, 1:2)
   expect_identical(res$value$sex, c("female", NA))
   expect_identical(st$list_datasets()$kind, "handmade")
+})
+
+# Items 4, 5 and 6 of phase 7 ----
+
+# A generator that changes the data, so a recipe no longer matches its md5.
+st_changed <- function(profile, n, seed, world) {
+  d <- simulate_from_profile(profile, n, seed, world)
+  d[, weight := weight + 1]
+  return(d)
+}
+
+test_that("item 4: invariants of both forms get the world on every path that validates", {
+  dir <- withr::local_tempdir()
+  dir.create(file.path(dir, "handmade"))
+  data.table::fwrite(st_valid(), file.path(dir, "handmade", "three_people.csv"))
+  w <- list(tag = "w")
+  calls <- 0L
+  st <- st_new(
+    dir,
+    invariants = list(
+      one_argument = function(d) {
+        calls <<- calls + 1L
+        return(TRUE)
+      },
+      has_world = function(d, world) {
+        if (identical(world$tag, "w")) TRUE else "the invariant got no world"
+      }
+    )
+  )
+  expect_identical(st_error(st$validate(st_valid(), world = w)), "no error")
+  expect_identical(st_error(st$random(n = 5, seed = 1, world = w)), "no error")
+  expect_identical(
+    st_error(st$add_dataset("small", 5, 1, "x", world = w)),
+    "no error"
+  )
+  expect_identical(st_error(st$dataset("small", world = w)), "no error")
+  expect_identical(st_error(st$dataset("three_people", world = w)), "no error")
+  # Each of the five calls ran the one-argument invariant once.
+  expect_identical(calls, 5L)
+  # Without the world, the invariant that needs it refuses.
+  expect_match(
+    st_error(st$validate(st_valid())),
+    "invariant 'has_world' check. the invariant got no world"
+  )
+  # A one-argument invariant that fails still refuses by name.
+  old <- st_new(invariants = list(no = function(d) "the old form ran"))
+  expect_match(
+    st_error(old$random(n = 5, seed = 1, world = w)),
+    "invariant 'no' check. the old form ran"
+  )
+})
+
+test_that("item 5: a recipe made with a world is hash-checked only with that world", {
+  dir <- withr::local_tempdir()
+  w <- list(sex = "f")
+  st <- st_new(dir)
+  females <- st$add_dataset("females", 20, 2, "x", world = w)
+  st$add_dataset("plain", 20, 2, "y")
+  entries <- yaml::read_yaml(file.path(dir, "datasets.yaml"))
+  expect_identical(entries[[1]]$world_md5, csdb:::synthetic_world_md5(w))
+  expect_false("world_md5" %in% names(entries[[2]]))
+  # The same world: the md5 is checked, with no message.
+  res <- st_try(st$dataset("females", world = w))
+  expect_identical(res$value, females)
+  expect_silent(st_try(st$dataset("females", world = w)))
+  st2 <- st_new(dir, generator = st_changed)
+  expect_match(
+    st_error(st2$dataset("females", world = w)),
+    "dataset 'females'.*does not match the md5"
+  )
+  # Another world: validated, not hash-checked, and a message says so.
+  expect_message(
+    res <- st_try(st2$dataset("females", world = list(sex = "m"))),
+    "not the world that made the recipe, so the hash is not checked"
+  )
+  expect_identical(unique(res$value$sex), "m")
+  expect_message(
+    st_try(st2$dataset("females")),
+    "not the world that made the recipe, so the hash is not checked"
+  )
+  # world = NULL on a recipe made with world = NULL keeps the md5 check.
+  expect_match(
+    st_error(st2$dataset("plain")),
+    "dataset 'plain'.*does not match the md5"
+  )
+  expect_identical(
+    st$check_hashes(world = w),
+    data.table::data.table(name = c("females", "plain"), pass = c(TRUE, NA))
+  )
+  expect_identical(
+    st2$check_hashes(),
+    data.table::data.table(name = c("females", "plain"), pass = c(NA, FALSE))
+  )
+})
+
+test_that("item 5: the world md5 sorts names, writes values as text and uses LF", {
+  md5 <- csdb:::synthetic_world_md5
+  expect_null(md5(NULL))
+  expect_identical(md5(list(a = 1L, b = "x")), md5(list(b = "x", a = 1)))
+  expect_false(identical(md5(list(a = c(1, 2))), md5(list(a = c(2, 1)))))
+  expect_false(identical(md5(list(a = 1)), md5(list(a = 1, b = 2))))
+  path <- withr::local_tempfile(fileext = ".yaml")
+  text <- "a: '1'\nday: '2024-01-02'\n"
+  writeBin(charToRaw(text), path)
+  expect_identical(
+    md5(list(day = as.Date("2024-01-02"), a = 1)),
+    unname(tools::md5sum(path))
+  )
+})
+
+test_that("item 6: n = NULL means the generator's own size, and rows is recorded and checked", {
+  dir <- withr::local_tempdir()
+  got <- "unset"
+  grid <- function(profile, n, seed, world) {
+    got <<- n
+    return(simulate_from_profile(profile, 12L, seed, world))
+  }
+  st <- st_new(dir, generator = grid)
+  d <- st$add_dataset("grid", n = NULL, seed = 1, description = "A grid.")
+  expect_null(got)
+  expect_identical(nrow(d), 12L)
+  entry <- yaml::read_yaml(file.path(dir, "datasets.yaml"))[[1]]
+  expect_true("n" %in% names(entry))
+  expect_null(entry$n)
+  expect_identical(entry$rows, 12L)
+  expect_identical(st$list_datasets()$n, NA_integer_)
+  # $dataset() regenerates the recipe with its stored n = NULL.
+  got <- "unset"
+  expect_identical(st$dataset("grid"), d)
+  expect_null(got)
+  got <- "unset"
+  expect_identical(nrow(st$random(n = NULL, seed = 1)), 12L)
+  expect_null(got)
+  # The default generator gives 1000 rows for n = NULL.
+  expect_identical(nrow(st_new()$random(n = NULL, seed = 1)), 1000L)
+  # 'default' takes n = NULL.
+  expect_identical(
+    st_error(st$add_dataset("default", n = NULL, seed = 1, description = "x")),
+    "no error"
+  )
+  # A generator that now gives 10 rows fails the row check by name.
+  fewer <- function(profile, n, seed, world) {
+    return(simulate_from_profile(profile, 10L, seed, world))
+  }
+  st_fewer <- st_new(dir, generator = fewer)
+  expect_match(
+    st_error(st_fewer$dataset("grid")),
+    "dataset 'grid'.*regenerated data has 10 rows, and datasets.yaml records 12\\."
+  )
+  expect_identical(st_fewer$check_hashes()$pass, c(FALSE, FALSE))
 })

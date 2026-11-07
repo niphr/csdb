@@ -131,8 +131,9 @@ synthetic_check_seed <- function(seed) {
 # validate ----
 
 # Stops at the first check that `d` fails, and names that check. `label` names
-# where `d` came from, or is NULL.
-synthetic_validate <- function(spec, d, label = NULL) {
+# where `d` came from, or is NULL. `world` goes to each invariant that takes
+# it.
+synthetic_validate <- function(spec, d, label = NULL, world = NULL) {
   fail <- function(check, detail) {
     stop(
       "SyntheticTable ",
@@ -158,7 +159,7 @@ synthetic_validate <- function(spec, d, label = NULL) {
     }
   }
   for (x in names(spec$invariants)) {
-    detail <- synthetic_check_invariant(spec$invariants[[x]], d)
+    detail <- synthetic_check_invariant(spec$invariants[[x]], d, world)
     if (!is.null(detail)) {
       fail(paste0("invariant '", x, "'"), detail)
     }
@@ -235,8 +236,14 @@ synthetic_check_contents <- function(spec, d) {
   return(paste0("validator_field_contents(d) failed on ", var, "."))
 }
 
-synthetic_check_invariant <- function(f, d) {
-  result <- f(d)
+# An invariant with two or more formal arguments is called as f(d, world),
+# and any other as f(d).
+synthetic_check_invariant <- function(f, d, world) {
+  if (synthetic_takes_world(f)) {
+    result <- f(d, world)
+  } else {
+    result <- f(d)
+  }
   if (isTRUE(result)) {
     return(NULL)
   }
@@ -246,7 +253,27 @@ synthetic_check_invariant <- function(f, d) {
   return("The invariant did not return TRUE.")
 }
 
+synthetic_takes_world <- function(f) {
+  return(!is.primitive(f) && length(formals(f)) >= 2)
+}
+
 # generate ----
+
+# NULL, which means the generator's own size, or a whole number of at least 1.
+synthetic_check_n <- function(n) {
+  if (is.null(n)) {
+    return(NULL)
+  }
+  return(profile_check_count(n, "n", 1))
+}
+
+# n as R code for a message.
+synthetic_deparse_n <- function(n) {
+  if (is.null(n)) {
+    return("NULL")
+  }
+  return(as.character(n))
+}
 
 synthetic_generate <- function(spec, n, seed, world, overrides = list()) {
   d <- spec$generator(spec$profile, n, seed, world)
@@ -254,7 +281,7 @@ synthetic_generate <- function(spec, n, seed, world, overrides = list()) {
 }
 
 synthetic_random <- function(spec, n, seed, world) {
-  n <- profile_check_count(n, "n", 1)
+  n <- synthetic_check_n(n)
   if (is.null(seed)) {
     seed <- sample.int(.Machine$integer.max, 1)
     message(
@@ -263,14 +290,14 @@ synthetic_random <- function(spec, n, seed, world) {
       ": random() drew seed ",
       seed,
       ". Replay it with $random(n = ",
-      n,
+      synthetic_deparse_n(n),
       ", seed = ",
       seed,
       ")."
     )
   }
   d <- synthetic_generate(spec, n, synthetic_check_seed(seed), world)
-  return(synthetic_validate(spec, d, "random()"))
+  return(synthetic_validate(spec, d, "random()", world))
 }
 
 # The overrides, each converted to its column's type. Each is one value.
@@ -329,6 +356,34 @@ synthetic_hash <- function(d, field_types) {
   return(unname(tools::md5sum(path)))
 }
 
+# The md5 of a world, or NULL for world = NULL. The world is written by
+# yaml::as.yaml() with its names sorted in C-locale order and each value as
+# text, with LF line ends. The order of the values within a name counts.
+synthetic_world_md5 <- function(world) {
+  if (is.null(world)) {
+    return(NULL)
+  }
+  nms <- names(world)
+  if (!is.list(world) || is.null(nms) || any(!nzchar(nms))) {
+    stop("world must be NULL or a named list.", call. = FALSE)
+  }
+  columns <- sort(nms, method = "radix")
+  text <- profile_named(columns, function(x) synthetic_value_text(world[[x]]))
+  path <- tempfile(fileext = ".yaml")
+  on.exit(unlink(path), add = TRUE)
+  con <- file(path, open = "wb")
+  writeLines(enc2utf8(yaml::as.yaml(text)), con, sep = "", useBytes = TRUE)
+  close(con)
+  return(unname(tools::md5sum(path)))
+}
+
+# Values as text: a date or a datetime as ISO 8601, anything else by
+# as.character().
+synthetic_value_text <- function(x) {
+  x <- synthetic_encode_value(x)
+  return(as.character(unlist(x, use.names = FALSE)))
+}
+
 # catalogue ----
 
 synthetic_yaml_path <- function(spec) {
@@ -381,7 +436,7 @@ synthetic_list <- function(spec) {
     name = c(names(recipes), handmade),
     kind = c(rep("recipe", length(recipes)), rep("handmade", length(handmade))),
     n = c(
-      vapply(recipes, function(e) as.integer(e$n), 1L),
+      vapply(recipes, function(e) synthetic_entry_integer(e$n), 1L),
       rep(NA_integer_, length(handmade))
     ),
     seed = c(
@@ -407,6 +462,14 @@ synthetic_list <- function(spec) {
   return(out)
 }
 
+# An integer field of a recipe, or NA when it is NULL.
+synthetic_entry_integer <- function(x) {
+  if (is.null(x)) {
+    return(NA_integer_)
+  }
+  return(as.integer(x))
+}
+
 # A value for YAML: a date or a datetime as ISO 8601 text.
 synthetic_encode_value <- function(x) {
   if (inherits(x, "POSIXct")) {
@@ -418,15 +481,26 @@ synthetic_encode_value <- function(x) {
   return(x)
 }
 
-synthetic_add <- function(spec, name, n, seed, description, overrides) {
+synthetic_add <- function(
+  spec,
+  name,
+  n,
+  seed,
+  description,
+  overrides,
+  world = NULL
+) {
   if (is.null(spec$dir)) {
     stop("add_dataset() needs a SyntheticTable with a dir.", call. = FALSE)
   }
   synthetic_check_name(name)
-  n <- profile_check_count(n, "n", 1)
+  n <- synthetic_check_n(n)
   seed <- synthetic_check_seed(seed)
-  if (name == "default" && (n != 1000L || seed != 1L)) {
-    stop("The dataset 'default' is n = 1000, seed = 1.", call. = FALSE)
+  if (name == "default" && ((!is.null(n) && n != 1000L) || seed != 1L)) {
+    stop(
+      "The dataset 'default' is n = 1000 or n = NULL, seed = 1.",
+      call. = FALSE
+    )
   }
   if (name %in% synthetic_list(spec)$name) {
     stop(
@@ -439,28 +513,38 @@ synthetic_add <- function(spec, name, n, seed, description, overrides) {
     )
   }
   overrides <- synthetic_check_overrides(spec, overrides)
-  d <- synthetic_generate(spec, n, seed, NULL, overrides)
-  synthetic_validate(spec, d, paste0("dataset '", name, "'"))
+  world_md5 <- synthetic_world_md5(world)
+  d <- synthetic_generate(spec, n, seed, world, overrides)
+  synthetic_validate(spec, d, paste0("dataset '", name, "'"), world)
   entry <- list(
     name = name,
     kind = "recipe",
     n = n,
     seed = seed,
     description = as.character(description),
-    overrides = lapply(overrides, synthetic_encode_value),
-    md5 = synthetic_hash(d, spec$field_types)
+    overrides = lapply(overrides, synthetic_encode_value)
   )
+  entry$world_md5 <- world_md5
+  entry$rows <- nrow(d)
+  entry$md5 <- synthetic_hash(d, spec$field_types)
   recipes <- synthetic_read_recipes(spec)
   recipes[[name]] <- entry
   synthetic_write_recipes(spec, recipes)
   return(invisible(d))
 }
 
-# The recipe regenerated with world = NULL, and whether its hash matches.
-synthetic_recipe_hash_ok <- function(spec, entry) {
-  d <- synthetic_generate(spec, entry$n, entry$seed, NULL, entry$overrides)
-  ok <- identical(synthetic_hash(d, spec$field_types), entry$md5)
-  return(list(d = d, ok = ok))
+# The recipe regenerated with `world`, whether its row count matches `rows`,
+# and whether its hash matches. A recipe without `rows` has no row check.
+synthetic_recipe_hash_ok <- function(spec, entry, world = NULL) {
+  d <- synthetic_generate(spec, entry$n, entry$seed, world, entry$overrides)
+  rows_ok <- is.null(entry$rows) || identical(nrow(d), as.integer(entry$rows))
+  md5_ok <- identical(synthetic_hash(d, spec$field_types), entry$md5)
+  return(list(d = d, rows_ok = rows_ok, ok = rows_ok && md5_ok))
+}
+
+# TRUE when `world` is the world that made the recipe.
+synthetic_same_world <- function(entry, world) {
+  return(identical(synthetic_world_md5(world), entry$world_md5))
 }
 
 synthetic_dataset <- function(spec, name, world) {
@@ -468,7 +552,7 @@ synthetic_dataset <- function(spec, name, world) {
   handmade <- synthetic_handmade_paths(spec)
   if (name %in% names(handmade)) {
     d <- synthetic_read_csv(handmade[[name]], spec$field_types)
-    return(synthetic_validate(spec, d, label))
+    return(synthetic_validate(spec, d, label, world))
   }
   entry <- synthetic_read_recipes(spec)[[name]]
   if (is.null(entry)) {
@@ -481,22 +565,40 @@ synthetic_dataset <- function(spec, name, world) {
       call. = FALSE
     )
   }
-  if (!is.null(world)) {
+  if (!synthetic_same_world(entry, world)) {
     message(
       "SyntheticTable ",
       spec$name,
       ", ",
       label,
-      ": world is not NULL, so the hash is not checked."
+      ": world is not the world that made the recipe, so the hash is not ",
+      "checked."
     )
     d <- synthetic_generate(spec, entry$n, entry$seed, world, entry$overrides)
-    return(synthetic_validate(spec, d, label))
+    return(synthetic_validate(spec, d, label, world))
   }
-  result <- synthetic_recipe_hash_ok(spec, entry)
+  result <- synthetic_recipe_hash_ok(spec, entry, world)
+  if (!result$rows_ok) {
+    stop(synthetic_rows_error(spec, name, result$d, entry), call. = FALSE)
+  }
   if (!result$ok) {
     stop(synthetic_hash_error(spec, name), call. = FALSE)
   }
-  return(synthetic_validate(spec, result$d, label))
+  return(synthetic_validate(spec, result$d, label, world))
+}
+
+synthetic_rows_error <- function(spec, name, d, entry) {
+  return(paste0(
+    "SyntheticTable ",
+    spec$name,
+    ", dataset '",
+    name,
+    "': the regenerated data has ",
+    nrow(d),
+    " rows, and datasets.yaml records ",
+    entry$rows,
+    ". The generator, the profile or the overrides changed."
+  ))
 }
 
 synthetic_hash_error <- function(spec, name) {
@@ -510,11 +612,17 @@ synthetic_hash_error <- function(spec, name) {
   ))
 }
 
-synthetic_check_hashes <- function(spec) {
+# A recipe made with another world than `world` gets NA.
+synthetic_check_hashes <- function(spec, world = NULL) {
   recipes <- synthetic_read_recipes(spec)
   pass <- vapply(
     recipes,
-    function(e) synthetic_recipe_hash_ok(spec, e)$ok,
+    function(e) {
+      if (!synthetic_same_world(e, world)) {
+        return(NA)
+      }
+      return(synthetic_recipe_hash_ok(spec, e, world)$ok)
+    },
     logical(1)
   )
   return(data.table::data.table(

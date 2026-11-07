@@ -195,3 +195,161 @@ sql_group_sizes <- function(con, sql, column) {
   )
   return(r)
 }
+
+# snapshot ----
+
+# The SQL Server isolation levels, by the number that
+# sys.dm_exec_sessions.transaction_isolation_level holds.
+profile_mssql_levels <- c(
+  "READ UNCOMMITTED",
+  "READ COMMITTED",
+  "REPEATABLE READ",
+  "SERIALIZABLE",
+  "SNAPSHOT"
+)
+
+# The database system of `con` for the snapshot, or NA when the function
+# knows no snapshot for it.
+profile_snapshot_driver <- function(con) {
+  if (inherits(con, "SQLiteConnection")) {
+    return("SQLite")
+  }
+  driver <- class(con)[1]
+  if (inherits(con, "PqConnection")) {
+    driver <- "PostgreSQL"
+  }
+  if (driver %in% c("PostgreSQL", "Microsoft SQL Server")) {
+    return(driver)
+  }
+  return(NA_character_)
+}
+
+# The statements around DBI::dbBegin() and DBI::dbRollback() that give one
+# snapshot. `before` runs before dbBegin(), `inside` after it and before the
+# first read, and `after` after dbRollback(). Each is a transaction-control
+# statement. On SQL Server the isolation level is a session setting, so
+# `after` puts back `mssql_level`.
+profile_snapshot_statements <- function(
+  driver,
+  mssql_snapshot = FALSE,
+  mssql_level = "READ COMMITTED"
+) {
+  out <- list(before = character(0), inside = character(0), after = character(0))
+  if (driver == "PostgreSQL") {
+    out$inside <- "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+  }
+  if (driver == "Microsoft SQL Server") {
+    level <- if (isTRUE(mssql_snapshot)) "SNAPSHOT" else "REPEATABLE READ"
+    out$before <- paste0("SET TRANSACTION ISOLATION LEVEL ", level)
+    out$after <- paste0("SET TRANSACTION ISOLATION LEVEL ", mssql_level)
+  }
+  return(out)
+}
+
+# Whether the database allows SNAPSHOT isolation, and the isolation level of
+# the session. Two SELECTs. When either fails, no SNAPSHOT and READ
+# COMMITTED, the SQL Server default.
+profile_mssql_state <- function(con) {
+  state <- list(snapshot = FALSE, level = "READ COMMITTED")
+  try(
+    {
+      allowed <- DBI::dbGetQuery(
+        con,
+        "SELECT snapshot_isolation_state AS s FROM sys.databases WHERE name = DB_NAME()"
+      )$s
+      state$snapshot <- isTRUE(as.integer(allowed) == 1L)
+    },
+    silent = TRUE
+  )
+  try(
+    {
+      level <- DBI::dbGetQuery(
+        con,
+        "SELECT transaction_isolation_level AS l FROM sys.dm_exec_sessions WHERE session_id = @@SPID"
+      )$l
+      level <- profile_mssql_levels[as.integer(level)]
+      if (length(level) == 1 && !is.na(level)) {
+        state$level <- level
+      }
+    },
+    silent = TRUE
+  )
+  return(state)
+}
+
+# Opens one read snapshot on `con`. Returns the statements that close it, or
+# NULL when the connection gives no snapshot. A message then says why.
+profile_snapshot_begin <- function(con) {
+  driver <- profile_snapshot_driver(con)
+  if (is.na(driver)) {
+    profile_snapshot_message(paste0("csdb knows no snapshot for ", class(con)[1]))
+    return(NULL)
+  }
+  state <- list(snapshot = FALSE, level = "READ COMMITTED")
+  if (driver == "Microsoft SQL Server") {
+    state <- profile_mssql_state(con)
+  }
+  plan <- profile_snapshot_statements(driver, state$snapshot, state$level)
+  opened <- tryCatch(
+    {
+      for (s in plan$before) {
+        DBI::dbExecute(con, s)
+      }
+      DBI::dbBegin(con)
+      TRUE
+    },
+    error = function(e) conditionMessage(e)
+  )
+  if (!isTRUE(opened)) {
+    profile_snapshot_run(con, plan$after)
+    profile_snapshot_message(opened)
+    return(NULL)
+  }
+  return(profile_snapshot_inside(con, plan))
+}
+
+# The `inside` statements of an open transaction. When one fails, the
+# transaction is rolled back and the profile runs without a snapshot.
+profile_snapshot_inside <- function(con, plan) {
+  failed <- tryCatch(
+    {
+      for (s in plan$inside) {
+        DBI::dbExecute(con, s)
+      }
+      NULL
+    },
+    error = function(e) conditionMessage(e)
+  )
+  if (!is.null(failed)) {
+    profile_snapshot_end(con, plan)
+    profile_snapshot_message(failed)
+    return(NULL)
+  }
+  return(plan)
+}
+
+# Closes the snapshot. The transaction only reads, so a rollback ends it.
+profile_snapshot_end <- function(con, plan) {
+  if (is.null(plan)) {
+    return(invisible(NULL))
+  }
+  try(DBI::dbRollback(con), silent = TRUE)
+  profile_snapshot_run(con, plan$after)
+  return(invisible(NULL))
+}
+
+profile_snapshot_run <- function(con, statements) {
+  for (s in statements) {
+    try(DBI::dbExecute(con, s), silent = TRUE)
+  }
+  return(invisible(NULL))
+}
+
+profile_snapshot_message <- function(reason) {
+  message(
+    "profile_query() runs without a snapshot (",
+    reason,
+    "). The check for a torn profile still runs."
+  )
+  return(invisible(NULL))
+}

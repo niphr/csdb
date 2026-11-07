@@ -140,11 +140,19 @@ test_that("simulated rows are unique on keys", {
 })
 
 test_that("a key that cannot be unique stops with an error naming keys and n", {
-  d <- data.frame(a = rep(c("x", "y"), 10))
-  p <- profile_data(d, c(a = "TEXT"), columns = c(a = "full"), keys = "a")
+  # b depends on a, so the keys give 2 pairs. The key space counts 4, so the
+  # draw starts and the redraws stop it.
+  d <- data.frame(a = rep(c("x", "y"), 10), b = rep(c("p", "q"), 10))
+  p <- profile_data(
+    d,
+    c(a = "TEXT", b = "TEXT"),
+    columns = c(a = "full", b = "full"),
+    keys = c("a", "b"),
+    dependencies = list(c("a", "b"))
+  )
   expect_error(
-    simulate_from_profile(p, n = 10),
-    "could not draw 10 rows unique on the keys a in 20 redraws"
+    simulate_from_profile(p, n = 3),
+    "could not draw 3 rows unique on the keys a, b in 20 redraws"
   )
 })
 
@@ -291,10 +299,6 @@ test_that("world replaces the support of the named columns only", {
   # c1 keeps its published weight of 30; c9 gets the mean of the shared
   # weights, which is also 30.
   expect_equal(mean(sim$county == "c1"), 0.5, tolerance = 0.05)
-  expect_error(
-    simulate_from_profile(p, world = list(nope = "x")),
-    "world names unknown column"
-  )
 })
 
 test_that("months, quarters and size ranges generate values within their cells", {
@@ -305,8 +309,13 @@ test_that("months, quarters and size ranges generate values within their cells",
   sizes <- c(rep(1:15, each = 2), rep(20L, 8))
   d <- data.frame(
     id = rep(seq_along(sizes), sizes),
-    mo = rows("2024-01-01" = 98, "2024-01-31" = 2, "2024-02-15" = 100,
-      "2024-03-15" = 100, "2024-04-15" = 100),
+    mo = rows(
+      "2024-01-01" = 98,
+      "2024-01-31" = 2,
+      "2024-02-15" = 100,
+      "2024-03-15" = 100,
+      "2024-04-15" = 100
+    ),
     runs = rows("2024-01-01" = 300, "2024-07-01" = 3, "2025-01-01" = 97)
   )
   p <- profile_data(
@@ -319,14 +328,17 @@ test_that("months, quarters and size ranges generate values within their cells",
   expect_false(is.null(p$columns$runs$quarters_to))
   sim <- simulate_from_profile(p, n = 4000)
   # A month draws every day of the month, not only its first day.
-  expect_true(all(format(sim$mo, "%Y-%m") %in% c("2024-01", "2024-02",
-    "2024-03", "2024-04")))
+  expect_true(all(
+    format(sim$mo, "%Y-%m") %in% c("2024-01", "2024-02", "2024-03", "2024-04")
+  ))
   expect_gt(length(unique(sim$mo)), 100)
   # The second run covers 2024-07-01 to 2025-03-31.
   runs <- p$columns$runs
   expect_identical(runs$quarters_to[2], as.Date("2025-01-01"))
-  in_first <- sim$runs >= as.Date("2024-01-01") & sim$runs <= as.Date("2024-03-31")
-  in_second <- sim$runs >= as.Date("2024-07-01") & sim$runs <= as.Date("2025-03-31")
+  in_first <- sim$runs >= as.Date("2024-01-01") &
+    sim$runs <= as.Date("2024-03-31")
+  in_second <- sim$runs >= as.Date("2024-07-01") &
+    sim$runs <= as.Date("2025-03-31")
   expect_true(all(in_first | in_second))
   expect_true(any(sim$runs >= as.Date("2024-10-01") & in_second))
   # Every group but the last, which can be truncated, has a size within a
@@ -336,7 +348,11 @@ test_that("months, quarters and size ranges generate values within their cells",
   counts <- counts[-length(counts)]
   # The last range has no size_to, and draws up to twice its size_from.
   to <- c(g$size_to, 2L * g$size_from[length(g$size_from)])
-  in_range <- vapply(counts, function(x) any(x >= g$size_from & x <= to), logical(1))
+  in_range <- vapply(
+    counts,
+    function(x) any(x >= g$size_from & x <= to),
+    logical(1)
+  )
   expect_true(all(in_range))
   expect_gt(length(unique(counts)), length(g$n))
 })
@@ -361,8 +377,12 @@ test_that("a nonnegative column is never simulated below 0", {
   p <- profile_data(
     d,
     ft,
-    columns = c(count = "coarsen", skewed = "coarsen", seconds = "coarsen",
-      signed = "coarsen")
+    columns = c(
+      count = "coarsen",
+      skewed = "coarsen",
+      seconds = "coarsen",
+      signed = "coarsen"
+    )
   )
   for (x in c("count", "skewed", "seconds", "unlisted")) {
     expect_true(p$columns[[x]]$nonnegative, label = x)
@@ -379,4 +399,101 @@ test_that("a nonnegative column is never simulated below 0", {
     expect_true(any(sim$skewed < 5))
     expect_lt(min(sim$signed), 0)
   }
+})
+
+# Items 3, 6 and 7 of phase 7 ----
+
+# The value of `expr` or its error message, and every message it gave.
+simulate_capture <- function(expr) {
+  messages <- character(0)
+  value <- withCallingHandlers(
+    tryCatch(expr, error = function(e) conditionMessage(e)),
+    message = function(m) {
+      messages <<- c(messages, conditionMessage(m))
+      invokeRestart("muffleMessage")
+    }
+  )
+  return(list(value = value, messages = messages))
+}
+
+test_that("item 3: world columns that the table lacks are ignored without a message", {
+  p <- profile_schema(c(sex = "TEXT", id = "INTEGER"), keys = "id")
+  world <- list(county = c("c1", "c2"), sex = "f", region = 1:3)
+  res <- simulate_capture(simulate_from_profile(p, n = 20, world = world))
+  expect_s3_class(res$value, "data.table")
+  expect_identical(res$messages, character(0))
+  # An error message in place of the data fails the checks below.
+  sim <- if (is.list(res$value)) res$value else list()
+  expect_identical(unique(sim$sex), "f")
+  expect_identical(names(sim), c("sex", "id"))
+  only_other <- simulate_capture(
+    simulate_from_profile(p, n = 20, world = list(nope = "x"))
+  )
+  expect_identical(only_other$value, simulate_from_profile(p, n = 20))
+  expect_identical(only_other$messages, character(0))
+})
+
+test_that("item 6: n = NULL gives simulate_from_profile() its default of 1000 rows", {
+  p <- profile_schema(c(id = "INTEGER"), keys = "id")
+  res <- simulate_capture(simulate_from_profile(p, n = NULL, seed = 2))
+  expect_s3_class(res$value, "data.table")
+  expect_identical(res$value, simulate_from_profile(p, n = 1000L, seed = 2))
+})
+
+test_that("item 7: a key space smaller than n stops before any draw, naming keys, space and n", {
+  d <- data.frame(
+    sex = rep(c("f", "m"), 30),
+    age = rep(c(10L, 20L, 30L), 20)
+  )
+  ft <- c(sex = "TEXT", age = "INTEGER")
+  p <- profile_data(
+    d,
+    ft,
+    columns = c(sex = "full", age = "full"),
+    keys = c("sex", "age")
+  )
+  local_mocked_bindings(simulate_table = function(profile, n, world) "drew")
+  expect_error(
+    simulate_from_profile(p, n = 7),
+    paste0(
+      "cannot draw 7 rows unique on the keys sex, age: the key space holds ",
+      "6 combinations \\(sex 2, age 3\\), and n is 7\\."
+    )
+  )
+  # A space that holds n reaches the draw.
+  expect_identical(simulate_from_profile(p, n = 6), "drew")
+  # world narrows a key column to its allowed values.
+  expect_error(
+    simulate_from_profile(p, n = 4, world = list(sex = "f")),
+    "key space holds 3 combinations \\(sex 1, age 3\\), and n is 4\\."
+  )
+  # Schema-only key sizes: 2 for BOOLEAN, 1827 days for DATE.
+  s <- profile_schema(
+    c(flag = "BOOLEAN", day = "DATE"),
+    keys = c("flag", "day")
+  )
+  expect_error(
+    simulate_from_profile(s, n = 4000),
+    "key space holds 3654 combinations \\(flag 2, day 1827\\), and n is 4000\\."
+  )
+  expect_identical(simulate_from_profile(s, n = 3654), "drew")
+  # A TEXT or INTEGER schema-only key has no limit.
+  big <- profile_schema(
+    c(id = "TEXT", flag = "BOOLEAN"),
+    keys = c("id", "flag")
+  )
+  expect_identical(simulate_from_profile(big, n = 1e6), "drew")
+  # INTEGER bins count their whole numbers. The values 0 to 9 at 10 rows
+  # each merge into 10 bins of width 1, each around one whole number.
+  b <- profile_data(
+    data.frame(v = rep(0:9, 10)),
+    c(v = "INTEGER"),
+    columns = c(v = "coarsen"),
+    keys = "v"
+  )
+  expect_identical(simulate_from_profile(b, n = 10), "drew")
+  expect_error(
+    simulate_from_profile(b, n = 11),
+    "key space holds 10 combinations \\(v 10\\), and n is 11\\."
+  )
 })

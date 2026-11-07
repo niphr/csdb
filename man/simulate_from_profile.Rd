@@ -10,13 +10,16 @@ simulate_from_profile(profile, n = 1000L, seed = 1L, world = NULL)
 \item{profile}{A `csdb_profile`, from [profile_query()], [read_profile()]
 or [profile_schema()].}
 
-\item{n}{The number of rows, a whole number of at least 1.}
+\item{n}{The number of rows, a whole number of at least 1. `NULL` gives
+1000 rows, the default.}
 
 \item{seed}{The seed for [set.seed()]. The function restores the random
 state of the caller on exit.}
 
 \item{world}{`NULL`, or a named list that maps a column to its allowed
-values. The function converts the values to the column's type.}
+values. The function converts the values to the column's type. It
+ignores, without a message, each element that names no column of
+`profile$field_types`, so one world can serve several tables.}
 }
 \value{
 A data.table with `n` rows and the columns of
@@ -74,6 +77,30 @@ The joint structure comes after the columns, in this order:
    first column from the most rows to the fewest. Each goes to the value
    of the second column that is furthest below its drawn row count. This
    keeps the drawn frequencies of the second column close.
+
+Before it draws, the function computes the key space. That is the
+product, over the key columns, of the number of values each column can
+take. When `n` is larger, it stops with an error that names the keys, the
+key space and `n`. A key column can take:
+
+- a `world` column: its allowed values.
+- `levels` or `days`: the values with a count above 0. A `DATETIME` from
+  `days` can take every second of those days.
+- `weeks`, `months` or `quarters`: every day of the cells with a count
+  above 0. A `DATETIME` can take every second of those days.
+- `breaks`: an `INTEGER` takes every whole number of the bins with a
+  count above 0, from 0 up when `nonnegative` is `TRUE`. A `DOUBLE` has
+  no limit.
+- `n_distinct` of a `TEXT` column: `n_distinct` values.
+- a group-size column: no limit, because each group gets a fresh
+  identifier.
+- schema values: no limit for a `TEXT`, `INTEGER` or `DOUBLE` key
+  column, and 2 for `BOOLEAN`. A `DATE` takes the 1827 days from
+  2020-01-01 to 2024-12-31, and a `DATETIME` every second of those days.
+
+A crosstab replaces its columns, so a key column of a crosstab can take
+the values that it has in the cells left after `world`. The key space
+does not count crosstab pairs or dependencies, so it is an upper bound.
 
 The function redraws each row whose keys repeat an earlier row. After 20
 redraws it stops with an error that names the keys and `n`. A redrawn row
