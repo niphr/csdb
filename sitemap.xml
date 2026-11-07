@@ -4,11 +4,13 @@
 <url><loc>https://niphr.github.io/csdb/articles/backends.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/articles/csdb.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/articles/index.html</loc></url>
+<url><loc>https://niphr.github.io/csdb/articles/synthetic-data.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/authors.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/index.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/news/index.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/DBConnection_v9.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/DBTable_v9.html</loc></url>
+<url><loc>https://niphr.github.io/csdb/reference/SyntheticTable.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/csdb_connection_is_alive.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/csdb_get_auth_hook.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/csdb_get_context.html</loc></url>
@@ -20,11 +22,20 @@
 <url><loc>https://niphr.github.io/csdb/reference/index.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/insert_data_many.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/nor_covid19_cases_by_time_location.html</loc></url>
+<url><loc>https://niphr.github.io/csdb/reference/profile_compare.html</loc></url>
+<url><loc>https://niphr.github.io/csdb/reference/profile_data.html</loc></url>
+<url><loc>https://niphr.github.io/csdb/reference/profile_query.html</loc></url>
+<url><loc>https://niphr.github.io/csdb/reference/profile_schema.html</loc></url>
+<url><loc>https://niphr.github.io/csdb/reference/profile_table.html</loc></url>
+<url><loc>https://niphr.github.io/csdb/reference/read_profile.html</loc></url>
+<url><loc>https://niphr.github.io/csdb/reference/simulate_from_profile.html</loc></url>
+<url><loc>https://niphr.github.io/csdb/reference/synthetic_table_from_dir.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/validator_field_contents_blank.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/validator_field_contents_csfmt_rts_data_v1.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/validator_field_contents_csfmt_rts_data_v2.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/validator_field_types_blank.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/validator_field_types_csfmt_rts_data_v1.html</loc></url>
 <url><loc>https://niphr.github.io/csdb/reference/validator_field_types_csfmt_rts_data_v2.html</loc></url>
+<url><loc>https://niphr.github.io/csdb/reference/write_profile.html</loc></url>
 </urlset>
 

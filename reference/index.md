@@ -49,6 +49,31 @@ Functions for validating field types and data contents
 - [`validator_field_contents_csfmt_rts_data_v2()`](https://niphr.github.io/csdb/reference/validator_field_contents_csfmt_rts_data_v2.md)
   : Field contents validator for csfmt_rts_data_v2 schema
 
+## Synthetic Data
+
+Profiles, simulation, and the synthetic data contract of one table
+
+- [`profile_query()`](https://niphr.github.io/csdb/reference/profile_query.md)
+  : Profile the result of a SQL query
+- [`profile_table()`](https://niphr.github.io/csdb/reference/profile_table.md)
+  : Profile a DBTable_v9
+- [`profile_data()`](https://niphr.github.io/csdb/reference/profile_data.md)
+  : Profile a data frame
+- [`profile_schema()`](https://niphr.github.io/csdb/reference/profile_schema.md)
+  : A profile that holds only a schema
+- [`write_profile()`](https://niphr.github.io/csdb/reference/write_profile.md)
+  : Write a profile to a YAML file
+- [`read_profile()`](https://niphr.github.io/csdb/reference/read_profile.md)
+  : Read a profile from a YAML file
+- [`simulate_from_profile()`](https://niphr.github.io/csdb/reference/simulate_from_profile.md)
+  : Simulate a table from a profile
+- [`profile_compare()`](https://niphr.github.io/csdb/reference/profile_compare.md)
+  : Compare two profiles
+- [`SyntheticTable`](https://niphr.github.io/csdb/reference/SyntheticTable.md)
+  : The synthetic data contract of one table
+- [`synthetic_table_from_dir()`](https://niphr.github.io/csdb/reference/synthetic_table_from_dir.md)
+  : Build a SyntheticTable from a directory
+
 ## Datasets
 
 Example datasets included with the package

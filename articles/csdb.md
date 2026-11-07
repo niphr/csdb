@@ -96,11 +96,11 @@ still store it: pass the `_blank` pair, or a function of your own.
 
 ### The three backends
 
-| Backend              | Connects through                                 | Needs a server |
-|----------------------|--------------------------------------------------|----------------|
-| PostgreSQL           | `odbc`, driver `"PostgreSQL Unicode"`            | Yes            |
-| Microsoft SQL Server | `odbc`, driver `"ODBC Driver 17 for SQL Server"` | Yes            |
-| SQLite               | `RSQLite`, where `db` is a file path             | No             |
+| Backend | Connects through | Needs a server |
+|----|----|----|
+| PostgreSQL | `odbc`, driver `"PostgreSQL Unicode"` | Yes |
+| Microsoft SQL Server | `odbc`, driver `"ODBC Driver 17 for SQL Server"` | Yes |
+| SQLite | `RSQLite`, where `db` is a file path | No |
 
 One `dbconfig` list picks the backend, and nothing else in your code
 changes. `csdb` reads no environment variable itself. To keep a password
@@ -140,11 +140,11 @@ dbconnection
 #> (disconnected)
 #> 
 #> Driver:              SQLite 
-#> File:                /tmp/RtmpRgCQN8/file20653ec27560.sqlite
+#> File:                /tmp/RtmpaS29yP/file1fb54f8abd1d.sqlite
 dbconnection$connect()
 dbconnection$connection
 #> <SQLiteConnection>
-#>   Path: /tmp/RtmpRgCQN8/file20653ec27560.sqlite
+#>   Path: /tmp/RtmpaS29yP/file1fb54f8abd1d.sqlite
 #>   Extensions: TRUE
 dbconnection$disconnect()
 class(dbconnection$connection)
@@ -199,7 +199,7 @@ dbtable$drop_all_rows()
 dbtable$insert_data(csdb::nor_covid19_cases_by_time_location)
 dbtable$tbl()
 #> # A query:  ?? x 18
-#> # Database: sqlite 3.53.3 [/tmp/RtmpRgCQN8/file20653ec27560.sqlite]
+#> # Database: sqlite 3.53.3 [/tmp/RtmpaS29yP/file1fb54f8abd1d.sqlite]
 #>    granularity_time granularity_geo country_iso3 location_code border age  
 #>    <chr>            <chr>           <chr>        <chr>          <int> <chr>
 #>  1 day              county          nor          county_nor03    2020 total

@@ -1,0 +1,268 @@
+# Profile the result of a SQL query
+
+Summarises the rows of a query as a `csdb_profile`, under disclosure
+control. Every statistic comes from an aggregate query, and the profile
+keeps no count below `k`.
+
+## Usage
+
+``` r
+profile_query(
+  connection,
+  sql,
+  columns = NULL,
+  field_types = NULL,
+  keys = NULL,
+  k = 5L,
+  noise = NULL,
+  max_levels = 50L,
+  group_sizes = NULL,
+  crosstabs = NULL,
+  dependencies = NULL,
+  source = NULL
+)
+```
+
+## Arguments
+
+- connection:
+
+  A DBI connection, or a
+  [DBConnection_v9](https://niphr.github.io/csdb/reference/DBConnection_v9.md).
+  For a `DBConnection_v9` the function uses `$autoconnection`.
+
+- sql:
+
+  The query to profile, as one string. The function runs it as the
+  subquery `SELECT ... FROM (<sql>) q`. The query is published with the
+  profile as `provenance$query`, so a caller MUST NOT put an identifier
+  literal, such as a person number, in it.
+
+- columns:
+
+  A named character vector or named list that gives the sensitivity of
+  each column: `"full"`, `"coarsen"`, `"schema_only"` or `"exclude"`. A
+  column that `columns` does not name is `"schema_only"`.
+
+- field_types:
+
+  A named character vector of csdb field types: `TEXT`, `INTEGER`,
+  `DOUBLE`, `BOOLEAN`, `DATE` or `DATETIME`. With `NULL`, the function
+  infers the types from the R classes of a zero-row fetch.
+
+- keys:
+
+  A character vector of key column names, or `NULL`.
+
+- k:
+
+  The smallest count that the profile can hold.
+
+- noise:
+
+  `NULL`, or `list(epsilon = e)`. With `epsilon`, the function adds
+  Laplace noise of scale `1 / e` to each cell count and to each count of
+  missing values. It adds the noise before suppression, then rounds each
+  count and floors it at 0. Call
+  [`set.seed()`](https://rdrr.io/r/base/Random.html) first for a
+  reproducible profile.
+
+- max_levels:
+
+  The largest number of distinct values for which a `full` column
+  publishes its values.
+
+- group_sizes:
+
+  A named list, for example `list(rows_per_id = "Id")`. Each element
+  names one column. The profile holds how many values of that column
+  have each row count.
+
+- crosstabs:
+
+  A list of pairs of column names, for example
+  `list(c("sex", "age_group"))`. Both columns MUST be `"full"`.
+
+- dependencies:
+
+  A list of pairs of column names. For each pair the profile holds
+  whether the first column determines the second.
+
+- source:
+
+  A label for the data source, or `NULL`. The profile publishes it.
+
+## Value
+
+A list of class `csdb_profile`, with the elements `provenance`,
+`field_types`, `keys`, `n_rows`, `columns`, `group_sizes`, `crosstabs`,
+`dependencies` and `notes`. `provenance` holds `format`, `source`,
+`query`, `driver`, `profiled_at` (UTC, ISO 8601), `k`, `noise`,
+`max_levels` and `csdb_version`. `driver` is the class of the DBI
+connection.
+
+## Details
+
+Each column of `field_types` gets a summary from its sensitivity:
+
+- `schema_only`: `type`, `sensitivity` and `missing_share`. All other
+  summaries hold these three fields too. An `INTEGER` or `DOUBLE` column
+  also holds `nonnegative`, which is `TRUE` when its SQL minimum is at
+  least 0.
+
+- `exclude`: no entry in `columns`. The column is in `field_types` only.
+
+- `full` `TEXT` or `BOOLEAN`, at most `max_levels` distinct values:
+  `levels` and `n`.
+
+- `full` `INTEGER`, `DOUBLE` or `DATETIME`, at most `max_levels`
+  distinct values: `levels` and `n` when every level holds at least `k`
+  rows. Otherwise the column takes the summary that it has above
+  `max_levels`. An `INTEGER` or `DOUBLE` column with one distinct value
+  always publishes `levels`. When that value holds fewer than `k` rows,
+  the function removes its cell, so `levels` and `n` are empty.
+
+- `full` `TEXT`, above `max_levels`: `n_distinct`, rounded down to a
+  multiple of `k`.
+
+- `full` `DATE`: counts per day, as `days` and `n`.
+
+- `full` `DATETIME`: `levels` and `n`, as above, otherwise counts per
+  UTC day as `days` and `n`. The function truncates each level to the
+  whole second.
+
+- `coarsen` `DATE` or `DATETIME`: counts per ISO week, as `weeks` and
+  `n`. The Monday of each week is its key. A `DATETIME` falls in the
+  week of its UTC day.
+
+- `INTEGER` and `DOUBLE`, `full` above `max_levels` or `coarsen`:
+  `breaks` and `n`, for the bins `[breaks[i], breaks[i + 1])`. The
+  breaks are always double.
+
+- `coarsen` `TEXT` or `BOOLEAN`: an error that names the column.
+
+The breaks come from `pretty(c(min, max), n = 20)`. An end break that
+equals the observed minimum or maximum moves one step outward. The
+function removes an inner break that equals either extreme. So no break
+equals an observed extreme.
+
+Suppression keeps every published count at `k` or above. On an ordered
+dimension, a cell below `k` merges with its neighbours:
+
+- Days merge into ISO weeks, then calendar months, then calendar
+  quarters. Weeks merge into months, then quarters. The column takes the
+  finest of these resolutions at which every cell holds `k`. The field
+  name gives the resolution: `days`, `weeks`, `months` or `quarters`.
+  Each key is the first day of its cell. A week merges into the month of
+  its Monday.
+
+- When a quarter holds fewer than `k` rows, adjacent quarters merge into
+  runs. Each run takes quarters in order until it holds `k`. A last run
+  below `k` joins the run before it. `quarters` then holds the first
+  quarter of each run and `quarters_to` the last.
+
+- Bins merge into runs in the same way. A merged bin keeps the outer
+  breaks of its run, so no break is added.
+
+- Group sizes merge into runs in the same way. Each run is published as
+  `size_from`, `size_to` and `n`, the number of values with a row count
+  in that range. The ranges tile the row counts from 1 up with no gap.
+  The first range starts at 1. Every other `size_from` is an observed
+  row count, the smallest in its run. Each `size_to` is one below the
+  next `size_from`. The last range has no `size_to`, so it runs from its
+  `size_from` up.
+
+- A first run that holds only the smallest row count merges with the
+  next run. A last run that holds only the largest merges with the run
+  before it. So no exact smallest or largest row count is published.
+
+A table whose present values number fewer than `k` publishes no cell.
+Unordered cells, which are the `levels` of a `TEXT` or `BOOLEAN` column
+and the cells of a crosstab, do not merge. Each cell below `k` is
+removed. A column sums its removed counts into `suppressed_n`, and it
+keeps `suppressed_n` only when that sum is at least `k`. With `noise`,
+the function adds the noise to the finest cells, before it merges or
+removes any cell.
+
+`missing_share` is `"suppressed"` when the count of missing values, or
+the count of values present, is from 1 to `k - 1`. `n_rows` holds no
+noise. A query with fewer than `k` rows is an error.
+
+The function reads the data with several queries. It runs them in one
+read snapshot where the driver gives one:
+
+- SQLite: one read transaction.
+
+- PostgreSQL: a transaction at `REPEATABLE READ`, `READ ONLY`.
+
+- SQL Server: a transaction at `SNAPSHOT` when the database allows it,
+  otherwise at `REPEATABLE READ`. `REPEATABLE READ` does not stop the
+  rows that other sessions insert. The function puts back the isolation
+  level of the session after the profile.
+
+- Other drivers, or a connection on which
+  [`DBI::dbBegin()`](https://dbi.r-dbi.org/reference/transactions.html)
+  fails, for example because a transaction is open: no snapshot, and a
+  message says so.
+
+The function sends only `SELECT` and transaction-control statements, and
+ends the transaction with a rollback.
+
+The function always refuses a torn profile, with or without a snapshot.
+The check covers each column with `levels`, `days`, `weeks`, `months`,
+`quarters` or `breaks`. Its counts before noise and suppression, plus
+its count of missing values, MUST equal `n_rows`. For a group-size
+column, the row counts of its values plus its missing count MUST equal
+`n_rows`. Otherwise the function stops with an error that names the
+column and both totals. A crosstab and an `n_distinct` have no total to
+check.
+
+A crosstab counts the rows where both columns hold a value. Each of its
+columns MUST have `levels` or be a `DATE`. A group-size range is a range
+of row counts, so it can be below `k`. Only `n` must reach `k`. A
+dependency holds when each value of the first column, `NULL` included,
+goes with one value of the second. The profile stores no mapping.
+
+## See also
+
+Other profile functions:
+[`profile_data()`](https://niphr.github.io/csdb/reference/profile_data.md),
+[`profile_table()`](https://niphr.github.io/csdb/reference/profile_table.md),
+[`read_profile()`](https://niphr.github.io/csdb/reference/read_profile.md),
+[`write_profile()`](https://niphr.github.io/csdb/reference/write_profile.md)
+
+## Examples
+
+``` r
+con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:", extended_types = TRUE)
+DBI::dbWriteTable(con, "visits", data.frame(
+  id = rep(1:20, each = 3),
+  sex = rep(c("female", "male"), 30),
+  age = rep(c(4, 15, 38, 52, 71, 90), 10)
+))
+p <- profile_query(
+  con,
+  "SELECT * FROM visits",
+  columns = c(sex = "full", age = "coarsen", id = "exclude"),
+  group_sizes = list(rows_per_id = "id")
+)
+p$columns$sex
+#> $type
+#> [1] "TEXT"
+#> 
+#> $sensitivity
+#> [1] "full"
+#> 
+#> $missing_share
+#> [1] 0
+#> 
+#> $levels
+#> [1] "female" "male"  
+#> 
+#> $n
+#> [1] 30 30
+#> 
+p$columns$age$breaks
+#> [1]  0  5 20 40 55 75 95
+DBI::dbDisconnect(con)
+```

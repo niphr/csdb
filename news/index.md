@@ -1,5 +1,37 @@
 # Changelog
 
+## Version 2026.11.7
+
+### New Features
+
+- Profiles:
+  [`profile_query()`](https://niphr.github.io/csdb/reference/profile_query.md),
+  [`profile_table()`](https://niphr.github.io/csdb/reference/profile_table.md)
+  and
+  [`profile_data()`](https://niphr.github.io/csdb/reference/profile_data.md)
+  summarise a table with aggregate SQL, and publish no count below `k`.
+  A day, week, month, quarter, bin or group-size range below `k` merges
+  with its neighbours instead of being removed. A profile whose column
+  counts do not add up to `n_rows` is torn, and the profiler refuses it.
+  [`write_profile()`](https://niphr.github.io/csdb/reference/write_profile.md)
+  and
+  [`read_profile()`](https://niphr.github.io/csdb/reference/read_profile.md)
+  store a profile as YAML.
+  [`profile_schema()`](https://niphr.github.io/csdb/reference/profile_schema.md)
+  builds a profile from the field types alone.
+- [`simulate_from_profile()`](https://niphr.github.io/csdb/reference/simulate_from_profile.md)
+  draws synthetic rows from a profile.
+  [`profile_compare()`](https://niphr.github.io/csdb/reference/profile_compare.md)
+  compares a simulation with the real profile, against the sampling
+  noise of a table of that size.
+- `SyntheticTable` and
+  [`synthetic_table_from_dir()`](https://niphr.github.io/csdb/reference/synthetic_table_from_dir.md)
+  hold the contract of one table and its fixed datasets: recipes checked
+  by md5 in `datasets.yaml`, and handmade CSV files.
+  [`vignette("synthetic-data")`](https://niphr.github.io/csdb/articles/synthetic-data.md)
+  shows the whole route.
+- csdb imports yaml.
+
 ## Version 2026.10.23
 
 ### New Features
@@ -303,14 +335,14 @@
   while it connects with `psql: error:`. `bcp` prints `Starting copy...`
   when it starts to send rows.
 
-  | Failure                                                                                            | Phase    | Class     |
-  |----------------------------------------------------------------------------------------------------|----------|-----------|
-  | Refused, timed-out or reset connection, DNS failure, too many clients, server starting or stopping | connect  | transient |
-  | `psql` SQLSTATE 40001, 40P01, 53300, 55P03 or 57P03                                                | transfer | transient |
-  | `psql` SQLSTATE 08xxx, 57P01 or 57P02, or a lost connection                                        | transfer | ambiguous |
-  | `bcp` SQLState 08xxx, HYT00, HYT01 or S1T00                                                        | connect  | transient |
-  | `bcp` SQLState 08xxx, HYT00, HYT01 or S1T00, or NativeError 596                                    | transfer | ambiguous |
-  | `bcp` SQLState 40001, or NativeError 1205 or 1222                                                  | any      | transient |
+  | Failure | Phase | Class |
+  |----|----|----|
+  | Refused, timed-out or reset connection, DNS failure, too many clients, server starting or stopping | connect | transient |
+  | `psql` SQLSTATE 40001, 40P01, 53300, 55P03 or 57P03 | transfer | transient |
+  | `psql` SQLSTATE 08xxx, 57P01 or 57P02, or a lost connection | transfer | ambiguous |
+  | `bcp` SQLState 08xxx, HYT00, HYT01 or S1T00 | connect | transient |
+  | `bcp` SQLState 08xxx, HYT00, HYT01 or S1T00, or NativeError 596 | transfer | ambiguous |
+  | `bcp` SQLState 40001, or NativeError 1205 or 1222 | any | transient |
 
 - `psql` runs with `-v VERBOSITY=verbose`, so it prints the SQLSTATE. A
   failed connection prints no SQLSTATE, so csdb reads the libpq text.

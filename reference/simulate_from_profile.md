@@ -1,0 +1,172 @@
+# Simulate a table from a profile
+
+Draws `n` synthetic rows from a `csdb_profile`. The rows follow the
+published summaries and hold no row of the profiled data.
+
+## Usage
+
+``` r
+simulate_from_profile(profile, n = 1000L, seed = 1L, world = NULL)
+```
+
+## Arguments
+
+- profile:
+
+  A `csdb_profile`, from
+  [`profile_query()`](https://niphr.github.io/csdb/reference/profile_query.md),
+  [`read_profile()`](https://niphr.github.io/csdb/reference/read_profile.md)
+  or
+  [`profile_schema()`](https://niphr.github.io/csdb/reference/profile_schema.md).
+
+- n:
+
+  The number of rows, a whole number of at least 1. `NULL` gives 1000
+  rows, the default.
+
+- seed:
+
+  The seed for [`set.seed()`](https://rdrr.io/r/base/Random.html). The
+  function restores the random state of the caller on exit.
+
+- world:
+
+  `NULL`, or a named list that maps a column to its allowed values. The
+  function converts the values to the column's type. It ignores, without
+  a message, each element that names no column of `profile$field_types`,
+  so one world can serve several tables.
+
+## Value
+
+A data.table with `n` rows and the columns of `profile$field_types`, in
+that order.
+
+## Details
+
+The R type of each column follows its field type: `TEXT` character,
+`INTEGER` integer, `DOUBLE` double, `BOOLEAN` logical, `DATE` Date and
+`DATETIME` POSIXct in UTC.
+
+A column takes its values from its own summary:
+
+- `levels` or `days`: a draw of the published values, weighted by `n`.
+  The suppressed cells generate nothing. A `DATETIME` drawn from `days`
+  gets a uniform whole second within its UTC day.
+
+- `weeks`, `months` or `quarters`: a cell drawn by `n`, then a uniform
+  day within it. A cell of `quarters` ends with the quarter in
+  `quarters_to` when the profile holds `quarters_to`.
+
+- `breaks`: a bin drawn by `n`, then a uniform value within the bin. An
+  `INTEGER` value is a uniform whole number within the bin. A column
+  with `nonnegative` `TRUE` draws no value below 0.
+
+- `n_distinct` of a `TEXT` column: `"<column>_<i>"`, with `i` uniform in
+  1 to `n_distinct`.
+
+- `missing_share`: `NA` at that rate. A share of `"suppressed"` gives no
+  `NA`. A key column gets no `NA`.
+
+A `schema_only` or `exclude` column, and a column whose summary has no
+published cell, gets schema values. A `TEXT` or `INTEGER` key column
+gets `"<column>_<i>"` or `i` for row `i`, so a single-column key is
+unique at any `n`. Other columns get schema values by type:
+
+- `TEXT`: `"<column>_<i>"`, with `i` from 1 to 10.
+
+- `INTEGER`: a whole number from 0 to 100.
+
+- `DOUBLE`: a uniform value from 0 to 1.
+
+- `BOOLEAN`: `TRUE` or `FALSE`. A `BOOLEAN` with `n_distinct` only also
+  gets these values.
+
+- `DATE` and `DATETIME`: a uniform day from 2020-01-01 to 2024-12-31. A
+  `DATETIME` gets a uniform whole second within that day.
+
+The joint structure comes after the columns, in this order:
+
+1.  Each crosstab draws its two columns jointly by the cell counts. This
+    replaces the values of both columns.
+
+2.  Each group size draws a range by `n`, then a uniform row count from
+    `size_from` to `size_to`. The last range has no `size_to` and draws
+    up to `2 * size_from`. It draws row counts until they cover all
+    rows, gives each group a fresh identifier, and truncates the last
+    group. With no published range, each group has 1 row.
+
+3.  Each dependency that holds gives every value of its first column one
+    value of the second column. The function assigns the values of the
+    first column from the most rows to the fewest. Each goes to the
+    value of the second column that is furthest below its drawn row
+    count. This keeps the drawn frequencies of the second column close.
+
+Before it draws, the function computes the key space. That is the
+product, over the key columns, of the number of values each column can
+take. When `n` is larger, it stops with an error that names the keys,
+the key space and `n`. A key column can take:
+
+- a `world` column: its allowed values.
+
+- `levels` or `days`: the values with a count above 0. A `DATETIME` from
+  `days` can take every second of those days.
+
+- `weeks`, `months` or `quarters`: every day of the cells with a count
+  above 0. A `DATETIME` can take every second of those days.
+
+- `breaks`: an `INTEGER` takes every whole number of the bins with a
+  count above 0, from 0 up when `nonnegative` is `TRUE`. A `DOUBLE` has
+  no limit.
+
+- `n_distinct` of a `TEXT` column: `n_distinct` values.
+
+- a group-size column: no limit, because each group gets a fresh
+  identifier.
+
+- schema values: no limit for a `TEXT`, `INTEGER` or `DOUBLE` key
+  column, and 2 for `BOOLEAN`. A `DATE` takes the 1827 days from
+  2020-01-01 to 2024-12-31, and a `DATETIME` every second of those days.
+
+A crosstab replaces its columns, so a key column of a crosstab can take
+the values that it has in the cells left after `world`. The key space
+does not count crosstab pairs or dependencies, so it is an upper bound.
+
+The function redraws each row whose keys repeat an earlier row. After 20
+redraws it stops with an error that names the keys and `n`. A redrawn
+row keeps the values of its group-size columns.
+
+A `world` column takes its values from `world` only. A value that the
+column's `levels` or `days` also hold keeps its published weight. Every
+other value gets the mean of those weights, or all values get equal
+weights when the profile holds none of them. A crosstab keeps only the
+cells whose values `world` allows, and has no effect when no cell is
+left. A group-size column takes its identifiers from `world`, without
+replacement where `world` has enough values.
+
+## See also
+
+Other simulation functions:
+[`profile_compare()`](https://niphr.github.io/csdb/reference/profile_compare.md),
+[`profile_schema()`](https://niphr.github.io/csdb/reference/profile_schema.md)
+
+## Examples
+
+``` r
+d <- data.frame(
+  sex = rep(c("female", "male"), 10),
+  age = rep(c(4L, 15L, 38L, 52L, 71L), 4)
+)
+p <- profile_data(
+  d,
+  c(sex = "TEXT", age = "INTEGER"),
+  columns = c(sex = "full", age = "coarsen")
+)
+simulate_from_profile(p, n = 5, seed = 2)
+#>       sex   age
+#>    <char> <int>
+#> 1:   male    11
+#> 2: female    33
+#> 3: female    15
+#> 4:   male    29
+#> 5: female    42
+```

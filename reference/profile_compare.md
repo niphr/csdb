@@ -1,0 +1,128 @@
+# Compare two profiles
+
+Measures how far each summary of a synthetic profile is from the same
+summary of a real profile. It judges each distance against the sampling
+noise of a synthetic table of that size.
+
+## Usage
+
+``` r
+profile_compare(real, synth, margin = 0.05, n_boot = 200L, seed = 1L)
+```
+
+## Arguments
+
+- real:
+
+  The `csdb_profile` of the real data.
+
+- synth:
+
+  The `csdb_profile` of the synthetic data. Profile the synthetic data
+  with the same `columns`, `k` and `max_levels` as the real data.
+
+- margin:
+
+  The amount by which a distance can exceed the noise of its table and
+  still pass.
+
+- n_boot:
+
+  The number of bootstrap draws for each table.
+
+- seed:
+
+  The seed for [`set.seed()`](https://rdrr.io/r/base/Random.html). The
+  function restores the random state of the caller on exit.
+
+## Value
+
+A data.table with the columns `column`, `property`, `distance`,
+`threshold` and `pass`. `pass` is `distance <= threshold`. A crosstab or
+a dependency names its columns as `"a,b"`.
+
+## Details
+
+Each row compares one summary of `real` with the same summary of
+`synth`. The tables of counts are `levels`, `days`, `weeks`, `months`,
+`quarters`, `bins`, `crosstab` and `group_sizes`. The distance of two
+tables is the total variation distance of their shares. Each table is
+normalised over its own published cells, so suppressed cells take no
+part.
+
+The function aligns the cells of the two tables first:
+
+- Ordered cells are days, weeks, months, runs of quarters, bins, ranges
+  of group sizes, and the levels of a number or a time. Cells of the two
+  tables that overlap join one aligned cell. So each aligned cell is a
+  union of whole cells of both tables. It takes the coarser resolution
+  of the two at that place. The last range of group sizes has no end.
+
+- Unordered cells are the `levels` of a `TEXT` or `BOOLEAN` column and
+  the cells of a crosstab. They align by value.
+
+An aligned cell that only one table holds counts in the distance. Merge
+suppression drops no ordered row. The simulator draws no row in a cell
+that `real` suppressed.
+
+The threshold of a table comes from `n_boot` draws:
+
+1.  Each draw is a multinomial sample from the real shares. Its size is
+    the size of the synthetic table: its rows, suppressed cells
+    included, or its identifiers for `group_sizes`.
+
+2.  An ordered draw puts each row at a uniform value within its real
+    cell, as
+    [`simulate_from_profile()`](https://niphr.github.io/csdb/reference/simulate_from_profile.md)
+    does.
+
+3.  The function applies the `k` merge of
+    [`profile_query()`](https://niphr.github.io/csdb/reference/profile_query.md)
+    to the draw, with the `k` and `max_levels` of `real`. Unordered
+    cells below `k` are removed.
+
+4.  The threshold is the 95th percentile of the distances of the draws
+    from `real`, plus `margin`.
+
+The other rows:
+
+- `missing_share`: the absolute difference of the two shares. The draws
+  are binomial, of `synth$n_rows` rows at the real share. The function
+  skips a column where either share is `"suppressed"`.
+
+- `n_distinct`: 0 when the synthetic `n_distinct` is in the range that
+  `synth$n_rows` uniform draws from the real `n_distinct` values can
+  reach. Otherwise the absolute difference from the nearest end of that
+  range, divided by that end. The range runs from the expected number of
+  distinct values in those draws up to the smaller of the real
+  `n_distinct` and `synth$n_rows`. Both ends are rounded down to a
+  multiple of the `k` of `synth`, as the profile rounds `n_distinct`.
+  The threshold is `margin`.
+
+- `dependency`: 0 when both profiles agree on `holds`, otherwise 1. The
+  threshold is 0.
+
+A summary of `real` that `synth` lacks, or holds in a form that does not
+align, gets distance 1 and threshold `margin`. A `schema_only` column
+has only its `missing_share` compared. The draws do not model the noise
+that `noise` adds to a profile.
+
+## See also
+
+Other simulation functions:
+[`profile_schema()`](https://niphr.github.io/csdb/reference/profile_schema.md),
+[`simulate_from_profile()`](https://niphr.github.io/csdb/reference/simulate_from_profile.md)
+
+## Examples
+
+``` r
+d <- data.frame(sex = rep(c("female", "male"), 500))
+p <- profile_data(d, c(sex = "TEXT"), columns = c(sex = "full"))
+sim <- simulate_from_profile(p, n = 1000)
+s <- profile_data(sim, c(sex = "TEXT"), columns = c(sex = "full"))
+profile_compare(p, s)
+#>    column      property distance threshold   pass
+#>    <char>        <char>    <num>     <num> <lgcl>
+#> 1:    sex missing_share     0.00   0.05000   TRUE
+#> 2:    sex        levels     0.02   0.08205   TRUE
+```
