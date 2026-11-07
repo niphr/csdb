@@ -112,6 +112,7 @@ SyntheticTable <- R6::R6Class(
         generator = generator,
         dir = dir
       )
+      return(invisible(self))
     },
 
     #' @description
