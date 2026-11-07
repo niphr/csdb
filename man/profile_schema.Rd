@@ -7,19 +7,19 @@
 profile_schema(field_types, keys = NULL)
 }
 \arguments{
-\item{field_types}{A named character vector of csdb field types: `TEXT`,
-`INTEGER`, `DOUBLE`, `BOOLEAN`, `DATE` or `DATETIME`.}
+\item{field_types}{A named character vector of csdb field types: \code{TEXT},
+\code{INTEGER}, \code{DOUBLE}, \code{BOOLEAN}, \code{DATE} or \code{DATETIME}.}
 
-\item{keys}{A character vector of key column names, or `NULL`.}
+\item{keys}{A character vector of key column names, or \code{NULL}.}
 }
 \value{
-A `csdb_profile`. Each column has `type`, `sensitivity`
-  `"schema_only"` and `missing_share` 0. `n_rows` is 0, and
-  `provenance$source` is `"schema"`.
+A \code{csdb_profile}. Each column has \code{type}, \code{sensitivity}
+\code{"schema_only"} and \code{missing_share} 0. \code{n_rows} is 0, and
+\code{provenance$source} is \code{"schema"}.
 }
 \description{
-Builds a `csdb_profile` in which every column is `schema_only`. Use it with
-[simulate_from_profile()] for a table that has no real profile.
+Builds a \code{csdb_profile} in which every column is \code{schema_only}. Use it with
+\code{\link[=simulate_from_profile]{simulate_from_profile()}} for a table that has no real profile.
 }
 \examples{
 p <- profile_schema(c(id = "INTEGER", sex = "TEXT"), keys = "id")

@@ -16,6 +16,7 @@
 #' @examples
 #' p <- profile_schema(c(id = "INTEGER", sex = "TEXT"), keys = "id")
 #' simulate_from_profile(p, n = 5)
+#' @md
 #' @export
 profile_schema <- function(field_types, keys = NULL) {
   field_types <- profile_check_field_types(field_types)

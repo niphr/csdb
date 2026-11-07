@@ -115,6 +115,7 @@
 #'   columns = c(sex = "full", age = "coarsen")
 #' )
 #' simulate_from_profile(p, n = 5, seed = 2)
+#' @md
 #' @export
 simulate_from_profile <- function(
   profile,

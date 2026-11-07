@@ -44,6 +44,20 @@ reference:
   - starts_with("validator_field_types")
   - starts_with("validator_field_contents")
 
+- title: "Synthetic Data"
+  desc: "Profiles, simulation, and the synthetic data contract of one table"
+  contents:
+  - profile_query
+  - profile_table
+  - profile_data
+  - profile_schema
+  - write_profile
+  - read_profile
+  - simulate_from_profile
+  - profile_compare
+  - SyntheticTable
+  - synthetic_table_from_dir
+
 - title: "Datasets"
   desc: "Example datasets included with the package"
   contents:

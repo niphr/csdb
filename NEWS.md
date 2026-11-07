@@ -1,3 +1,11 @@
+# Version 2026.11.7
+
+## New Features
+* Profiles: `profile_query()`, `profile_table()` and `profile_data()` summarise a table with aggregate SQL, and publish no count below `k`. A day, week, month, quarter, bin or group-size range below `k` merges with its neighbours instead of being removed. A profile whose column counts do not add up to `n_rows` is torn, and the profiler refuses it. `write_profile()` and `read_profile()` store a profile as YAML. `profile_schema()` builds a profile from the field types alone.
+* `simulate_from_profile()` draws synthetic rows from a profile. `profile_compare()` compares a simulation with the real profile, against the sampling noise of a table of that size.
+* `SyntheticTable` and `synthetic_table_from_dir()` hold the contract of one table and its fixed datasets: recipes checked by md5 in `datasets.yaml`, and handmade CSV files. `vignette("synthetic-data")` shows the whole route.
+* csdb imports yaml.
+
 # Version 2026.10.23
 
 ## New Features

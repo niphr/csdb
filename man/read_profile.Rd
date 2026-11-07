@@ -10,12 +10,12 @@ read_profile(path)
 \item{path}{The YAML file to read.}
 }
 \value{
-A `csdb_profile`. `identical(read_profile(write_profile(p, f)), p)`
-  is `TRUE`.
+A \code{csdb_profile}. \code{identical(read_profile(write_profile(p, f)), p)}
+is \code{TRUE}.
 }
 \description{
-Reads a file that [write_profile()] wrote. The function decodes each value
-by its field name and by the `type` of its column.
+Reads a file that \code{\link[=write_profile]{write_profile()}} wrote. The function decodes each value
+by its field name and by the \code{type} of its column.
 }
 \examples{
 d <- data.frame(day = as.Date("2024-01-01") + rep(0:1, each = 6))

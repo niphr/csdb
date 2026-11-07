@@ -7,21 +7,21 @@
 profile_data(d, field_types, ...)
 }
 \arguments{
-\item{d}{A data frame that holds every column of `field_types`.}
+\item{d}{A data frame that holds every column of \code{field_types}.}
 
 \item{field_types}{A named character vector of csdb field types, as in
-[profile_query()]. Columns of `d` that it does not name are not written.}
+\code{\link[=profile_query]{profile_query()}}. Columns of \code{d} that it does not name are not written.}
 
-\item{...}{Other arguments to [profile_query()]. Do not give `connection`,
-`sql` or `field_types`.}
+\item{...}{Other arguments to \code{\link[=profile_query]{profile_query()}}. Do not give \code{connection},
+\code{sql} or \code{field_types}.}
 }
 \value{
-A `csdb_profile`, as [profile_query()] returns it. The query
-  selects every column of the in-memory table `profile_data`.
+A \code{csdb_profile}, as \code{\link[=profile_query]{profile_query()}} returns it. The query
+selects every column of the in-memory table \code{profile_data}.
 }
 \description{
-Writes `d` to an in-memory SQLite database and profiles it with
-[profile_query()]. Use it to profile data that is already in R.
+Writes \code{d} to an in-memory SQLite database and profiles it with
+\code{\link[=profile_query]{profile_query()}}. Use it to profile data that is already in R.
 }
 \examples{
 d <- data.frame(

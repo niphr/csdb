@@ -7,10 +7,10 @@
 profile_compare(real, synth, margin = 0.05, n_boot = 200L, seed = 1L)
 }
 \arguments{
-\item{real}{The `csdb_profile` of the real data.}
+\item{real}{The \code{csdb_profile} of the real data.}
 
-\item{synth}{The `csdb_profile` of the synthetic data. Profile the
-synthetic data with the same `columns`, `k` and `max_levels` as the real
+\item{synth}{The \code{csdb_profile} of the synthetic data. Profile the
+synthetic data with the same \code{columns}, \code{k} and \code{max_levels} as the real
 data.}
 
 \item{margin}{The amount by which a distance can exceed the noise of its
@@ -18,13 +18,13 @@ table and still pass.}
 
 \item{n_boot}{The number of bootstrap draws for each table.}
 
-\item{seed}{The seed for [set.seed()]. The function restores the random
+\item{seed}{The seed for \code{\link[=set.seed]{set.seed()}}. The function restores the random
 state of the caller on exit.}
 }
 \value{
-A data.table with the columns `column`, `property`, `distance`,
-  `threshold` and `pass`. `pass` is `distance <= threshold`. A crosstab or
-  a dependency names its columns as `"a,b"`.
+A data.table with the columns \code{column}, \code{property}, \code{distance},
+\code{threshold} and \code{pass}. \code{pass} is \code{distance <= threshold}. A crosstab or
+a dependency names its columns as \code{"a,b"}.
 }
 \description{
 Measures how far each summary of a synthetic profile is from the same
@@ -32,60 +32,63 @@ summary of a real profile. It judges each distance against the sampling
 noise of a synthetic table of that size.
 }
 \details{
-Each row compares one summary of `real` with the same summary of
-`synth`. The tables of counts are `levels`, `days`, `weeks`, `months`,
-`quarters`, `bins`, `crosstab` and `group_sizes`. The distance of two
+Each row compares one summary of \code{real} with the same summary of
+\code{synth}. The tables of counts are \code{levels}, \code{days}, \code{weeks}, \code{months},
+\code{quarters}, \code{bins}, \code{crosstab} and \code{group_sizes}. The distance of two
 tables is the total variation distance of their shares. Each table is
 normalised over its own published cells, so suppressed cells take no
 part.
 
 The function aligns the cells of the two tables first:
-
-- Ordered cells are days, weeks, months, runs of quarters, bins, ranges of
-  group sizes, and the levels of a number or a time. Cells of the two
-  tables that overlap join one aligned cell. So each aligned cell is a
-  union of whole cells of both tables. It takes the coarser resolution of
-  the two at that place. The last range of group sizes has no end.
-- Unordered cells are the `levels` of a `TEXT` or `BOOLEAN` column and the
-  cells of a crosstab. They align by value.
+\itemize{
+\item Ordered cells are days, weeks, months, runs of quarters, bins, ranges of
+group sizes, and the levels of a number or a time. Cells of the two
+tables that overlap join one aligned cell. So each aligned cell is a
+union of whole cells of both tables. It takes the coarser resolution of
+the two at that place. The last range of group sizes has no end.
+\item Unordered cells are the \code{levels} of a \code{TEXT} or \code{BOOLEAN} column and the
+cells of a crosstab. They align by value.
+}
 
 An aligned cell that only one table holds counts in the distance. Merge
 suppression drops no ordered row. The simulator draws no row in a cell
-that `real` suppressed.
+that \code{real} suppressed.
 
-The threshold of a table comes from `n_boot` draws:
-
-1. Each draw is a multinomial sample from the real shares. Its size is
-   the size of the synthetic table: its rows, suppressed cells included,
-   or its identifiers for `group_sizes`.
-2. An ordered draw puts each row at a uniform value within its real cell,
-   as [simulate_from_profile()] does.
-3. The function applies the `k` merge of [profile_query()] to the draw,
-   with the `k` and `max_levels` of `real`. Unordered cells below `k` are
-   removed.
-4. The threshold is the 95th percentile of the distances of the draws
-   from `real`, plus `margin`.
+The threshold of a table comes from \code{n_boot} draws:
+\enumerate{
+\item Each draw is a multinomial sample from the real shares. Its size is
+the size of the synthetic table: its rows, suppressed cells included,
+or its identifiers for \code{group_sizes}.
+\item An ordered draw puts each row at a uniform value within its real cell,
+as \code{\link[=simulate_from_profile]{simulate_from_profile()}} does.
+\item The function applies the \code{k} merge of \code{\link[=profile_query]{profile_query()}} to the draw,
+with the \code{k} and \code{max_levels} of \code{real}. Unordered cells below \code{k} are
+removed.
+\item The threshold is the 95th percentile of the distances of the draws
+from \code{real}, plus \code{margin}.
+}
 
 The other rows:
+\itemize{
+\item \code{missing_share}: the absolute difference of the two shares. The draws
+are binomial, of \code{synth$n_rows} rows at the real share. The function
+skips a column where either share is \code{"suppressed"}.
+\item \code{n_distinct}: 0 when the synthetic \code{n_distinct} is in the range that
+\code{synth$n_rows} uniform draws from the real \code{n_distinct} values can
+reach. Otherwise the absolute difference from the nearest end of that
+range, divided by that end. The range runs from the expected number of
+distinct values in those draws up to the smaller of the real
+\code{n_distinct} and \code{synth$n_rows}. Both ends are rounded down to a
+multiple of the \code{k} of \code{synth}, as the profile rounds \code{n_distinct}.
+The threshold is \code{margin}.
+\item \code{dependency}: 0 when both profiles agree on \code{holds}, otherwise 1. The
+threshold is 0.
+}
 
-- `missing_share`: the absolute difference of the two shares. The draws
-  are binomial, of `synth$n_rows` rows at the real share. The function
-  skips a column where either share is `"suppressed"`.
-- `n_distinct`: 0 when the synthetic `n_distinct` is in the range that
-  `synth$n_rows` uniform draws from the real `n_distinct` values can
-  reach. Otherwise the absolute difference from the nearest end of that
-  range, divided by that end. The range runs from the expected number of
-  distinct values in those draws up to the smaller of the real
-  `n_distinct` and `synth$n_rows`. Both ends are rounded down to a
-  multiple of the `k` of `synth`, as the profile rounds `n_distinct`.
-  The threshold is `margin`.
-- `dependency`: 0 when both profiles agree on `holds`, otherwise 1. The
-  threshold is 0.
-
-A summary of `real` that `synth` lacks, or holds in a form that does not
-align, gets distance 1 and threshold `margin`. A `schema_only` column has
-only its `missing_share` compared. The draws do not model the noise that
-`noise` adds to a profile.
+A summary of \code{real} that \code{synth} lacks, or holds in a form that does not
+align, gets distance 1 and threshold \code{margin}. A \code{schema_only} column has
+only its \code{missing_share} compared. The draws do not model the noise that
+\code{noise} adds to a profile.
 }
 \examples{
 d <- data.frame(sex = rep(c("female", "male"), 500))

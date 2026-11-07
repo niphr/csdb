@@ -7,112 +7,116 @@
 simulate_from_profile(profile, n = 1000L, seed = 1L, world = NULL)
 }
 \arguments{
-\item{profile}{A `csdb_profile`, from [profile_query()], [read_profile()]
-or [profile_schema()].}
+\item{profile}{A \code{csdb_profile}, from \code{\link[=profile_query]{profile_query()}}, \code{\link[=read_profile]{read_profile()}}
+or \code{\link[=profile_schema]{profile_schema()}}.}
 
-\item{n}{The number of rows, a whole number of at least 1. `NULL` gives
+\item{n}{The number of rows, a whole number of at least 1. \code{NULL} gives
 1000 rows, the default.}
 
-\item{seed}{The seed for [set.seed()]. The function restores the random
+\item{seed}{The seed for \code{\link[=set.seed]{set.seed()}}. The function restores the random
 state of the caller on exit.}
 
-\item{world}{`NULL`, or a named list that maps a column to its allowed
+\item{world}{\code{NULL}, or a named list that maps a column to its allowed
 values. The function converts the values to the column's type. It
 ignores, without a message, each element that names no column of
-`profile$field_types`, so one world can serve several tables.}
+\code{profile$field_types}, so one world can serve several tables.}
 }
 \value{
-A data.table with `n` rows and the columns of
-  `profile$field_types`, in that order.
+A data.table with \code{n} rows and the columns of
+\code{profile$field_types}, in that order.
 }
 \description{
-Draws `n` synthetic rows from a `csdb_profile`. The rows follow the
+Draws \code{n} synthetic rows from a \code{csdb_profile}. The rows follow the
 published summaries and hold no row of the profiled data.
 }
 \details{
-The R type of each column follows its field type: `TEXT` character,
-`INTEGER` integer, `DOUBLE` double, `BOOLEAN` logical, `DATE` Date and
-`DATETIME` POSIXct in UTC.
+The R type of each column follows its field type: \code{TEXT} character,
+\code{INTEGER} integer, \code{DOUBLE} double, \code{BOOLEAN} logical, \code{DATE} Date and
+\code{DATETIME} POSIXct in UTC.
 
 A column takes its values from its own summary:
+\itemize{
+\item \code{levels} or \code{days}: a draw of the published values, weighted by \code{n}.
+The suppressed cells generate nothing. A \code{DATETIME} drawn from \code{days}
+gets a uniform whole second within its UTC day.
+\item \code{weeks}, \code{months} or \code{quarters}: a cell drawn by \code{n}, then a uniform
+day within it. A cell of \code{quarters} ends with the quarter in
+\code{quarters_to} when the profile holds \code{quarters_to}.
+\item \code{breaks}: a bin drawn by \code{n}, then a uniform value within the bin. An
+\code{INTEGER} value is a uniform whole number within the bin. A column with
+\code{nonnegative} \code{TRUE} draws no value below 0.
+\item \code{n_distinct} of a \code{TEXT} column: \code{"<column>_<i>"}, with \code{i} uniform in
+1 to \code{n_distinct}.
+\item \code{missing_share}: \code{NA} at that rate. A share of \code{"suppressed"} gives no
+\code{NA}. A key column gets no \code{NA}.
+}
 
-- `levels` or `days`: a draw of the published values, weighted by `n`.
-  The suppressed cells generate nothing. A `DATETIME` drawn from `days`
-  gets a uniform whole second within its UTC day.
-- `weeks`, `months` or `quarters`: a cell drawn by `n`, then a uniform
-  day within it. A cell of `quarters` ends with the quarter in
-  `quarters_to` when the profile holds `quarters_to`.
-- `breaks`: a bin drawn by `n`, then a uniform value within the bin. An
-  `INTEGER` value is a uniform whole number within the bin. A column with
-  `nonnegative` `TRUE` draws no value below 0.
-- `n_distinct` of a `TEXT` column: `"<column>_<i>"`, with `i` uniform in
-  1 to `n_distinct`.
-- `missing_share`: `NA` at that rate. A share of `"suppressed"` gives no
-  `NA`. A key column gets no `NA`.
-
-A `schema_only` or `exclude` column, and a column whose summary has no
-published cell, gets schema values. A `TEXT` or `INTEGER` key column gets
-`"<column>_<i>"` or `i` for row `i`, so a single-column key is unique at
-any `n`. Other columns get schema values by type:
-
-- `TEXT`: `"<column>_<i>"`, with `i` from 1 to 10.
-- `INTEGER`: a whole number from 0 to 100.
-- `DOUBLE`: a uniform value from 0 to 1.
-- `BOOLEAN`: `TRUE` or `FALSE`. A `BOOLEAN` with `n_distinct` only also
-  gets these values.
-- `DATE` and `DATETIME`: a uniform day from 2020-01-01 to 2024-12-31. A
-  `DATETIME` gets a uniform whole second within that day.
+A \code{schema_only} or \code{exclude} column, and a column whose summary has no
+published cell, gets schema values. A \code{TEXT} or \code{INTEGER} key column gets
+\code{"<column>_<i>"} or \code{i} for row \code{i}, so a single-column key is unique at
+any \code{n}. Other columns get schema values by type:
+\itemize{
+\item \code{TEXT}: \code{"<column>_<i>"}, with \code{i} from 1 to 10.
+\item \code{INTEGER}: a whole number from 0 to 100.
+\item \code{DOUBLE}: a uniform value from 0 to 1.
+\item \code{BOOLEAN}: \code{TRUE} or \code{FALSE}. A \code{BOOLEAN} with \code{n_distinct} only also
+gets these values.
+\item \code{DATE} and \code{DATETIME}: a uniform day from 2020-01-01 to 2024-12-31. A
+\code{DATETIME} gets a uniform whole second within that day.
+}
 
 The joint structure comes after the columns, in this order:
-
-1. Each crosstab draws its two columns jointly by the cell counts. This
-   replaces the values of both columns.
-2. Each group size draws a range by `n`, then a uniform row count from
-   `size_from` to `size_to`. The last range has no `size_to` and draws
-   up to `2 * size_from`. It draws row counts until they cover all rows,
-   gives each group a fresh identifier, and truncates the last group.
-   With no published range, each group has 1 row.
-3. Each dependency that holds gives every value of its first column one
-   value of the second column. The function assigns the values of the
-   first column from the most rows to the fewest. Each goes to the value
-   of the second column that is furthest below its drawn row count. This
-   keeps the drawn frequencies of the second column close.
+\enumerate{
+\item Each crosstab draws its two columns jointly by the cell counts. This
+replaces the values of both columns.
+\item Each group size draws a range by \code{n}, then a uniform row count from
+\code{size_from} to \code{size_to}. The last range has no \code{size_to} and draws
+up to \code{2 * size_from}. It draws row counts until they cover all rows,
+gives each group a fresh identifier, and truncates the last group.
+With no published range, each group has 1 row.
+\item Each dependency that holds gives every value of its first column one
+value of the second column. The function assigns the values of the
+first column from the most rows to the fewest. Each goes to the value
+of the second column that is furthest below its drawn row count. This
+keeps the drawn frequencies of the second column close.
+}
 
 Before it draws, the function computes the key space. That is the
 product, over the key columns, of the number of values each column can
-take. When `n` is larger, it stops with an error that names the keys, the
-key space and `n`. A key column can take:
-
-- a `world` column: its allowed values.
-- `levels` or `days`: the values with a count above 0. A `DATETIME` from
-  `days` can take every second of those days.
-- `weeks`, `months` or `quarters`: every day of the cells with a count
-  above 0. A `DATETIME` can take every second of those days.
-- `breaks`: an `INTEGER` takes every whole number of the bins with a
-  count above 0, from 0 up when `nonnegative` is `TRUE`. A `DOUBLE` has
-  no limit.
-- `n_distinct` of a `TEXT` column: `n_distinct` values.
-- a group-size column: no limit, because each group gets a fresh
-  identifier.
-- schema values: no limit for a `TEXT`, `INTEGER` or `DOUBLE` key
-  column, and 2 for `BOOLEAN`. A `DATE` takes the 1827 days from
-  2020-01-01 to 2024-12-31, and a `DATETIME` every second of those days.
+take. When \code{n} is larger, it stops with an error that names the keys, the
+key space and \code{n}. A key column can take:
+\itemize{
+\item a \code{world} column: its allowed values.
+\item \code{levels} or \code{days}: the values with a count above 0. A \code{DATETIME} from
+\code{days} can take every second of those days.
+\item \code{weeks}, \code{months} or \code{quarters}: every day of the cells with a count
+above 0. A \code{DATETIME} can take every second of those days.
+\item \code{breaks}: an \code{INTEGER} takes every whole number of the bins with a
+count above 0, from 0 up when \code{nonnegative} is \code{TRUE}. A \code{DOUBLE} has
+no limit.
+\item \code{n_distinct} of a \code{TEXT} column: \code{n_distinct} values.
+\item a group-size column: no limit, because each group gets a fresh
+identifier.
+\item schema values: no limit for a \code{TEXT}, \code{INTEGER} or \code{DOUBLE} key
+column, and 2 for \code{BOOLEAN}. A \code{DATE} takes the 1827 days from
+2020-01-01 to 2024-12-31, and a \code{DATETIME} every second of those days.
+}
 
 A crosstab replaces its columns, so a key column of a crosstab can take
-the values that it has in the cells left after `world`. The key space
+the values that it has in the cells left after \code{world}. The key space
 does not count crosstab pairs or dependencies, so it is an upper bound.
 
 The function redraws each row whose keys repeat an earlier row. After 20
-redraws it stops with an error that names the keys and `n`. A redrawn row
+redraws it stops with an error that names the keys and \code{n}. A redrawn row
 keeps the values of its group-size columns.
 
-A `world` column takes its values from `world` only. A value that the
-column's `levels` or `days` also hold keeps its published weight. Every
+A \code{world} column takes its values from \code{world} only. A value that the
+column's \code{levels} or \code{days} also hold keeps its published weight. Every
 other value gets the mean of those weights, or all values get equal
 weights when the profile holds none of them. A crosstab keeps only the
-cells whose values `world` allows, and has no effect when no cell is left.
-A group-size column takes its identifiers from `world`, without
-replacement where `world` has enough values.
+cells whose values \code{world} allows, and has no effect when no cell is left.
+A group-size column takes its identifiers from \code{world}, without
+replacement where \code{world} has enough values.
 }
 \examples{
 d <- data.frame(

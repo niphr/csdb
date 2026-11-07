@@ -1,6 +1,6 @@
 Package: csdb
 Title: An Abstracted System for Easily Working with Databases with Large Datasets
-Version: 2026.10.23
+Version: 2026.11.7
 Authors@R:
     c(
       person(

@@ -7,19 +7,19 @@
 profile_table(table, columns = NULL, ...)
 }
 \arguments{
-\item{table}{A [DBTable_v9].}
+\item{table}{A \link{DBTable_v9}.}
 
-\item{columns}{The sensitivity of each column, as in [profile_query()].}
+\item{columns}{The sensitivity of each column, as in \code{\link[=profile_query]{profile_query()}}.}
 
-\item{...}{Other arguments to [profile_query()]. Do not give `connection`,
-`sql`, `field_types` or `keys`.}
+\item{...}{Other arguments to \code{\link[=profile_query]{profile_query()}}. Do not give \code{connection},
+\code{sql}, \code{field_types} or \code{keys}.}
 }
 \value{
-A `csdb_profile`, as [profile_query()] returns it. The query is
-  `dbplyr::sql_render(table$tbl())`.
+A \code{csdb_profile}, as \code{\link[=profile_query]{profile_query()}} returns it. The query is
+\code{dbplyr::sql_render(table$tbl())}.
 }
 \description{
-Profiles every row of a [DBTable_v9] with [profile_query()]. The table
+Profiles every row of a \link{DBTable_v9} with \code{\link[=profile_query]{profile_query()}}. The table
 supplies the query, the field types and the keys.
 }
 \examples{

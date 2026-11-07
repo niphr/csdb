@@ -20,162 +20,165 @@ profile_query(
 )
 }
 \arguments{
-\item{connection}{A DBI connection, or a [DBConnection_v9]. For a
-`DBConnection_v9` the function uses `$autoconnection`.}
+\item{connection}{A DBI connection, or a \link{DBConnection_v9}. For a
+\code{DBConnection_v9} the function uses \verb{$autoconnection}.}
 
 \item{sql}{The query to profile, as one string. The function runs it as the
-subquery `SELECT ... FROM (<sql>) q`. The query is published with the
-profile as `provenance$query`, so a caller MUST NOT put an identifier
+subquery \verb{SELECT ... FROM (<sql>) q}. The query is published with the
+profile as \code{provenance$query}, so a caller MUST NOT put an identifier
 literal, such as a person number, in it.}
 
 \item{columns}{A named character vector or named list that gives the
-sensitivity of each column: `"full"`, `"coarsen"`, `"schema_only"` or
-`"exclude"`. A column that `columns` does not name is `"schema_only"`.}
+sensitivity of each column: \code{"full"}, \code{"coarsen"}, \code{"schema_only"} or
+\code{"exclude"}. A column that \code{columns} does not name is \code{"schema_only"}.}
 
-\item{field_types}{A named character vector of csdb field types: `TEXT`,
-`INTEGER`, `DOUBLE`, `BOOLEAN`, `DATE` or `DATETIME`. With `NULL`, the
+\item{field_types}{A named character vector of csdb field types: \code{TEXT},
+\code{INTEGER}, \code{DOUBLE}, \code{BOOLEAN}, \code{DATE} or \code{DATETIME}. With \code{NULL}, the
 function infers the types from the R classes of a zero-row fetch.}
 
-\item{keys}{A character vector of key column names, or `NULL`.}
+\item{keys}{A character vector of key column names, or \code{NULL}.}
 
 \item{k}{The smallest count that the profile can hold.}
 
-\item{noise}{`NULL`, or `list(epsilon = e)`. With `epsilon`, the function
-adds Laplace noise of scale `1 / e` to each cell count and to each count
+\item{noise}{\code{NULL}, or \code{list(epsilon = e)}. With \code{epsilon}, the function
+adds Laplace noise of scale \code{1 / e} to each cell count and to each count
 of missing values. It adds the noise before suppression, then rounds each
-count and floors it at 0. Call `set.seed()` first for a reproducible
+count and floors it at 0. Call \code{set.seed()} first for a reproducible
 profile.}
 
-\item{max_levels}{The largest number of distinct values for which a `full`
+\item{max_levels}{The largest number of distinct values for which a \code{full}
 column publishes its values.}
 
-\item{group_sizes}{A named list, for example `list(rows_per_id = "Id")`.
+\item{group_sizes}{A named list, for example \code{list(rows_per_id = "Id")}.
 Each element names one column. The profile holds how many values of that
 column have each row count.}
 
 \item{crosstabs}{A list of pairs of column names, for example
-`list(c("sex", "age_group"))`. Both columns MUST be `"full"`.}
+\code{list(c("sex", "age_group"))}. Both columns MUST be \code{"full"}.}
 
 \item{dependencies}{A list of pairs of column names. For each pair the
 profile holds whether the first column determines the second.}
 
-\item{source}{A label for the data source, or `NULL`. The profile
+\item{source}{A label for the data source, or \code{NULL}. The profile
 publishes it.}
 }
 \value{
-A list of class `csdb_profile`, with the elements `provenance`,
-  `field_types`, `keys`, `n_rows`, `columns`, `group_sizes`, `crosstabs`,
-  `dependencies` and `notes`. `provenance` holds `format`, `source`,
-  `query`, `driver`, `profiled_at` (UTC, ISO 8601), `k`, `noise`,
-  `max_levels` and `csdb_version`. `driver` is the class of the DBI
-  connection.
+A list of class \code{csdb_profile}, with the elements \code{provenance},
+\code{field_types}, \code{keys}, \code{n_rows}, \code{columns}, \code{group_sizes}, \code{crosstabs},
+\code{dependencies} and \code{notes}. \code{provenance} holds \code{format}, \code{source},
+\code{query}, \code{driver}, \code{profiled_at} (UTC, ISO 8601), \code{k}, \code{noise},
+\code{max_levels} and \code{csdb_version}. \code{driver} is the class of the DBI
+connection.
 }
 \description{
-Summarises the rows of a query as a `csdb_profile`, under disclosure
+Summarises the rows of a query as a \code{csdb_profile}, under disclosure
 control. Every statistic comes from an aggregate query, and the profile
-keeps no count below `k`.
+keeps no count below \code{k}.
 }
 \details{
-Each column of `field_types` gets a summary from its sensitivity:
+Each column of \code{field_types} gets a summary from its sensitivity:
+\itemize{
+\item \code{schema_only}: \code{type}, \code{sensitivity} and \code{missing_share}. All other
+summaries hold these three fields too. An \code{INTEGER} or \code{DOUBLE} column
+also holds \code{nonnegative}, which is \code{TRUE} when its SQL minimum is at
+least 0.
+\item \code{exclude}: no entry in \code{columns}. The column is in \code{field_types} only.
+\item \code{full} \code{TEXT} or \code{BOOLEAN}, at most \code{max_levels} distinct values:
+\code{levels} and \code{n}.
+\item \code{full} \code{INTEGER}, \code{DOUBLE} or \code{DATETIME}, at most \code{max_levels} distinct
+values: \code{levels} and \code{n} when every level holds at least \code{k} rows.
+Otherwise the column takes the summary that it has above \code{max_levels}.
+An \code{INTEGER} or \code{DOUBLE} column with one distinct value always
+publishes \code{levels}. When that value holds fewer than \code{k} rows, the
+function removes its cell, so \code{levels} and \code{n} are empty.
+\item \code{full} \code{TEXT}, above \code{max_levels}: \code{n_distinct}, rounded down to a
+multiple of \code{k}.
+\item \code{full} \code{DATE}: counts per day, as \code{days} and \code{n}.
+\item \code{full} \code{DATETIME}: \code{levels} and \code{n}, as above, otherwise counts per UTC
+day as \code{days} and \code{n}. The function truncates each level to the whole
+second.
+\item \code{coarsen} \code{DATE} or \code{DATETIME}: counts per ISO week, as \code{weeks} and \code{n}.
+The Monday of each week is its key. A \code{DATETIME} falls in the week of
+its UTC day.
+\item \code{INTEGER} and \code{DOUBLE}, \code{full} above \code{max_levels} or \code{coarsen}: \code{breaks}
+and \code{n}, for the bins \verb{[breaks[i], breaks[i + 1])}. The breaks are
+always double.
+\item \code{coarsen} \code{TEXT} or \code{BOOLEAN}: an error that names the column.
+}
 
-- `schema_only`: `type`, `sensitivity` and `missing_share`. All other
-  summaries hold these three fields too. An `INTEGER` or `DOUBLE` column
-  also holds `nonnegative`, which is `TRUE` when its SQL minimum is at
-  least 0.
-- `exclude`: no entry in `columns`. The column is in `field_types` only.
-- `full` `TEXT` or `BOOLEAN`, at most `max_levels` distinct values:
-  `levels` and `n`.
-- `full` `INTEGER`, `DOUBLE` or `DATETIME`, at most `max_levels` distinct
-  values: `levels` and `n` when every level holds at least `k` rows.
-  Otherwise the column takes the summary that it has above `max_levels`.
-  An `INTEGER` or `DOUBLE` column with one distinct value always
-  publishes `levels`. When that value holds fewer than `k` rows, the
-  function removes its cell, so `levels` and `n` are empty.
-- `full` `TEXT`, above `max_levels`: `n_distinct`, rounded down to a
-  multiple of `k`.
-- `full` `DATE`: counts per day, as `days` and `n`.
-- `full` `DATETIME`: `levels` and `n`, as above, otherwise counts per UTC
-  day as `days` and `n`. The function truncates each level to the whole
-  second.
-- `coarsen` `DATE` or `DATETIME`: counts per ISO week, as `weeks` and `n`.
-  The Monday of each week is its key. A `DATETIME` falls in the week of
-  its UTC day.
-- `INTEGER` and `DOUBLE`, `full` above `max_levels` or `coarsen`: `breaks`
-  and `n`, for the bins `[breaks[i], breaks[i + 1])`. The breaks are
-  always double.
-- `coarsen` `TEXT` or `BOOLEAN`: an error that names the column.
-
-The breaks come from `pretty(c(min, max), n = 20)`. An end break that
+The breaks come from \code{pretty(c(min, max), n = 20)}. An end break that
 equals the observed minimum or maximum moves one step outward. The
 function removes an inner break that equals either extreme. So no break
 equals an observed extreme.
 
-Suppression keeps every published count at `k` or above. On an ordered
-dimension, a cell below `k` merges with its neighbours:
+Suppression keeps every published count at \code{k} or above. On an ordered
+dimension, a cell below \code{k} merges with its neighbours:
+\itemize{
+\item Days merge into ISO weeks, then calendar months, then calendar
+quarters. Weeks merge into months, then quarters. The column takes the
+finest of these resolutions at which every cell holds \code{k}. The field
+name gives the resolution: \code{days}, \code{weeks}, \code{months} or \code{quarters}.
+Each key is the first day of its cell. A week merges into the month of
+its Monday.
+\item When a quarter holds fewer than \code{k} rows, adjacent quarters merge into
+runs. Each run takes quarters in order until it holds \code{k}. A last run
+below \code{k} joins the run before it. \code{quarters} then holds the first
+quarter of each run and \code{quarters_to} the last.
+\item Bins merge into runs in the same way. A merged bin keeps the outer
+breaks of its run, so no break is added.
+\item Group sizes merge into runs in the same way. Each run is published as
+\code{size_from}, \code{size_to} and \code{n}, the number of values with a row count
+in that range. The ranges tile the row counts from 1 up with no gap.
+The first range starts at 1. Every other \code{size_from} is an observed row
+count, the smallest in its run. Each \code{size_to} is one below the next
+\code{size_from}. The last range has no \code{size_to}, so it runs from its
+\code{size_from} up.
+\item A first run that holds only the smallest row count merges with the
+next run. A last run that holds only the largest merges with the run
+before it. So no exact smallest or largest row count is published.
+}
 
-- Days merge into ISO weeks, then calendar months, then calendar
-  quarters. Weeks merge into months, then quarters. The column takes the
-  finest of these resolutions at which every cell holds `k`. The field
-  name gives the resolution: `days`, `weeks`, `months` or `quarters`.
-  Each key is the first day of its cell. A week merges into the month of
-  its Monday.
-- When a quarter holds fewer than `k` rows, adjacent quarters merge into
-  runs. Each run takes quarters in order until it holds `k`. A last run
-  below `k` joins the run before it. `quarters` then holds the first
-  quarter of each run and `quarters_to` the last.
-- Bins merge into runs in the same way. A merged bin keeps the outer
-  breaks of its run, so no break is added.
-- Group sizes merge into runs in the same way. Each run is published as
-  `size_from`, `size_to` and `n`, the number of values with a row count
-  in that range. The ranges tile the row counts from 1 up with no gap.
-  The first range starts at 1. Every other `size_from` is an observed row
-  count, the smallest in its run. Each `size_to` is one below the next
-  `size_from`. The last range has no `size_to`, so it runs from its
-  `size_from` up.
-- A first run that holds only the smallest row count merges with the
-  next run. A last run that holds only the largest merges with the run
-  before it. So no exact smallest or largest row count is published.
-
-A table whose present values number fewer than `k` publishes no cell.
-Unordered cells, which are the `levels` of a `TEXT` or `BOOLEAN` column
-and the cells of a crosstab, do not merge. Each cell below `k` is
-removed. A column sums its removed counts into `suppressed_n`, and it
-keeps `suppressed_n` only when that sum is at least `k`. With `noise`,
+A table whose present values number fewer than \code{k} publishes no cell.
+Unordered cells, which are the \code{levels} of a \code{TEXT} or \code{BOOLEAN} column
+and the cells of a crosstab, do not merge. Each cell below \code{k} is
+removed. A column sums its removed counts into \code{suppressed_n}, and it
+keeps \code{suppressed_n} only when that sum is at least \code{k}. With \code{noise},
 the function adds the noise to the finest cells, before it merges or
 removes any cell.
 
-`missing_share` is `"suppressed"` when the count of missing values, or
-the count of values present, is from 1 to `k - 1`. `n_rows` holds no
-noise. A query with fewer than `k` rows is an error.
+\code{missing_share} is \code{"suppressed"} when the count of missing values, or
+the count of values present, is from 1 to \code{k - 1}. \code{n_rows} holds no
+noise. A query with fewer than \code{k} rows is an error.
 
 The function reads the data with several queries. It runs them in one
 read snapshot where the driver gives one:
+\itemize{
+\item SQLite: one read transaction.
+\item PostgreSQL: a transaction at \verb{REPEATABLE READ}, \verb{READ ONLY}.
+\item SQL Server: a transaction at \code{SNAPSHOT} when the database allows it,
+otherwise at \verb{REPEATABLE READ}. \verb{REPEATABLE READ} does not stop the
+rows that other sessions insert. The function puts back the isolation
+level of the session after the profile.
+\item Other drivers, or a connection on which \code{DBI::dbBegin()} fails, for
+example because a transaction is open: no snapshot, and a message says
+so.
+}
 
-- SQLite: one read transaction.
-- PostgreSQL: a transaction at `REPEATABLE READ`, `READ ONLY`.
-- SQL Server: a transaction at `SNAPSHOT` when the database allows it,
-  otherwise at `REPEATABLE READ`. `REPEATABLE READ` does not stop the
-  rows that other sessions insert. The function puts back the isolation
-  level of the session after the profile.
-- Other drivers, or a connection on which `DBI::dbBegin()` fails, for
-  example because a transaction is open: no snapshot, and a message says
-  so.
-
-The function sends only `SELECT` and transaction-control statements, and
+The function sends only \code{SELECT} and transaction-control statements, and
 ends the transaction with a rollback.
 
 The function always refuses a torn profile, with or without a snapshot.
-The check covers each column with `levels`, `days`, `weeks`, `months`,
-`quarters` or `breaks`. Its counts before noise and suppression, plus its
-count of missing values, MUST equal `n_rows`. For a group-size column,
-the row counts of its values plus its missing count MUST equal `n_rows`. Otherwise the function stops with an error that
-names the column and both totals. A crosstab and an `n_distinct` have no
+The check covers each column with \code{levels}, \code{days}, \code{weeks}, \code{months},
+\code{quarters} or \code{breaks}. Its counts before noise and suppression, plus its
+count of missing values, MUST equal \code{n_rows}. For a group-size column,
+the row counts of its values plus its missing count MUST equal \code{n_rows}. Otherwise the function stops with an error that
+names the column and both totals. A crosstab and an \code{n_distinct} have no
 total to check.
 
 A crosstab counts the rows where both columns hold a value. Each of its
-columns MUST have `levels` or be a `DATE`. A group-size range is a range
-of row counts, so it can be below `k`. Only `n` must reach `k`. A
-dependency holds when each value of the first column, `NULL` included,
+columns MUST have \code{levels} or be a \code{DATE}. A group-size range is a range
+of row counts, so it can be below \code{k}. Only \code{n} must reach \code{k}. A
+dependency holds when each value of the first column, \code{NULL} included,
 goes with one value of the second. The profile stores no mapping.
 }
 \examples{

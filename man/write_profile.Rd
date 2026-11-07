@@ -7,16 +7,16 @@
 write_profile(profile, path)
 }
 \arguments{
-\item{profile}{A `csdb_profile`, from [profile_query()].}
+\item{profile}{A \code{csdb_profile}, from \code{\link[=profile_query]{profile_query()}}.}
 
 \item{path}{The file to write. The function overwrites it.}
 }
 \value{
-`path`, invisibly.
+\code{path}, invisibly.
 }
 \description{
-Writes a `csdb_profile` as YAML. [read_profile()] reads the file back to
-an object identical to `profile`.
+Writes a \code{csdb_profile} as YAML. \code{\link[=read_profile]{read_profile()}} reads the file back to
+an object identical to \code{profile}.
 }
 \examples{
 d <- data.frame(sex = rep(c("female", "male"), 6))

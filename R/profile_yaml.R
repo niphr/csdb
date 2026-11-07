@@ -21,6 +21,7 @@
 #' p <- profile_data(d, c(sex = "TEXT"), columns = c(sex = "full"))
 #' f <- write_profile(p, tempfile(fileext = ".yaml"))
 #' cat(readLines(f), sep = "\n")
+#' @md
 #' @export
 write_profile <- function(profile, path) {
   if (!inherits(profile, "csdb_profile")) {
@@ -47,6 +48,7 @@ write_profile <- function(profile, path) {
 #' p <- profile_data(d, c(day = "DATE"), columns = c(day = "full"))
 #' f <- write_profile(p, tempfile(fileext = ".yaml"))
 #' identical(read_profile(f), p)
+#' @md
 #' @export
 read_profile <- function(path) {
   text <- readLines(path, encoding = "UTF-8", warn = FALSE)

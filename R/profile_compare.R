@@ -83,6 +83,7 @@
 #' sim <- simulate_from_profile(p, n = 1000)
 #' s <- profile_data(sim, c(sex = "TEXT"), columns = c(sex = "full"))
 #' profile_compare(p, s)
+#' @md
 #' @export
 profile_compare <- function(
   real,

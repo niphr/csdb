@@ -177,6 +177,7 @@ profile_field_type_names <- c(
 #' p$columns$sex
 #' p$columns$age$breaks
 #' DBI::dbDisconnect(con)
+#' @md
 #' @export
 profile_query <- function(
   connection,
@@ -255,6 +256,7 @@ profile_query <- function(
 #' p <- profile_table(tab, columns = c(sex = "full"))
 #' p$columns$sex
 #' tab$dbconnection$disconnect()
+#' @md
 #' @export
 profile_table <- function(table, columns = NULL, ...) {
   sql <- as.character(dbplyr::sql_render(table$tbl()))
@@ -292,6 +294,7 @@ profile_table <- function(table, columns = NULL, ...) {
 #'   columns = c(day = "full", cases = "full")
 #' )
 #' p$columns$day
+#' @md
 #' @export
 profile_data <- function(d, field_types, ...) {
   field_types <- profile_check_field_types(field_types)
