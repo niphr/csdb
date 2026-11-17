@@ -66,7 +66,8 @@ It collects and sorts in one step.
 ## See also
 
 Other row order:
-[`collect_and_sort_by_pk()`](https://niphr.github.io/csdb/reference/collect_and_sort_by_pk.md)
+[`collect_and_sort_by_pk()`](https://niphr.github.io/csdb/reference/collect_and_sort_by_pk.md),
+[`set_pk()`](https://niphr.github.io/csdb/reference/set_pk.md)
 
 ## Examples
 

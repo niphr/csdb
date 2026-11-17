@@ -78,6 +78,7 @@ with `table = NULL`.
 ## See also
 
 Other row order:
+[`set_pk()`](https://niphr.github.io/csdb/reference/set_pk.md),
 [`setorder_by_pk()`](https://niphr.github.io/csdb/reference/setorder_by_pk.md)
 
 ## Examples

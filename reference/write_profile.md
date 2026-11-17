@@ -45,7 +45,7 @@ cat(readLines(f), sep = "\n")
 #>   source: ~
 #>   query: SELECT * FROM `profile_data`
 #>   driver: SQLiteConnection
-#>   profiled_at: '2026-11-17T14:16:06Z'
+#>   profiled_at: '2026-11-17T14:35:14Z'
 #>   k: 5
 #>   noise: ~
 #>   max_levels: 50

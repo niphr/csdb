@@ -249,7 +249,7 @@ cat(readLines(f)[1:16], sep = "\n")
 #>     SELECT *
 #>     FROM `visits`
 #>   driver: SQLiteConnection
-#>   profiled_at: '2026-11-17T14:16:16Z'
+#>   profiled_at: '2026-11-17T14:35:24Z'
 #>   k: 5
 #>   noise: ~
 #>   max_levels: 10

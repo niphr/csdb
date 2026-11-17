@@ -12,6 +12,11 @@
   [`setorder_by_pk()`](https://niphr.github.io/csdb/reference/setorder_by_pk.md)
   does the same sort on a data.table. PostgreSQL returns rows in no
   fixed order, so `d[1]` and `tail(d, 1)` need this sort.
+- [`set_pk()`](https://niphr.github.io/csdb/reference/set_pk.md)
+  attaches a primary key to a lazy table that does not start at
+  `$tbl()`, for example one built from SQL text, so that
+  [`collect_and_sort_by_pk()`](https://niphr.github.io/csdb/reference/collect_and_sort_by_pk.md)
+  can sort it.
 
 ## Version 2026.11.7
 

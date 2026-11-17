@@ -58,6 +58,8 @@
 <h3 id="new-features-2026-11-17">New Features<a class="anchor" aria-label="anchor" href="#new-features-2026-11-17"></a></h3>
 <ul><li>
 <code>DBTable_v9$tbl()</code> attaches the primary key of the table to the lazy table. <code><a href="../reference/collect_and_sort_by_pk.html">collect_and_sort_by_pk()</a></code> collects such a query and orders the rows by that key, then by every other column. <code><a href="../reference/setorder_by_pk.html">setorder_by_pk()</a></code> does the same sort on a data.table. PostgreSQL returns rows in no fixed order, so <code>d[1]</code> and <code>tail(d, 1)</code> need this sort.</li>
+<li>
+<code><a href="../reference/set_pk.html">set_pk()</a></code> attaches a primary key to a lazy table that does not start at <code>$tbl()</code>, for example one built from SQL text, so that <code><a href="../reference/collect_and_sort_by_pk.html">collect_and_sort_by_pk()</a></code> can sort it.</li>
 </ul></div>
 </div>
     <div class="section level2">
