@@ -2,6 +2,7 @@
 
 ## New Features
 * `DBTable_v9$tbl()` attaches the primary key of the table to the lazy table. `collect_and_sort_by_pk()` collects such a query and orders the rows by that key, then by every other column. `setorder_by_pk()` does the same sort on a data.table. PostgreSQL returns rows in no fixed order, so `d[1]` and `tail(d, 1)` need this sort.
+* `set_pk()` attaches a primary key to a lazy table that does not start at `$tbl()`, for example one built from SQL text, so that `collect_and_sort_by_pk()` can sort it.
 
 # Version 2026.11.7
 

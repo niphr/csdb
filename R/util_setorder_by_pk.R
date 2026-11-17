@@ -171,3 +171,36 @@ collect_and_sort_by_pk <- function(x) {
   data.table::setDT(d)
   return(setorder_by_pk(d, list(keys = pk)))
 }
+
+#' Attach a primary key to a lazy table
+#'
+#' `set_pk()` attaches `keys` to `x`, so that [collect_and_sort_by_pk()] can
+#' sort the result. [DBTable_v9]`$tbl()` calls it for every table. Call it for
+#' a lazy table that you build yourself, for example from SQL text with
+#' [dplyr::sql()], when its rows have a primary key.
+#'
+#' @param x A lazy table.
+#' @param keys A character vector with the primary key columns, or `NULL`.
+#'   `NULL` removes the key, and [collect_and_sort_by_pk()] then stops.
+#' @return `x`, with the key attached.
+#' @examples
+#' con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+#' DBI::dbWriteTable(con, "t", data.frame(a = c(2L, 1L), b = c("y", "x")))
+#' q <- set_pk(dplyr::tbl(con, dplyr::sql("SELECT a, b FROM t")), "a")
+#' collect_and_sort_by_pk(q)
+#' DBI::dbDisconnect(con)
+#' @md
+#' @family row order
+#' @export
+set_pk <- function(x, keys) {
+  if (!is.null(keys) && !is.character(keys)) {
+    stop(
+      "`keys` must be a character vector or NULL, but it has class ",
+      paste(class(keys), collapse = "/"),
+      ".",
+      call. = FALSE
+    )
+  }
+  attr(x, "csdb_pk") <- keys
+  return(x)
+}

@@ -160,3 +160,14 @@ test_that("collect_and_sort_by_pk stops when x carries no pk", {
     "`x` carries no primary key"
   )
 })
+
+test_that("set_pk() lets collect_and_sort_by_pk() sort a query built from SQL text", {
+  con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  DBI::dbWriteTable(con, "t", data.frame(a = c(2L, 1L, 3L), b = c("y", "x", "z")))
+  q <- dplyr::tbl(con, dplyr::sql("SELECT a, b FROM t"))
+  expect_error(collect_and_sort_by_pk(q), "carries no primary key")
+  d <- collect_and_sort_by_pk(set_pk(q, "a"))
+  expect_identical(d$a, c(1L, 2L, 3L))
+  expect_error(set_pk(q, 1), "character vector or NULL")
+})

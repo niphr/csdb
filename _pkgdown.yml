@@ -38,6 +38,7 @@ reference:
   - csdb_get_context
   - csdb_connection_is_alive
   - setorder_by_pk
+  - set_pk
   - collect_and_sort_by_pk
 
 - title: "Data Validation"

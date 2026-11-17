@@ -1316,7 +1316,7 @@ DBTable_v9 <- R6::R6Class(
       private$lazy_creation_of_table()
       retval <- self$dbconnection$autoconnection |>
         dplyr::tbl(self$table_name_short_for_mssql_fully_specified_for_postgres)
-      attr(retval, "csdb_pk") <- self$keys
+      retval <- set_pk(retval, self$keys)
 
       return(retval)
     },

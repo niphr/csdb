@@ -64,6 +64,7 @@ setorder_by_pk(d)
 }
 \seealso{
 Other row order:
-\code{\link[=collect_and_sort_by_pk]{collect_and_sort_by_pk()}}
+\code{\link[=collect_and_sort_by_pk]{collect_and_sort_by_pk()}},
+\code{\link[=set_pk]{set_pk()}}
 }
 \concept{row order}

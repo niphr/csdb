@@ -81,6 +81,7 @@ my_table$disconnect()
 }
 \seealso{
 Other row order:
+\code{\link[=set_pk]{set_pk()}},
 \code{\link[=setorder_by_pk]{setorder_by_pk()}}
 }
 \concept{row order}
