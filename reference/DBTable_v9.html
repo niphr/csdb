@@ -11,7 +11,7 @@ combines database connectivity with data validation and bulk operations."><meta 
 
     <a class="navbar-brand me-2" href="../index.html">csdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.11.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2026.11.17</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -582,7 +582,9 @@ change can therefore start from an empty table.</p><div class="section">
 
 <p></p><hr><a id="method-DBTable_v9-tbl"></a><div class="section">
 <h3 id="dbtable-v-tbl-"><code>DBTable_v9$tbl()</code><a class="anchor" aria-label="anchor" href="#dbtable-v-tbl-"></a></h3>
-<p>Provides access to the database table via dplyr::tbl.</p><div class="section">
+<p>Provides access to the database table via dplyr::tbl.
+The lazy table carries <code>self$keys</code> as the attribute <code>csdb_pk</code>.
+<code><a href="collect_and_sort_by_pk.html">collect_and_sort_by_pk</a></code> reads it to sort the collected rows.</p><div class="section">
 <h4 id="usage-15">Usage<a class="anchor" aria-label="anchor" href="#usage-15"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">DBTable_v9</span><span class="op">$</span><span class="fu">tbl</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>

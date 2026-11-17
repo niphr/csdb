@@ -45,11 +45,11 @@ cat(readLines(f), sep = "\n")
 #>   source: ~
 #>   query: SELECT * FROM `profile_data`
 #>   driver: SQLiteConnection
-#>   profiled_at: '2026-11-07T16:39:23Z'
+#>   profiled_at: '2026-11-17T14:16:06Z'
 #>   k: 5
 #>   noise: ~
 #>   max_levels: 50
-#>   csdb_version: 2026.11.7
+#>   csdb_version: 2026.11.17
 #> field_types:
 #>   sex: TEXT
 #> keys: []

@@ -651,7 +651,10 @@ Drops all rows in the database table and then inserts data.
 
 ### `DBTable_v9$tbl()`
 
-Provides access to the database table via dplyr::tbl.
+Provides access to the database table via dplyr::tbl. The lazy table
+carries `self$keys` as the attribute `csdb_pk`.
+[`collect_and_sort_by_pk`](https://niphr.github.io/csdb/reference/collect_and_sort_by_pk.md)
+reads it to sort the collected rows.
 
 #### Usage
 

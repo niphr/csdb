@@ -31,6 +31,10 @@ Helper functions for database operations and metadata
   : Get the caller context
 - [`csdb_connection_is_alive()`](https://niphr.github.io/csdb/reference/csdb_connection_is_alive.md)
   : Does a database connection still reach its server?
+- [`setorder_by_pk()`](https://niphr.github.io/csdb/reference/setorder_by_pk.md)
+  : Order a data.table by the primary key of a table
+- [`collect_and_sort_by_pk()`](https://niphr.github.io/csdb/reference/collect_and_sort_by_pk.md)
+  : Collect a query and order it by the primary key of its table
 
 ## Data Validation
 

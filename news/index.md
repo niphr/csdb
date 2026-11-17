@@ -1,5 +1,18 @@
 # Changelog
 
+## Version 2026.11.17
+
+### New Features
+
+- `DBTable_v9$tbl()` attaches the primary key of the table to the lazy
+  table.
+  [`collect_and_sort_by_pk()`](https://niphr.github.io/csdb/reference/collect_and_sort_by_pk.md)
+  collects such a query and orders the rows by that key, then by every
+  other column.
+  [`setorder_by_pk()`](https://niphr.github.io/csdb/reference/setorder_by_pk.md)
+  does the same sort on a data.table. PostgreSQL returns rows in no
+  fixed order, so `d[1]` and `tail(d, 1)` need this sort.
+
 ## Version 2026.11.7
 
 ### New Features

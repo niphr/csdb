@@ -26,7 +26,7 @@ person.
 
 ``` r
 library(csdb)
-#> csdb 2026.11.7
+#> csdb 2026.11.17
 #> https://niphr.github.io/csdb/
 library(data.table)
 #> 
@@ -249,11 +249,11 @@ cat(readLines(f)[1:16], sep = "\n")
 #>     SELECT *
 #>     FROM `visits`
 #>   driver: SQLiteConnection
-#>   profiled_at: '2026-11-07T16:39:33Z'
+#>   profiled_at: '2026-11-17T14:16:16Z'
 #>   k: 5
 #>   noise: ~
 #>   max_levels: 10
-#>   csdb_version: 2026.11.7
+#>   csdb_version: 2026.11.17
 #> field_types:
 #>   id: INTEGER
 #>   date: DATE
