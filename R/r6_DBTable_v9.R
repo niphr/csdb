@@ -1310,10 +1310,13 @@ DBTable_v9 <- R6::R6Class(
 
     #' @description
     #' Provides access to the database table via dplyr::tbl.
+    #' The lazy table carries \code{self$keys} as the attribute \code{csdb_pk}.
+    #' \code{\link{collect_and_sort_by_pk}} reads it to sort the collected rows.
     tbl = function() {
       private$lazy_creation_of_table()
       retval <- self$dbconnection$autoconnection |>
         dplyr::tbl(self$table_name_short_for_mssql_fully_specified_for_postgres)
+      attr(retval, "csdb_pk") <- self$keys
 
       return(retval)
     },

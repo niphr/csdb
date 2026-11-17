@@ -37,6 +37,8 @@ reference:
   - csdb_set_context
   - csdb_get_context
   - csdb_connection_is_alive
+  - setorder_by_pk
+  - collect_and_sort_by_pk
 
 - title: "Data Validation"
   desc: "Functions for validating field types and data contents"

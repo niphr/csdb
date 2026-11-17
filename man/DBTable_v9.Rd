@@ -585,6 +585,8 @@ change can therefore start from an empty table.
 \if{latex}{\out{\hypertarget{method-DBTable_v9-tbl}{}}}
 \subsection{\code{DBTable_v9$tbl()}}{
   Provides access to the database table via dplyr::tbl.
+The lazy table carries \code{self$keys} as the attribute \code{csdb_pk}.
+\code{\link{collect_and_sort_by_pk}} reads it to sort the collected rows.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{DBTable_v9$tbl()}
